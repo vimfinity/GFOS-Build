@@ -1,0 +1,46 @@
+{
+  "name": "gfos-build",
+  "version": "1.0.0",
+  "description": "High-performance CLI tool for managing local Maven builds across multiple JDK versions",
+  "module": "src/index.tsx",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "gfos-build": "./dist/gfos-build"
+  },
+  "scripts": {
+    "dev": "bun run src/index.tsx",
+    "dev:mock": "MOCK_MODE=true bun run src/index.tsx",
+    "demo:home": "MOCK_MODE=true bun run src/ui/views/home-view-demo.tsx",
+    "demo:repo": "MOCK_MODE=true bun run src/ui/views/repo-detail-demo.tsx",
+    "demo:jobs": "MOCK_MODE=true bun run src/ui/views/jobs-view-demo.tsx",
+    "demo:settings": "MOCK_MODE=true bun run src/ui/views/settings-view-demo.tsx",
+    "build": "bun build src/index.tsx --compile --minify --sourcemap=none --target=bun --outfile=dist/gfos-build",
+    "build:windows": "bun build src/index.tsx --compile --minify --sourcemap=none --target=bun-windows-x64 --outfile=dist/gfos-build.exe",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/fs-extra": "^11.0.4",
+    "@types/match-sorter": "^6.0.0",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.3",
+    "fs-extra": "^11.3.2",
+    "ink": "^6.5.1",
+    "ink-select-input": "^6.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "match-sorter": "^8.2.0",
+    "react": "^19.2.0",
+    "react-devtools-core": "^7.0.1",
+    "zod": "^4.1.13",
+    "zustand": "^5.0.9"
+  }
+}
