@@ -361,8 +361,10 @@ export function RepoDetailView({
     );
 
     // Check if only the root module is selected (no -pl needed)
+    // Normalize path separators for comparison
+    const normalizedProjectPath = project.path.replace(/\\/g, '/');
     const isRootOnly = selectedModuleObjects.length === 1 && 
-      selectedModuleObjects[0]?.pomPath === `${project.path}\\pom.xml`;
+      selectedModuleObjects[0]?.pomPath.replace(/\\/g, '/') === `${normalizedProjectPath}/pom.xml`;
 
     // Prepare module data with relative paths
     const modulesWithRelativePaths = selectedModuleObjects.map(module => {
@@ -372,7 +374,11 @@ export function RepoDetailView({
         const projectRoot = project.path;
         const moduleDir = modulePomPath.replace(/[\\/]pom\.xml$/i, '');
         if (moduleDir !== projectRoot) {
-          relativePath = moduleDir.replace(projectRoot, '').replace(/^[\\/]+/, '');
+          // Calculate relative path and convert to forward slashes for Maven
+          relativePath = moduleDir
+            .replace(projectRoot, '')
+            .replace(/^[\\/]+/, '')
+            .replace(/\\/g, '/'); // Always use forward slashes for Maven -pl
         }
       }
       return {

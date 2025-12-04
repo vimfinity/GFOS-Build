@@ -374,6 +374,9 @@ async function runRealBuild(
   store.appendJobLog(jobId, `[GFOS-Build] Executing: ${fullCommand}`);
   store.appendJobLog(jobId, `[GFOS-Build] JAVA_HOME: ${config.environment.JAVA_HOME || '(system default)'}`);
   store.appendJobLog(jobId, `[GFOS-Build] Working directory: ${config.projectPath}`);
+  if (config.modules && config.modules.length > 0) {
+    store.appendJobLog(jobId, `[GFOS-Build] Modules: ${config.modules.join(', ')}`);
+  }
   store.appendJobLog(jobId, '');
   
   return new Promise<BuildResult>((resolve) => {
