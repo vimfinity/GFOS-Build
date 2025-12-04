@@ -447,7 +447,10 @@ export function App(): React.ReactElement {
                 customArgsArray.push(...options.customArgs.split(/\s+/).filter(a => a));
               }
               
-              if (options.sequential) {
+              // Sequential mode only makes sense for multiple modules
+              const useSequential = options.sequential && pendingBuildConfig.selectedModules.length > 1;
+              
+              if (useSequential) {
                 // For sequential builds, add jobs with a dependency chain
                 // Generate a unique sequence ID to group these jobs
                 const sequenceId = `seq-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -470,7 +473,7 @@ export function App(): React.ReactElement {
                   });
                 });
               } else {
-                // Parallel builds - all jobs start as pending
+                // Parallel builds or single module - all jobs start as pending, no sequence
                 pendingBuildConfig.selectedModules.forEach(module => {
                   addJob({
                     projectPath: pendingBuildConfig.projectPath,

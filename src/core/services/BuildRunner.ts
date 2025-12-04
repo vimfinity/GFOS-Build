@@ -258,7 +258,11 @@ function buildMavenCommand(config: BuildConfig): string[] {
   
   // Add module selection if specified (expects relative paths like "submodule" or "parent/child")
   // Only add -pl if modules are specified and not empty strings
-  const validModules = config.modules?.filter(m => m && m.trim() !== '');
+  // IMPORTANT: Convert Windows backslashes to forward slashes for Maven
+  const validModules = config.modules
+    ?.filter(m => m && m.trim() !== '')
+    .map(m => m.replace(/\\/g, '/'));
+  
   if (validModules && validModules.length > 0) {
     args.push('-pl', validModules.join(','));
     args.push('-am'); // Also make dependencies
@@ -382,14 +386,30 @@ async function runRealBuild(
       });
       
       // Track progress based on Maven output
-      // Strategy: Use module-based progress for multi-module builds
-      // Each module completion = 100/totalModules percent
-      let totalModules = 1;
-      let completedModules = 0;
+      // Strategy: 
+      // 1. Parse "Reactor Build Order" to get total module count early
+      // 2. Track "Building X (N/M)" for progress updates
+      // 3. For single modules, use phase-based progress
+      let totalModules = 0; // 0 = not yet determined
+      let currentModuleNum = 0;
       let lastReportedProgress = 0;
+      let inReactorOrder = false;
+      let reactorModuleCount = 0;
+      let logLineCount = 0;
       
-      // Track when we see "Building module (X/Y)" - use module count for progress
-      // This is more reliable than tracking individual phases
+      // Phase progress for single-module builds
+      const phaseProgress: Record<string, number> = {
+        'clean': 5,
+        'validate': 8,
+        'compile': 25,
+        'test-compile': 35,
+        'test': 50,
+        'package': 75,
+        'verify': 85,
+        'install': 95,
+        'deploy': 98,
+      };
+      let currentPhaseProgress = 0;
       
       // Stream stdout
       const streamStdout = async () => {
@@ -408,48 +428,79 @@ async function runRealBuild(
           for (const line of lines) {
             store.appendJobLog(jobId, line);
             callbacks.onLog?.(jobId, line);
+            logLineCount++;
             
-            // Detect multi-module build start: "[INFO] Reactor Build Order:"
-            // This tells us it's a multi-module build before we see the count
-            
-            // Detect module build: "[INFO] Building moduleName (X/Y)"
-            const multiModuleMatch = line.match(/\[INFO\] Building .+ \((\d+)\/(\d+)\)/);
-            if (multiModuleMatch?.[1] && multiModuleMatch?.[2]) {
-              const currentModule = parseInt(multiModuleMatch[1], 10);
-              totalModules = parseInt(multiModuleMatch[2], 10);
-              // Progress based on modules started (not completed)
-              // Module 1/5 = 0%, 2/5 = 20%, 3/5 = 40%, etc.
-              completedModules = currentModule - 1;
+            // Detect start of reactor build order listing
+            if (line.includes('[INFO] Reactor Build Order:')) {
+              inReactorOrder = true;
+              reactorModuleCount = 0;
+              continue;
             }
             
-            // Detect module completion: "[INFO] BUILD SUCCESS" within module
-            // For individual module: "[INFO] --------" separator after install
+            // Count modules in reactor build order (lines starting with "[INFO]" followed by module name)
+            // Pattern: "[INFO] project-name" or "[INFO] project-name [jar]"
+            if (inReactorOrder) {
+              if (line.match(/^\[INFO\] [a-zA-Z0-9][\w\-\.]+/)) {
+                reactorModuleCount++;
+              }
+              // End of reactor order when we hit an empty [INFO] line or separator
+              if (line === '[INFO] ' || line.includes('--------')) {
+                inReactorOrder = false;
+                if (reactorModuleCount > 0) {
+                  totalModules = reactorModuleCount;
+                }
+              }
+            }
+            
+            // Detect module build: "[INFO] Building moduleName (X/Y)" or "[INFO] Building moduleName version (X/Y)"
+            const multiModuleMatch = line.match(/\[INFO\] Building .+ \((\d+)\/(\d+)\)/);
+            if (multiModuleMatch?.[1] && multiModuleMatch?.[2]) {
+              currentModuleNum = parseInt(multiModuleMatch[1], 10);
+              const parsedTotal = parseInt(multiModuleMatch[2], 10);
+              // Only update total if not set or if this is higher (handles nested builds)
+              if (totalModules === 0 || parsedTotal > totalModules) {
+                totalModules = parsedTotal;
+              }
+            }
+            
+            // Detect Maven phase/goal for single-module builds
+            const phaseMatch = line.match(/\[INFO\] --- [\w\.-]+:[\d\w\.-]+:(\w+)/);
+            if (phaseMatch?.[1]) {
+              const goal = phaseMatch[1].toLowerCase();
+              if (phaseProgress[goal] !== undefined) {
+                currentPhaseProgress = phaseProgress[goal];
+              }
+            }
             
             // Detect reactor summary (at end of multi-module build)
             if (line.includes('[INFO] Reactor Summary')) {
-              completedModules = totalModules;
+              currentModuleNum = totalModules;
             }
             
             // Detect BUILD SUCCESS/FAILURE (final)
-            if (line.includes('BUILD SUCCESS')) {
-              completedModules = totalModules;
+            if (line.includes('BUILD SUCCESS') || line.includes('BUILD FAILURE')) {
+              currentModuleNum = totalModules || 1;
+              currentPhaseProgress = 100;
             }
             
-            // Calculate progress: module-based for multi-module, simple for single
+            // Calculate progress
             let progress: number;
             if (totalModules > 1) {
-              // Multi-module: progress = completed modules / total * 100
-              // Add small increment for current module being processed
-              const moduleProgress = (completedModules / totalModules) * 100;
-              // Add 5% buffer for current module processing
-              progress = Math.min(99, Math.round(moduleProgress + (completedModules < totalModules ? 3 : 0)));
+              // Multi-module: progress based on module number
+              // currentModuleNum-1 completed, currentModuleNum in progress
+              const completedModules = Math.max(0, currentModuleNum - 1);
+              const baseProgress = (completedModules / totalModules) * 100;
+              // Add small increment for current module in progress
+              progress = Math.min(99, Math.round(baseProgress + (currentModuleNum > 0 && currentModuleNum <= totalModules ? 2 : 0)));
+            } else if (totalModules === 1 || currentPhaseProgress > 0) {
+              // Single module: use phase-based progress
+              progress = Math.min(99, currentPhaseProgress);
             } else {
-              // Single module: estimate based on log output
-              // Just show steady progress based on output lines
-              const job = useAppStore.getState().activeJobs.find(j => j.id === jobId);
-              const logCount = job?.logs.length || 0;
-              // Estimate: 500 lines for a typical build
-              progress = Math.min(95, Math.round((logCount / 500) * 100));
+              // Fallback: steady progress based on log lines (for very long builds)
+              // Use logarithmic scale for large builds
+              const estimatedLines = 1000; // Baseline
+              const logProgress = Math.log10(logLineCount + 1) / Math.log10(estimatedLines + 1);
+              progress = Math.min(50, Math.round(logProgress * 50));
             }
             
             // Only update if progress increased (prevents jumping backward)

@@ -96,7 +96,8 @@ export function BuildConfigView({
   const [offline, setOffline] = useState(settings.offlineMode);
   const [batchMode, setBatchMode] = useState(false);
   const [threads, setThreads] = useState(settings.enableThreads ? settings.threadCount : '');
-  const [sequential, setSequential] = useState(true);
+  // Sequential only makes sense for multiple modules, default to false for single
+  const [sequential, setSequential] = useState(selectedModules.length > 1);
   const [updateSnapshots, setUpdateSnapshots] = useState(false);
   const [alsoMake, setAlsoMake] = useState(false);
   const [alsoMakeDependents, setAlsoMakeDependents] = useState(false);
