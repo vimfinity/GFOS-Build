@@ -382,39 +382,14 @@ async function runRealBuild(
       });
       
       // Track progress based on Maven output
-      // For multi-module builds: "[INFO] Building moduleName (X/Y)"
-      // For single module: track lifecycle phases
+      // Strategy: Use module-based progress for multi-module builds
+      // Each module completion = 100/totalModules percent
       let totalModules = 1;
-      let currentModule = 0;
-      let moduleProgress = 0;
+      let completedModules = 0;
+      let lastReportedProgress = 0;
       
-      // Phase weights within a single module (cumulative percentages)
-      const phaseWeights: Record<string, number> = {
-        'clean': 5,
-        'initialize': 8,
-        'validate': 10,
-        'generate-sources': 15,
-        'process-sources': 18,
-        'generate-resources': 20,
-        'process-resources': 25,
-        'compile': 40,
-        'process-classes': 42,
-        'generate-test-sources': 45,
-        'process-test-sources': 48,
-        'generate-test-resources': 50,
-        'process-test-resources': 52,
-        'test-compile': 55,
-        'process-test-classes': 58,
-        'test': 70,
-        'prepare-package': 75,
-        'package': 85,
-        'pre-integration-test': 87,
-        'integration-test': 90,
-        'post-integration-test': 92,
-        'verify': 94,
-        'install': 98,
-        'deploy': 100,
-      };
+      // Track when we see "Building module (X/Y)" - use module count for progress
+      // This is more reliable than tracking individual phases
       
       // Stream stdout
       const streamStdout = async () => {
@@ -434,70 +409,55 @@ async function runRealBuild(
             store.appendJobLog(jobId, line);
             callbacks.onLog?.(jobId, line);
             
-            // Detect multi-module build: "[INFO] Building moduleName (X/Y)"
+            // Detect multi-module build start: "[INFO] Reactor Build Order:"
+            // This tells us it's a multi-module build before we see the count
+            
+            // Detect module build: "[INFO] Building moduleName (X/Y)"
             const multiModuleMatch = line.match(/\[INFO\] Building .+ \((\d+)\/(\d+)\)/);
-            if (multiModuleMatch) {
-              currentModule = parseInt(multiModuleMatch[1], 10);
+            if (multiModuleMatch?.[1] && multiModuleMatch?.[2]) {
+              const currentModule = parseInt(multiModuleMatch[1], 10);
               totalModules = parseInt(multiModuleMatch[2], 10);
-              moduleProgress = 0; // Reset module progress for new module
+              // Progress based on modules started (not completed)
+              // Module 1/5 = 0%, 2/5 = 20%, 3/5 = 40%, etc.
+              completedModules = currentModule - 1;
             }
+            
+            // Detect module completion: "[INFO] BUILD SUCCESS" within module
+            // For individual module: "[INFO] --------" separator after install
             
             // Detect reactor summary (at end of multi-module build)
             if (line.includes('[INFO] Reactor Summary')) {
-              currentModule = totalModules;
-              moduleProgress = 100;
+              completedModules = totalModules;
             }
             
-            // Detect Maven phase/goal execution
-            // Pattern: "[INFO] --- plugin:version:goal (execution-id) @ module ---"
-            const phaseMatch = line.match(/\[INFO\] --- [\w.-]+:[\d.]+:([\w-]+)/);
-            if (phaseMatch) {
-              const goal = phaseMatch[1];
-              // Map common goals to lifecycle phases
-              const goalToPhase: Record<string, string> = {
-                'clean': 'clean',
-                'resources': 'process-resources',
-                'compile': 'compile',
-                'testResources': 'process-test-resources',
-                'testCompile': 'test-compile',
-                'test': 'test',
-                'jar': 'package',
-                'war': 'package',
-                'ear': 'package',
-                'install': 'install',
-                'deploy': 'deploy',
-              };
-              const phase = goalToPhase[goal] || goal;
-              if (phaseWeights[phase] !== undefined) {
-                moduleProgress = phaseWeights[phase];
-              }
-            }
-            
-            // Detect BUILD SUCCESS/FAILURE
+            // Detect BUILD SUCCESS/FAILURE (final)
             if (line.includes('BUILD SUCCESS')) {
-              currentModule = totalModules;
-              moduleProgress = 100;
-            } else if (line.includes('BUILD FAILURE')) {
-              // Keep current progress on failure
+              completedModules = totalModules;
             }
             
-            // Calculate overall progress
-            // For multi-module: ((completedModules + currentModuleProgress) / totalModules) * 100
-            let overallProgress: number;
+            // Calculate progress: module-based for multi-module, simple for single
+            let progress: number;
             if (totalModules > 1) {
-              const completedModules = Math.max(0, currentModule - 1);
-              overallProgress = Math.round(
-                ((completedModules + (moduleProgress / 100)) / totalModules) * 100
-              );
+              // Multi-module: progress = completed modules / total * 100
+              // Add small increment for current module being processed
+              const moduleProgress = (completedModules / totalModules) * 100;
+              // Add 5% buffer for current module processing
+              progress = Math.min(99, Math.round(moduleProgress + (completedModules < totalModules ? 3 : 0)));
             } else {
-              overallProgress = moduleProgress;
+              // Single module: estimate based on log output
+              // Just show steady progress based on output lines
+              const job = useAppStore.getState().activeJobs.find(j => j.id === jobId);
+              const logCount = job?.logs.length || 0;
+              // Estimate: 500 lines for a typical build
+              progress = Math.min(95, Math.round((logCount / 500) * 100));
             }
             
-            // Cap at 99% until build actually completes
-            overallProgress = Math.min(99, overallProgress);
-            
-            store.updateJobProgress(jobId, overallProgress);
-            callbacks.onProgress?.(jobId, overallProgress);
+            // Only update if progress increased (prevents jumping backward)
+            if (progress > lastReportedProgress) {
+              lastReportedProgress = progress;
+              store.updateJobProgress(jobId, progress);
+              callbacks.onProgress?.(jobId, progress);
+            }
             
             // Check for cancellation
             const currentJob = useAppStore.getState().activeJobs.find(j => j.id === jobId);

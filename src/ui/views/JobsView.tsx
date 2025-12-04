@@ -138,31 +138,157 @@ interface JobListViewProps {
 }
 
 /**
- * JobListView - Shows list of all jobs.
+ * Represents a group of jobs - either a single job or a sequence.
+ */
+interface JobGroup {
+  id: string;
+  type: 'single' | 'sequence';
+  jobs: BuildJob[];
+  status: BuildJob['status'];
+  name: string;
+  createdAt: Date;
+}
+
+/**
+ * Get the overall status of a sequence.
+ */
+function getSequenceStatus(jobs: BuildJob[]): BuildJob['status'] {
+  const hasRunning = jobs.some(j => j.status === 'running');
+  const hasFailed = jobs.some(j => j.status === 'failed');
+  const hasCancelled = jobs.some(j => j.status === 'cancelled');
+  const allSuccess = jobs.every(j => j.status === 'success');
+  const hasPending = jobs.some(j => j.status === 'pending' || j.status === 'waiting');
+  
+  if (hasRunning) return 'running';
+  if (hasFailed) return 'failed';
+  if (hasCancelled && !hasPending) return 'cancelled';
+  if (allSuccess) return 'success';
+  if (hasPending) return 'pending';
+  return 'pending';
+}
+
+/**
+ * Group jobs by sequence and standalone.
+ */
+function groupJobs(jobs: BuildJob[]): JobGroup[] {
+  const groups: JobGroup[] = [];
+  const sequenceMap = new Map<string, BuildJob[]>();
+  
+  for (const job of jobs) {
+    if (job.sequenceId) {
+      const existing = sequenceMap.get(job.sequenceId) || [];
+      existing.push(job);
+      sequenceMap.set(job.sequenceId, existing);
+    } else {
+      // Standalone job
+      groups.push({
+        id: job.id,
+        type: 'single',
+        jobs: [job],
+        status: job.status,
+        name: job.name,
+        createdAt: job.createdAt,
+      });
+    }
+  }
+  
+  // Add sequences - sort jobs within sequence by sequenceIndex
+  for (const [sequenceId, seqJobs] of sequenceMap) {
+    const sortedJobs = seqJobs.sort((a, b) => (a.sequenceIndex || 0) - (b.sequenceIndex || 0));
+    const firstJob = sortedJobs[0];
+    // Extract project name (before the colon)
+    const projectName = firstJob?.name.split(':')[0] || 'Sequence';
+    
+    groups.push({
+      id: sequenceId,
+      type: 'sequence',
+      jobs: sortedJobs,
+      status: getSequenceStatus(sortedJobs),
+      name: `${projectName} (${sortedJobs.length} builds)`,
+      createdAt: firstJob?.createdAt || new Date(),
+    });
+  }
+  
+  // Sort groups by creation date (oldest first for sequences, but newest first overall for visibility)
+  return groups.sort((a, b) => {
+    // Running/pending first
+    const statusOrder: Record<string, number> = {
+      'running': 0,
+      'pending': 1,
+      'waiting': 2,
+      'failed': 3,
+      'cancelled': 4,
+      'success': 5,
+    };
+    const statusA = statusOrder[a.status] ?? 5;
+    const statusB = statusOrder[b.status] ?? 5;
+    const statusDiff = statusA - statusB;
+    if (statusDiff !== 0) return statusDiff;
+    // Then by date (newest first)
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
+}
+
+/**
+ * JobListView - Shows list of all jobs grouped by sequences.
  */
 function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElement {
   const activeJobs = useActiveJobs();
   const jobHistory = useJobHistory();
   const clearCompletedJobs = useAppStore((state) => state.clearCompletedJobs);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [expandedSequences, setExpandedSequences] = useState<Set<string>>(new Set());
   
   // Combine active and history jobs
   const allJobs = useMemo(() => {
     return [...activeJobs, ...jobHistory];
   }, [activeJobs, jobHistory]);
   
+  // Group jobs by sequence
+  const jobGroups = useMemo(() => groupJobs(allJobs), [allJobs]);
+  
+  // Build flat list of visible items for navigation
+  const visibleItems = useMemo(() => {
+    const items: { type: 'group' | 'job'; group: JobGroup; job?: BuildJob; indent: boolean }[] = [];
+    
+    for (const group of jobGroups) {
+      items.push({ type: 'group', group, indent: false });
+      
+      if (group.type === 'sequence' && expandedSequences.has(group.id)) {
+        for (const job of group.jobs) {
+          items.push({ type: 'job', group, job, indent: true });
+        }
+      }
+    }
+    
+    return items;
+  }, [jobGroups, expandedSequences]);
+  
   // Keep highlighted index in bounds
   React.useEffect(() => {
-    if (highlightedIndex >= allJobs.length && allJobs.length > 0) {
-      setHighlightedIndex(allJobs.length - 1);
+    if (highlightedIndex >= visibleItems.length && visibleItems.length > 0) {
+      setHighlightedIndex(visibleItems.length - 1);
     }
-  }, [allJobs.length, highlightedIndex]);
+  }, [visibleItems.length, highlightedIndex]);
   
   // Stats - include 'waiting' in pending count
   const runningCount = activeJobs.filter(j => j.status === 'running').length;
   const pendingCount = activeJobs.filter(j => j.status === 'pending' || j.status === 'waiting').length;
   const successCount = jobHistory.filter(j => j.status === 'success').length;
   const failedCount = jobHistory.filter(j => j.status === 'failed').length;
+  
+  // Toggle sequence expansion
+  const toggleSequence = useCallback((sequenceId: string) => {
+    setExpandedSequences(prev => {
+      const next = new Set(prev);
+      if (next.has(sequenceId)) {
+        next.delete(sequenceId);
+      } else {
+        next.add(sequenceId);
+      }
+      return next;
+    });
+  }, []);
   
   // Handle keyboard
   useInput((input, key) => {
@@ -179,15 +305,33 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
     
     // Navigate down
     if (key.downArrow) {
-      setHighlightedIndex(prev => Math.min(allJobs.length - 1, prev + 1));
+      setHighlightedIndex(prev => Math.min(visibleItems.length - 1, prev + 1));
       return;
     }
     
     // Select with Enter
-    if (key.return && allJobs.length > 0) {
-      const selectedJob = allJobs[highlightedIndex];
-      if (selectedJob) {
-        onSelectJob(selectedJob.id);
+    if (key.return && visibleItems.length > 0) {
+      const selected = visibleItems[highlightedIndex];
+      if (selected) {
+        if (selected.type === 'job' && selected.job) {
+          onSelectJob(selected.job.id);
+        } else if (selected.type === 'group') {
+          if (selected.group.type === 'sequence') {
+            toggleSequence(selected.group.id);
+          } else {
+            // Single job - go to detail
+            onSelectJob(selected.group.jobs[0]?.id || '');
+          }
+        }
+      }
+      return;
+    }
+    
+    // Toggle expand with Space for sequences
+    if (input === ' ' && visibleItems.length > 0) {
+      const selected = visibleItems[highlightedIndex];
+      if (selected?.type === 'group' && selected.group.type === 'sequence') {
+        toggleSequence(selected.group.id);
       }
       return;
     }
@@ -203,7 +347,7 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
   const shortcuts: Shortcut[] = [
     { key: 'ESC', label: 'Back' },
     { key: '↑/↓', label: 'Navigate' },
-    { key: 'Enter', label: 'View Log' },
+    { key: '⏎', label: 'Select/Expand' },
     { key: 'C', label: 'Clear History' },
   ];
   
@@ -242,7 +386,7 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
           </Box>
           
           {/* Job List */}
-          {allJobs.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <Box flexDirection="column" paddingY={2}>
               <Text color={colors.textDim} italic>
                 No build jobs yet.
@@ -253,19 +397,49 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
             </Box>
           ) : (
             <Box flexDirection="column">
-              {/* Custom job rendering for live updates */}
-              {allJobs.map((job, index) => {
-                // Find the running job name for waiting jobs
-                const runningJob = activeJobs.find(j => j.status === 'running');
-                return (
-                  <JobListItem 
-                    key={job.id} 
-                    job={job} 
-                    isHighlighted={index === highlightedIndex}
-                    onSelect={() => onSelectJob(job.id)}
-                    runningJobName={runningJob?.name}
-                  />
-                );
+              {visibleItems.map((item, index) => {
+                const isHighlighted = index === highlightedIndex;
+                
+                if (item.type === 'group') {
+                  const group = item.group;
+                  const isExpanded = expandedSequences.has(group.id);
+                  
+                  if (group.type === 'sequence') {
+                    return (
+                      <SequenceHeader
+                        key={group.id}
+                        group={group}
+                        isExpanded={isExpanded}
+                        isHighlighted={isHighlighted}
+                        onToggle={() => toggleSequence(group.id)}
+                      />
+                    );
+                  } else {
+                    // Single job rendered as group
+                    const job = group.jobs[0];
+                    if (!job) return null;
+                    return (
+                      <JobListItem
+                        key={job.id}
+                        job={job}
+                        isHighlighted={isHighlighted}
+                        onSelect={() => onSelectJob(job.id)}
+                        indent={false}
+                      />
+                    );
+                  }
+                } else if (item.type === 'job' && item.job) {
+                  return (
+                    <JobListItem
+                      key={item.job.id}
+                      job={item.job}
+                      isHighlighted={isHighlighted}
+                      onSelect={() => onSelectJob(item.job!.id)}
+                      indent={true}
+                    />
+                  );
+                }
+                return null;
               })}
             </Box>
           )}
@@ -282,27 +456,27 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
   );
 }
 
-interface JobListItemProps {
-  job: BuildJob;
+interface SequenceHeaderProps {
+  group: JobGroup;
+  isExpanded: boolean;
   isHighlighted: boolean;
-  onSelect: () => void;
-  runningJobName?: string; // Name of the currently running job for 'waiting' status
+  onToggle: () => void;
 }
 
 /**
- * Single job item with live status updates.
+ * Sequence header row with expand/collapse.
  */
-function JobListItem({ job, isHighlighted, runningJobName }: JobListItemProps): React.ReactElement {
-  const duration = formatDuration(job.startedAt, job.completedAt);
-  const isRunning = job.status === 'running';
-  const isWaiting = job.status === 'waiting' || job.status === 'pending';
+function SequenceHeader({ group, isExpanded, isHighlighted }: SequenceHeaderProps): React.ReactElement {
+  const completedCount = group.jobs.filter(j => j.status === 'success').length;
+  const failedCount = group.jobs.filter(j => j.status === 'failed').length;
+  const totalCount = group.jobs.length;
   
-  // Status text for waiting jobs
-  const statusInfo = isWaiting && runningJobName 
-    ? `waiting for "${runningJobName}"` 
-    : isRunning 
-      ? `${job.progress}%` 
-      : duration;
+  // Calculate total duration for completed sequences
+  const firstStart = group.jobs.find(j => j.startedAt)?.startedAt;
+  const lastEnd = group.jobs.filter(j => j.completedAt).sort((a, b) => 
+    (b.completedAt?.getTime() || 0) - (a.completedAt?.getTime() || 0)
+  )[0]?.completedAt;
+  const duration = formatDuration(firstStart, lastEnd);
   
   return (
     <Box>
@@ -312,6 +486,91 @@ function JobListItem({ job, isHighlighted, runningJobName }: JobListItemProps): 
           {isHighlighted ? icons.pointer : ' '}
         </Text>
       </Box>
+      
+      {/* Expand/collapse indicator */}
+      <Box width={2}>
+        <Text color={colors.textDim}>
+          {isExpanded ? '▼' : '▶'}
+        </Text>
+      </Box>
+      
+      {/* Sequence icon */}
+      <Box width={2}>
+        <Text color={
+          group.status === 'success' ? colors.success :
+          group.status === 'failed' ? colors.error :
+          group.status === 'running' ? colors.info :
+          colors.textDim
+        }>
+          {group.status === 'running' ? '◐' : 
+           group.status === 'success' ? '✔' : 
+           group.status === 'failed' ? '✖' : '○'}
+        </Text>
+      </Box>
+      
+      {/* Sequence name */}
+      <Box width={30}>
+        <Text color={isHighlighted ? colors.primaryBright : colors.text} bold={isHighlighted}>
+          {group.name}
+        </Text>
+      </Box>
+      
+      {/* Progress info */}
+      <Box width={18}>
+        <Text color={colors.textDim}>
+          {completedCount + failedCount}/{totalCount} done
+          {failedCount > 0 && <Text color={colors.error}> ({failedCount} failed)</Text>}
+        </Text>
+      </Box>
+      
+      {/* Duration */}
+      <Box width={12}>
+        <Text color={colors.textDim}>{duration}</Text>
+      </Box>
+      
+      {/* Status badge */}
+      <Badge variant={getStatusVariant(group.status)}>
+        {group.status.toUpperCase()}
+      </Badge>
+    </Box>
+  );
+}
+
+interface JobListItemProps {
+  job: BuildJob;
+  isHighlighted: boolean;
+  onSelect: () => void;
+  indent: boolean;
+}
+
+/**
+ * Single job item with live status updates.
+ */
+function JobListItem({ job, isHighlighted, indent }: JobListItemProps): React.ReactElement {
+  const duration = formatDuration(job.startedAt, job.completedAt);
+  const isRunning = job.status === 'running';
+  const isWaiting = job.status === 'waiting' || job.status === 'pending';
+  
+  // For sequence jobs, show position
+  const positionInfo = job.sequenceIndex !== undefined 
+    ? `[${(job.sequenceIndex || 0) + 1}/${job.sequenceTotal || '?'}]`
+    : '';
+  
+  return (
+    <Box>
+      {/* Pointer */}
+      <Box width={2}>
+        <Text color={isHighlighted ? colors.primary : undefined}>
+          {isHighlighted ? icons.pointer : ' '}
+        </Text>
+      </Box>
+      
+      {/* Indent for sequence children */}
+      {indent && (
+        <Box width={2}>
+          <Text color={colors.textDim}>└</Text>
+        </Box>
+      )}
       
       {/* Status indicator */}
       <Box width={2}>
@@ -329,24 +588,24 @@ function JobListItem({ job, isHighlighted, runningJobName }: JobListItemProps): 
         )}
       </Box>
       
-      {/* Job name */}
-      <Box width={25}>
+      {/* Job name (shorter for indented items) */}
+      <Box width={indent ? 26 : 30}>
         <Text color={isHighlighted ? colors.primaryBright : colors.text} bold={isHighlighted}>
-          {job.name}
+          {indent ? job.name.split(':')[1] || job.name : job.name}
         </Text>
       </Box>
       
       {/* Goals */}
-      <Box width={20}>
+      <Box width={16}>
         <Text color={colors.textDim}>
           {job.mavenGoals.join(' ')}
         </Text>
       </Box>
       
-      {/* Progress/duration/waiting info */}
-      <Box width={25}>
+      {/* Progress/duration */}
+      <Box width={12}>
         <Text color={isWaiting ? colors.warning : isRunning ? colors.info : colors.textDim}>
-          {statusInfo}
+          {isRunning ? `${job.progress}%` : isWaiting ? 'waiting' : duration}
         </Text>
       </Box>
       

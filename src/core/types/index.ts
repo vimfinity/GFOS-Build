@@ -189,6 +189,8 @@ export interface BuildJob {
   sequenceIndex?: number;
   /** Total jobs in sequence */
   sequenceTotal?: number;
+  /** Unique ID for the sequence group */
+  sequenceId?: string;
 }
 
 // ============================================================================

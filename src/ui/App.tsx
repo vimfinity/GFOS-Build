@@ -240,19 +240,35 @@ export function App(): React.ReactElement {
         onComplete: (result) => {
           processingJobRef.current.delete(job.id);
           
-          // Handle sequential builds: activate next job in sequence
-          if (result.status === 'success' && job.sequenceIndex !== undefined && job.sequenceTotal !== undefined) {
-            const nextIndex = job.sequenceIndex + 1;
-            if (nextIndex < job.sequenceTotal) {
-              // Find the waiting job with the next sequence index from the same project
+          // Handle sequential builds
+          if (job.sequenceId && job.sequenceIndex !== undefined && job.sequenceTotal !== undefined) {
+            if (result.status === 'success') {
+              // Activate next job in sequence
+              const nextIndex = job.sequenceIndex + 1;
+              if (nextIndex < job.sequenceTotal) {
+                // Find the waiting job with the next sequence index in the same sequence
+                const waitingJobs = useAppStore.getState().activeJobs.filter(
+                  j => j.status === 'waiting' 
+                    && j.sequenceId === job.sequenceId
+                    && j.sequenceIndex === nextIndex
+                );
+                
+                for (const waitingJob of waitingJobs) {
+                  useAppStore.getState().updateJobStatus(waitingJob.id, 'pending');
+                }
+              }
+            } else if (result.status === 'failed') {
+              // Cancel all remaining waiting jobs in the sequence
               const waitingJobs = useAppStore.getState().activeJobs.filter(
-                j => j.status === 'waiting' 
-                  && j.projectPath === job.projectPath 
-                  && j.sequenceIndex === nextIndex
+                j => j.status === 'waiting' && j.sequenceId === job.sequenceId
               );
               
               for (const waitingJob of waitingJobs) {
-                useAppStore.getState().updateJobStatus(waitingJob.id, 'pending');
+                useAppStore.getState().updateJobStatus(waitingJob.id, 'cancelled');
+                useAppStore.getState().appendJobLog(
+                  waitingJob.id, 
+                  `[CANCELLED] Previous job in sequence failed: ${job.name}`
+                );
               }
             }
           }
@@ -433,6 +449,9 @@ export function App(): React.ReactElement {
               
               if (options.sequential) {
                 // For sequential builds, add jobs with a dependency chain
+                // Generate a unique sequence ID to group these jobs
+                const sequenceId = `seq-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                
                 // We'll mark all but the first as 'waiting' and handle them in job processor
                 pendingBuildConfig.selectedModules.forEach((module, index) => {
                   addJob({
@@ -447,6 +466,7 @@ export function App(): React.ReactElement {
                     customArgs: customArgsArray,
                     sequenceIndex: index,
                     sequenceTotal: pendingBuildConfig.selectedModules.length,
+                    sequenceId,
                   });
                 });
               } else {
