@@ -381,28 +381,38 @@ async function runRealBuild(
         stderr: 'pipe',
       });
       
-      // Track progress based on Maven lifecycle phases
-      let currentPhase = 0;
-      const phases = [
-        'clean',           // 0-10%
-        'validate',        // 10-15%
-        'compile',         // 15-35%
-        'test-compile',    // 35-45%
-        'test',            // 45-65%
-        'package',         // 65-80%
-        'verify',          // 80-85%
-        'install',         // 85-95%
-        'deploy',          // 95-100%
-      ];
-      const phaseProgress: Record<string, number> = {
-        'clean': 10,
-        'validate': 15,
-        'compile': 35,
-        'test-compile': 45,
-        'test': 65,
-        'package': 80,
-        'verify': 85,
-        'install': 95,
+      // Track progress based on Maven output
+      // For multi-module builds: "[INFO] Building moduleName (X/Y)"
+      // For single module: track lifecycle phases
+      let totalModules = 1;
+      let currentModule = 0;
+      let moduleProgress = 0;
+      
+      // Phase weights within a single module (cumulative percentages)
+      const phaseWeights: Record<string, number> = {
+        'clean': 5,
+        'initialize': 8,
+        'validate': 10,
+        'generate-sources': 15,
+        'process-sources': 18,
+        'generate-resources': 20,
+        'process-resources': 25,
+        'compile': 40,
+        'process-classes': 42,
+        'generate-test-sources': 45,
+        'process-test-sources': 48,
+        'generate-test-resources': 50,
+        'process-test-resources': 52,
+        'test-compile': 55,
+        'process-test-classes': 58,
+        'test': 70,
+        'prepare-package': 75,
+        'package': 85,
+        'pre-integration-test': 87,
+        'integration-test': 90,
+        'post-integration-test': 92,
+        'verify': 94,
+        'install': 98,
         'deploy': 100,
       };
       
@@ -424,30 +434,70 @@ async function runRealBuild(
             store.appendJobLog(jobId, line);
             callbacks.onLog?.(jobId, line);
             
-            // Detect Maven phase from log output
-            const phaseMatch = line.match(/\[INFO\] --- ([\w-]+)-plugin:[\d.]+:([\w-]+)/);
+            // Detect multi-module build: "[INFO] Building moduleName (X/Y)"
+            const multiModuleMatch = line.match(/\[INFO\] Building .+ \((\d+)\/(\d+)\)/);
+            if (multiModuleMatch) {
+              currentModule = parseInt(multiModuleMatch[1], 10);
+              totalModules = parseInt(multiModuleMatch[2], 10);
+              moduleProgress = 0; // Reset module progress for new module
+            }
+            
+            // Detect reactor summary (at end of multi-module build)
+            if (line.includes('[INFO] Reactor Summary')) {
+              currentModule = totalModules;
+              moduleProgress = 100;
+            }
+            
+            // Detect Maven phase/goal execution
+            // Pattern: "[INFO] --- plugin:version:goal (execution-id) @ module ---"
+            const phaseMatch = line.match(/\[INFO\] --- [\w.-]+:[\d.]+:([\w-]+)/);
             if (phaseMatch) {
-              const goal = phaseMatch[2];
-              // Map common goals to phases
-              if (goal === 'clean') currentPhase = phaseProgress['clean'] || currentPhase;
-              else if (goal === 'compile') currentPhase = phaseProgress['compile'] || currentPhase;
-              else if (goal === 'testCompile' || goal === 'test-compile') currentPhase = phaseProgress['test-compile'] || currentPhase;
-              else if (goal === 'test') currentPhase = phaseProgress['test'] || currentPhase;
-              else if (goal === 'jar' || goal === 'war' || goal === 'ear') currentPhase = phaseProgress['package'] || currentPhase;
-              else if (goal === 'install') currentPhase = phaseProgress['install'] || currentPhase;
+              const goal = phaseMatch[1];
+              // Map common goals to lifecycle phases
+              const goalToPhase: Record<string, string> = {
+                'clean': 'clean',
+                'resources': 'process-resources',
+                'compile': 'compile',
+                'testResources': 'process-test-resources',
+                'testCompile': 'test-compile',
+                'test': 'test',
+                'jar': 'package',
+                'war': 'package',
+                'ear': 'package',
+                'install': 'install',
+                'deploy': 'deploy',
+              };
+              const phase = goalToPhase[goal] || goal;
+              if (phaseWeights[phase] !== undefined) {
+                moduleProgress = phaseWeights[phase];
+              }
             }
             
-            // Also detect "BUILD SUCCESS" to set 100%
+            // Detect BUILD SUCCESS/FAILURE
             if (line.includes('BUILD SUCCESS')) {
-              currentPhase = 100;
+              currentModule = totalModules;
+              moduleProgress = 100;
             } else if (line.includes('BUILD FAILURE')) {
-              currentPhase = Math.max(currentPhase, 50); // Keep current progress on failure
+              // Keep current progress on failure
             }
             
-            // Update progress (cap at 95% until build completes)
-            const progress = Math.min(95, currentPhase);
-            store.updateJobProgress(jobId, progress);
-            callbacks.onProgress?.(jobId, progress);
+            // Calculate overall progress
+            // For multi-module: ((completedModules + currentModuleProgress) / totalModules) * 100
+            let overallProgress: number;
+            if (totalModules > 1) {
+              const completedModules = Math.max(0, currentModule - 1);
+              overallProgress = Math.round(
+                ((completedModules + (moduleProgress / 100)) / totalModules) * 100
+              );
+            } else {
+              overallProgress = moduleProgress;
+            }
+            
+            // Cap at 99% until build actually completes
+            overallProgress = Math.min(99, overallProgress);
+            
+            store.updateJobProgress(jobId, overallProgress);
+            callbacks.onProgress?.(jobId, overallProgress);
             
             // Check for cancellation
             const currentJob = useAppStore.getState().activeJobs.find(j => j.id === jobId);

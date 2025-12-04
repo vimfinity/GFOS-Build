@@ -94,6 +94,20 @@ function formatTime(date: Date): string {
 }
 
 /**
+ * Extract JDK version number from path.
+ * Examples: "C:\jdk21" -> "21", "/opt/jdk-17" -> "17", "jdk8" -> "8"
+ */
+function extractJdkVersion(jdkPath: string): string {
+  // Get the last segment of the path
+  const segments = jdkPath.split(/[/\\]/);
+  const lastSegment = segments[segments.length - 1] || jdkPath;
+  
+  // Try to extract version number
+  const versionMatch = lastSegment.match(/(\d+)/);
+  return versionMatch?.[1] ?? lastSegment;
+}
+
+/**
  * Convert BuildJob to ActionItem.
  */
 function jobToActionItem(job: BuildJob): ActionItem<string> {
@@ -144,9 +158,9 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
     }
   }, [allJobs.length, highlightedIndex]);
   
-  // Stats
+  // Stats - include 'waiting' in pending count
   const runningCount = activeJobs.filter(j => j.status === 'running').length;
-  const pendingCount = activeJobs.filter(j => j.status === 'pending').length;
+  const pendingCount = activeJobs.filter(j => j.status === 'pending' || j.status === 'waiting').length;
   const successCount = jobHistory.filter(j => j.status === 'success').length;
   const failedCount = jobHistory.filter(j => j.status === 'failed').length;
   
@@ -214,16 +228,16 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
           {/* Stats Bar */}
           <Box marginBottom={1} gap={2}>
             <Text color={runningCount > 0 ? colors.info : colors.textDim}>
-              {icons.running} Running: {runningCount}
+              Running: {runningCount}
             </Text>
             <Text color={pendingCount > 0 ? colors.warning : colors.textDim}>
-              {icons.pending} Pending: {pendingCount}
+              Pending: {pendingCount}
             </Text>
             <Text color={successCount > 0 ? colors.success : colors.textDim}>
-              {icons.success} Success: {successCount}
+              Success: {successCount}
             </Text>
             <Text color={failedCount > 0 ? colors.error : colors.textDim}>
-              {icons.error} Failed: {failedCount}
+              Failed: {failedCount}
             </Text>
           </Box>
           
@@ -240,14 +254,19 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
           ) : (
             <Box flexDirection="column">
               {/* Custom job rendering for live updates */}
-              {allJobs.map((job, index) => (
-                <JobListItem 
-                  key={job.id} 
-                  job={job} 
-                  isHighlighted={index === highlightedIndex}
-                  onSelect={() => onSelectJob(job.id)}
-                />
-              ))}
+              {allJobs.map((job, index) => {
+                // Find the running job name for waiting jobs
+                const runningJob = activeJobs.find(j => j.status === 'running');
+                return (
+                  <JobListItem 
+                    key={job.id} 
+                    job={job} 
+                    isHighlighted={index === highlightedIndex}
+                    onSelect={() => onSelectJob(job.id)}
+                    runningJobName={runningJob?.name}
+                  />
+                );
+              })}
             </Box>
           )}
         </Box>
@@ -267,14 +286,23 @@ interface JobListItemProps {
   job: BuildJob;
   isHighlighted: boolean;
   onSelect: () => void;
+  runningJobName?: string; // Name of the currently running job for 'waiting' status
 }
 
 /**
  * Single job item with live status updates.
  */
-function JobListItem({ job, isHighlighted }: JobListItemProps): React.ReactElement {
+function JobListItem({ job, isHighlighted, runningJobName }: JobListItemProps): React.ReactElement {
   const duration = formatDuration(job.startedAt, job.completedAt);
   const isRunning = job.status === 'running';
+  const isWaiting = job.status === 'waiting' || job.status === 'pending';
+  
+  // Status text for waiting jobs
+  const statusInfo = isWaiting && runningJobName 
+    ? `waiting for "${runningJobName}"` 
+    : isRunning 
+      ? `${job.progress}%` 
+      : duration;
   
   return (
     <Box>
@@ -315,17 +343,11 @@ function JobListItem({ job, isHighlighted }: JobListItemProps): React.ReactEleme
         </Text>
       </Box>
       
-      {/* Progress or duration */}
-      <Box width={15}>
-        {isRunning ? (
-          <Text color={colors.info}>
-            {job.progress}%
-          </Text>
-        ) : (
-          <Text color={colors.textDim}>
-            {duration}
-          </Text>
-        )}
+      {/* Progress/duration/waiting info */}
+      <Box width={25}>
+        <Text color={isWaiting ? colors.warning : isRunning ? colors.info : colors.textDim}>
+          {statusInfo}
+        </Text>
       </Box>
       
       {/* Status badge */}
@@ -487,11 +509,12 @@ function JobDetailView({ jobId, onBack }: JobDetailViewProps): React.ReactElemen
           {/* Job Info Header */}
           <Box marginBottom={1} flexDirection="column">
             <Box>
-              <Text color={colors.textDim}>Goals: </Text>
-              <Text>{job.mavenGoals.join(' ')}</Text>
-              <Text>  </Text>
+              <Text color={colors.textDim}>Command: </Text>
+              <Text>mvn {job.mavenGoals.join(' ')}</Text>
+            </Box>
+            <Box>
               <Text color={colors.textDim}>JDK: </Text>
-              <Text>{job.jdkPath.split('\\').pop()}</Text>
+              <Text>{extractJdkVersion(job.jdkPath)}</Text>
             </Box>
             
             {/* Progress bar for running jobs */}

@@ -72,7 +72,7 @@ export function MainMenuView({
   const menuItems: MenuItem[] = [
     {
       id: 'repos',
-      icon: '📁',
+      icon: '›',
       label: 'Repositories',
       description: 'Browse and build Maven projects',
       badge: projects.length > 0 ? `${projects.length}` : undefined,
@@ -80,7 +80,7 @@ export function MainMenuView({
     },
     {
       id: 'jobs',
-      icon: '🔨',
+      icon: '›',
       label: 'Build Jobs',
       description: 'View running and completed builds',
       badge: runningJobs > 0 ? `${runningJobs} running` : pendingJobs > 0 ? `${pendingJobs} pending` : undefined,
@@ -88,13 +88,13 @@ export function MainMenuView({
     },
     {
       id: 'settings',
-      icon: '⚙️',
+      icon: '›',
       label: 'Settings',
       description: 'Configure paths, JDKs, and preferences',
     },
     {
       id: 'exit',
-      icon: '🚪',
+      icon: '›',
       label: 'Exit',
       description: 'Quit GFOS-Build',
     },
@@ -175,13 +175,11 @@ export function MainMenuView({
   });
   
   // Status bar shortcuts
-  const shortcuts: Shortcut[] = [
+  const shortcuts = [
     { key: '↑↓', label: 'Navigate' },
     { key: '⏎', label: 'Select' },
-    { key: 'R', label: 'Repos' },
-    { key: 'J', label: 'Jobs' },
-    { key: 'S', label: 'Settings' },
-    { key: 'Q', label: 'Quit' },
+    { key: '1-4', label: 'Jump' },
+    { key: 'q', label: 'Quit' },
   ];
   
   return (
@@ -218,36 +216,31 @@ export function MainMenuView({
                   <Text color={colors.textDim}>{index + 1}.</Text>
                 </Box>
                 
-                {/* Icon */}
-                <Box width={3}>
-                  <Text>{item.icon}</Text>
+                {/* Label with fixed width for stability */}
+                <Box width={16}>
+                  <Text
+                    color={isSelected ? colors.primaryBright : colors.text}
+                    bold={isSelected}
+                  >
+                    {item.label}
+                  </Text>
                 </Box>
                 
-                {/* Label and description */}
-                <Box flexDirection="column" flexGrow={1}>
-                  <Box>
-                    <Text
-                      color={isSelected ? colors.primaryBright : colors.text}
-                      bold={isSelected}
-                    >
-                      {item.label}
-                    </Text>
-                    
-                    {/* Badge */}
-                    {item.badge && (
-                      <Text color={item.badgeColor || colors.accent}>
-                        {' '}[{item.badge}]
-                      </Text>
-                    )}
-                  </Box>
-                  
-                  {/* Description - only for selected item */}
-                  {isSelected && (
-                    <Text color={colors.textDim} italic>
-                      {item.description}
+                {/* Badge with fixed width to prevent layout shift */}
+                <Box width={14}>
+                  {item.badge && (
+                    <Text color={item.badgeColor || colors.accent}>
+                      [{item.badge}]
                     </Text>
                   )}
                 </Box>
+                
+                {/* Description - only for selected item */}
+                {isSelected && (
+                  <Text color={colors.textDim} italic>
+                    {item.description}
+                  </Text>
+                )}
               </Box>
             );
           })}
@@ -256,11 +249,11 @@ export function MainMenuView({
         {/* Quick stats */}
         <Box marginTop={2} borderStyle="single" borderColor={colors.border} paddingX={1}>
           <Text color={colors.textDim}>
-            {icons.folder} {projects.length} repos
-            {'  '}
-            {icons.running} {runningJobs} running
-            {'  '}
-            {icons.pending} {pendingJobs} pending
+            {projects.length} repos
+            {'  •  '}
+            {runningJobs} running
+            {'  •  '}
+            {pendingJobs} pending
           </Text>
         </Box>
       </ScreenContainer>

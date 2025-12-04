@@ -118,12 +118,12 @@ export const icons = {
   running: '◐',
   
   // Objects
-  folder: '📁',
-  file: '📄',
-  package: '📦',
+  folder: '▪',
+  file: '▫',
+  package: '□',
   git: '',
-  java: '☕',
-  maven: '🏗️',
+  java: '◆',
+  maven: '◈',
   
   // Actions
   play: '▶',
