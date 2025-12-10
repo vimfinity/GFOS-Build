@@ -35,6 +35,7 @@ import {
 import { WorkspaceScanner, type MavenModule } from '../../core/services/WorkspaceScanner.js';
 import { getCacheService } from '../../core/services/CacheService.js';
 import { getFileSystem } from '../../infrastructure/ServiceLocator.js';
+import type { SelectedModuleData } from '../../core/types/index.js';
 import type { Shortcut } from '../components/index.js';
 
 /**
@@ -157,14 +158,6 @@ function getJavaVersionColor(version: string): string {
 // ============================================================================
 // Props
 // ============================================================================
-
-/** Data passed to BuildConfigView */
-export interface SelectedModuleData {
-  artifactId?: string;
-  pomPath: string;
-  projectPath: string;
-  relativePath?: string;
-}
 
 export interface BuildConfigData {
   projectPath: string;

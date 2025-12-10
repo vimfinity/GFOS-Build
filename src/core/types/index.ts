@@ -195,6 +195,16 @@ export interface BuildJob {
   sequenceId?: string;
 }
 
+/**
+ * Represents a selected module when configuring builds or pipelines.
+ */
+export interface SelectedModuleData {
+  artifactId?: string;
+  pomPath: string;
+  projectPath: string;
+  relativePath?: string;
+}
+
 // ============================================================================
 // UI Navigation Types
 // ============================================================================

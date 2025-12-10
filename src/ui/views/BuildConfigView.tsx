@@ -26,7 +26,8 @@ import {
   useAppStore,
   useSettings,
 } from '../../core/store/useAppStore.js';
-import type { SelectedModuleData } from './RepoDetailView.js';
+import type { SelectedModuleData } from '../../core/types/index.js';
+import { getPipelineService, type PipelineDefinition, type PipelineStepOptions } from '../../core/services/PipelineService.js';
 
 // ============================================================================
 // Types
@@ -65,20 +66,25 @@ export interface BuildConfigViewProps {
 const MAVEN_GOALS = ['clean', 'compile', 'test', 'package', 'install', 'deploy'];
 type Section = 'goals' | 'profiles' | 'options' | 'custom';
 
+const pipelineService = getPipelineService();
+
 // ============================================================================
 // Component
 // ============================================================================
-
 export function BuildConfigView({
+  projectPath,
   projectName,
   selectedModules,
   availableProfiles = [],
+  jdkPath,
   jdkVersion,
   onConfirm,
   onBack,
 }: BuildConfigViewProps): React.ReactElement {
   const settings = useSettings();
   const goBack = useAppStore((state) => state.goBack);
+  const savePipelineDefinition = useAppStore((state) => state.savePipeline);
+  const addNotification = useAppStore((state) => state.addNotification);
   const { height: terminalHeight } = useTerminalSize();
   
   // Default goals from settings
@@ -109,6 +115,9 @@ export function BuildConfigView({
   const [focusIndex, setFocusIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [isEditingCustom, setIsEditingCustom] = useState(false);
+  const [isEnteringPipelineName, setIsEnteringPipelineName] = useState(false);
+  const [pipelineNameInput, setPipelineNameInput] = useState('');
+  const [pipelineMessage, setPipelineMessage] = useState<string | null>(null);
   
   // ============================================================================
   // Computed Values
@@ -188,23 +197,112 @@ export function BuildConfigView({
     return 'none';
   }, [selectedProfiles]);
   
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = useCallback(async (pipelineName?: string) => {
     if (selectedGoals.length === 0) return;
-    onConfirm({
+    const buildOptions: BuildOptions = {
       goals: selectedGoals,
       profiles: selectedProfiles,
-      skipTests, offline, batchMode, threads,
-      updateSnapshots, alsoMake, alsoMakeDependents, showErrors,
-      customArgs, sequential,
-    });
-  }, [selectedGoals, selectedProfiles, skipTests, offline, batchMode, threads, 
-      updateSnapshots, alsoMake, alsoMakeDependents, showErrors, customArgs, sequential, onConfirm]);
+      skipTests,
+      offline,
+      batchMode,
+      threads,
+      updateSnapshots,
+      alsoMake,
+      alsoMakeDependents,
+      showErrors,
+      customArgs,
+      sequential,
+    };
+
+    if (pipelineName) {
+      const trimmedName = pipelineName.trim();
+      if (trimmedName && selectedModules.length > 0) {
+        const stepOptions: PipelineStepOptions = {
+          goals: [...selectedGoals],
+          profiles: [...selectedProfiles],
+          skipTests,
+          offline,
+          batchMode,
+          threads,
+          updateSnapshots,
+          alsoMake,
+          alsoMakeDependents,
+          showErrors,
+          customArgs,
+          sequential,
+        };
+
+        const pipelineDefinition: PipelineDefinition = {
+          id: `pipeline-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+          name: trimmedName,
+          createdAt: new Date().toISOString(),
+          steps: [{
+            id: `step-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+            projectPath,
+            projectName,
+            jdkPath,
+            jdkVersion,
+            selectedModules: selectedModules.map((module) => ({ ...module })),
+            options: stepOptions,
+          }],
+        };
+
+        try {
+          await pipelineService.save(pipelineDefinition);
+          savePipelineDefinition(pipelineDefinition);
+          setPipelineMessage(`Pipeline saved as "${trimmedName}"`);
+          addNotification('success', `Pipeline "${trimmedName}" saved`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to save pipeline';
+          addNotification('error', `Pipeline save failed: ${message}`);
+        }
+      } else {
+        setPipelineMessage('Select at least one module to save a pipeline');
+      }
+    }
+
+    onConfirm(buildOptions);
+  }, [projectName, projectPath, selectedModules, jdkPath, jdkVersion, selectedGoals,
+      selectedProfiles, skipTests, offline, batchMode, threads, updateSnapshots, alsoMake,
+      alsoMakeDependents, showErrors, customArgs, sequential, onConfirm, savePipelineDefinition,
+      addNotification]);
   
   // ============================================================================
   // Keyboard Handler
   // ============================================================================
   
   useInput((input, key) => {
+    if (isEnteringPipelineName) {
+      if (key.escape) {
+        setIsEnteringPipelineName(false);
+        setPipelineNameInput('');
+        setPipelineMessage(null);
+        return;
+      }
+
+      if (key.return) {
+        if (pipelineNameInput.trim()) {
+          setIsEnteringPipelineName(false);
+          const value = pipelineNameInput.trim();
+          setPipelineNameInput('');
+          void handleConfirm(value);
+        } else {
+          setPipelineMessage('Pipeline name cannot be empty');
+        }
+        return;
+      }
+
+      if (key.backspace || key.delete) {
+        setPipelineNameInput(prev => prev.slice(0, -1));
+        return;
+      }
+
+      if (input && input.length === 1 && input.charCodeAt(0) >= 32) {
+        setPipelineNameInput(prev => prev + input);
+      }
+      return;
+    }
+
     if (key.escape) {
       if (isEditingCustom) {
         setIsEditingCustom(false);
@@ -213,7 +311,14 @@ export function BuildConfigView({
       }
       return;
     }
-    
+
+    if (key.ctrl && (input === 'p' || input === 'P')) {
+      setIsEnteringPipelineName(true);
+      setPipelineNameInput('');
+      setPipelineMessage(null);
+      return;
+    }
+
     if (isEditingCustom) {
       if (key.return) {
         setIsEditingCustom(false);
@@ -323,12 +428,18 @@ export function BuildConfigView({
   // Shortcuts
   const shortcuts: Shortcut[] = isEditingCustom
     ? [{ key: 'ESC', label: 'Done' }]
-    : [
-        { key: 'Tab', label: 'Section' },
-        { key: '↑↓', label: 'Nav' },
-        { key: 'Space', label: 'Toggle' },
-        { key: '⏎', label: 'Build' },
-      ];
+    : isEnteringPipelineName
+      ? [
+          { key: 'ESC', label: 'Cancel' },
+          { key: '⏎', label: 'Save & Run' },
+        ]
+      : [
+          { key: 'Tab', label: 'Section' },
+          { key: '↑↓', label: 'Nav' },
+          { key: 'Space', label: 'Toggle' },
+          { key: '⏎', label: 'Build' },
+          { key: 'Ctrl+P', label: 'Save pipeline' },
+        ];
   
   // ============================================================================
   // Render
@@ -471,6 +582,20 @@ export function BuildConfigView({
               {selectedGoals.length > 0 ? '✓ Press Enter to build' : '⚠ Select at least one goal'}
             </Text>
           </Box>
+
+          {isEnteringPipelineName && (
+            <Box marginTop={1}>
+              <Text color={colors.info}>
+                Name this pipeline: {pipelineNameInput || '(type a name)'} • Enter to save + run
+              </Text>
+            </Box>
+          )}
+
+          {pipelineMessage && !isEnteringPipelineName && (
+            <Box marginTop={1}>
+              <Text color={colors.success}>{pipelineMessage}</Text>
+            </Box>
+          )}
           
         </Box>
       </ScreenContainer>

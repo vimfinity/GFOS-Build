@@ -28,21 +28,23 @@ import { getConfigService } from '../core/services/ConfigService.js';
 import { processManager } from '../core/services/ProcessManager.js';
 import { getBuildRunner } from '../core/services/BuildRunner.js';
 import type { BuildConfig } from '../core/services/BuildRunner.js';
-import type { BuildJob } from '../core/types/index.js';
+import type { BuildJob, SelectedModuleData } from '../core/types/index.js';
 import { WorkspaceScanner } from '../core/services/WorkspaceScanner.js';
 import { getCacheService } from '../core/services/CacheService.js';
 import { getFileSystem } from '../infrastructure/ServiceLocator.js';
 import { getJobHistoryService, type PersistedJob } from '../core/services/JobHistoryService.js';
+import { getPipelineService } from '../core/services/PipelineService.js';
 
 // Views
 import { MainMenuView } from './views/MainMenuView.js';
 import { RepoListView } from './views/RepoListView.js';
 import { RepoDetailView } from './views/RepoDetailView.js';
-import type { BuildConfigData, SelectedModuleData } from './views/RepoDetailView.js';
+import type { BuildConfigData } from './views/RepoDetailView.js';
 import { BuildConfigView } from './views/BuildConfigView.js';
 import type { BuildOptions } from './views/BuildConfigView.js';
 import { JobsView } from './views/JobsView.js';
 import { SettingsView } from './views/SettingsView.js';
+import { PipelineManagerView } from './views/PipelineManagerView.js';
 
 // Components
 import { Header, StatusBar, FullscreenContainer } from './components/index.js';
@@ -110,6 +112,7 @@ export function App(): React.ReactElement {
   const loadProjects = useAppStore((state) => state.loadProjects);
   const loadJdks = useAppStore((state) => state.loadJdks);
   const loadJobHistory = useAppStore((state) => state.loadJobHistory);
+  const loadPipelines = useAppStore((state) => state.loadPipelines);
   const setScanning = useAppStore((state) => state.setScanning);
   const addNotification = useAppStore((state) => state.addNotification);
   
@@ -128,6 +131,12 @@ export function App(): React.ReactElement {
         const persistedJobs = await historyService.load();
         if (persistedJobs.length > 0) {
           loadJobHistory(persistedJobs.map(toBuildJob));
+        }
+
+        const pipelineService = getPipelineService();
+        const persistedPipelines = await pipelineService.loadAll();
+        if (persistedPipelines.length > 0) {
+          loadPipelines(persistedPipelines);
         }
         
         // 2. Try to load from cache first
@@ -545,6 +554,11 @@ export function App(): React.ReactElement {
             onBack={goBack}
           />
         );
+
+      case 'PIPELINES':
+        return (
+          <PipelineManagerView onBack={goBack} />
+        );
         
       // Placeholder screens
       case 'MODULE_DETAIL':
@@ -587,7 +601,7 @@ export function App(): React.ReactElement {
   
   // All main views include their own Header/StatusBar, render them directly
   if (isInitialized && !initError) {
-    const viewsWithOwnLayout = ['HOME', 'REPO_LIST', 'REPO_DETAIL', 'BUILD_QUEUE', 'BUILD_DETAIL', 'SETTINGS'];
+    const viewsWithOwnLayout = ['HOME', 'REPO_LIST', 'REPO_DETAIL', 'BUILD_QUEUE', 'BUILD_DETAIL', 'SETTINGS', 'PIPELINES'];
     if (viewsWithOwnLayout.includes(currentScreen)) {
       return (
         <FullscreenContainer>

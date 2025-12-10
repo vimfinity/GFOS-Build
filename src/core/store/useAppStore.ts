@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { JDK, BuildStatus, BuildJob } from '../types';
+import type { PipelineDefinition } from '../services/PipelineService.js';
 import type { DiscoveredProject, MavenModule } from '../services/WorkspaceScanner';
 import { getJobLogService } from '../services/JobLogService.js';
 
@@ -27,7 +28,8 @@ export type AppScreen =
   | 'BUILD_CONFIG'
   | 'BUILD_QUEUE'
   | 'BUILD_DETAIL'
-  | 'SETTINGS';
+  | 'SETTINGS'
+  | 'PIPELINES';
 
 /**
  * User settings and preferences.
@@ -116,6 +118,7 @@ export interface AppState {
   activeJobs: BuildJob[];
   jobHistory: BuildJob[];
   jobLogs: Record<string, string[]>;
+  pipelines: PipelineDefinition[];
   
   // Notifications
   notifications: Notification[];
@@ -163,6 +166,9 @@ export interface AppActions {
   setJobCommand: (id: string, command: string) => void;
   setJobExitCode: (id: string, exitCode: number | null) => void;
   removeJobLogs: (id: string) => void;
+  loadPipelines: (pipelines: PipelineDefinition[]) => void;
+  savePipeline: (pipeline: PipelineDefinition) => void;
+  removePipeline: (id: string) => void;
   
   // Selection Actions
   selectProject: (path: string | null) => void;
@@ -223,6 +229,7 @@ export const useAppStore = create<AppState & AppActions>()(
     activeJobs: [],
     jobHistory: [],
     jobLogs: {},
+    pipelines: [],
     notifications: [],
     selectedProjectPath: null,
     selectedModulePath: null,
@@ -452,6 +459,22 @@ export const useAppStore = create<AppState & AppActions>()(
       set({ jobHistory: jobs });
     },
 
+    loadPipelines: (pipelines) => {
+      set({ pipelines });
+    },
+
+    savePipeline: (pipeline) => {
+      set((state) => ({
+        pipelines: [pipeline, ...state.pipelines.filter((p) => p.id !== pipeline.id)],
+      }));
+    },
+
+    removePipeline: (id) => {
+      set((state) => ({
+        pipelines: state.pipelines.filter((p) => p.id !== id),
+      }));
+    },
+
     setJobCommand: (id, command) => {
       set((state) => {
         const updateList = (list: BuildJob[]) =>
@@ -580,6 +603,8 @@ export const useJobHistory = () => useAppStore((state) => state.jobHistory);
 
 export const useJobLogs = (jobId: string) =>
   useAppStore((state) => state.jobLogs[jobId] ?? []);
+
+export const usePipelines = () => useAppStore((state) => state.pipelines);
 
 /**
  * Selects pending jobs count.

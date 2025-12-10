@@ -663,7 +663,13 @@ function JobDetailView({ jobId, onBack }: JobDetailViewProps): React.ReactElemen
     let isActive = true;
     jobLogService.read(job.id).then(lines => {
       if (isActive) {
-        setPersistedLogs(lines);
+        // Avoid state churn when lines haven't actually changed
+        setPersistedLogs(prev => {
+          if (prev.length === lines.length && prev.every((line, index) => line === lines[index])) {
+            return prev;
+          }
+          return lines;
+        });
       }
     });
 
@@ -679,10 +685,17 @@ function JobDetailView({ jobId, onBack }: JobDetailViewProps): React.ReactElemen
   
   // Auto-scroll in follow mode
   React.useEffect(() => {
-    if (followMode && job?.status === 'running') {
-      setScrollOffset(maxOffset);
+    if (!followMode || job?.status !== 'running') {
+      return;
     }
-  }, [totalLines, followMode, job?.status, maxOffset]);
+
+    setScrollOffset(prev => {
+      if (prev === maxOffset) {
+        return prev;
+      }
+      return maxOffset;
+    });
+  }, [followMode, job?.status, maxOffset]);
   
   // Handle keyboard
   useInput((input, key) => {

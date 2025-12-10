@@ -18,6 +18,7 @@ import {
   usePendingJobsCount,
   useRunningJobsCount,
   useProjects,
+  usePipelines,
 } from '../../core/store/useAppStore.js';
 import type { Shortcut } from '../components/index.js';
 
@@ -62,6 +63,7 @@ export function MainMenuView({
   
   // Store data for badges
   const projects = useProjects();
+  const pipelines = usePipelines();
   const pendingJobs = usePendingJobsCount();
   const runningJobs = useRunningJobsCount();
   
@@ -85,6 +87,14 @@ export function MainMenuView({
       description: 'View running and completed builds',
       badge: runningJobs > 0 ? `${runningJobs} running` : pendingJobs > 0 ? `${pendingJobs} pending` : undefined,
       badgeColor: runningJobs > 0 ? colors.warning : colors.info,
+    },
+    {
+      id: 'pipelines',
+      icon: '›',
+      label: 'Pipelines',
+      description: 'Saved build presets',
+      badge: pipelines.length > 0 ? `${pipelines.length}` : undefined,
+      badgeColor: colors.primaryBright,
     },
     {
       id: 'settings',
@@ -111,6 +121,9 @@ export function MainMenuView({
         break;
       case 'jobs':
         onNavigateToJobs?.() || setScreen('BUILD_QUEUE');
+        break;
+      case 'pipelines':
+        setScreen('PIPELINES');
         break;
       case 'settings':
         onNavigateToSettings?.() || setScreen('SETTINGS');
@@ -142,11 +155,10 @@ export function MainMenuView({
     }
     
     // Quick navigation with numbers
-    if (input >= '1' && input <= '4') {
+    if (input >= '1' && input <= String(menuItems.length)) {
       const index = parseInt(input, 10) - 1;
-      if (index < menuItems.length) {
+      if (index >= 0 && index < menuItems.length) {
         setSelectedIndex(index);
-        // Auto-select after short delay feel
         handleSelect();
       }
       return;
@@ -163,8 +175,13 @@ export function MainMenuView({
       onNavigateToJobs?.() || setScreen('BUILD_QUEUE');
       return;
     }
-    if (input === 's' || input === 'S') {
+    if (input === 'p' || input === 'P') {
       setSelectedIndex(2);
+      setScreen('PIPELINES');
+      return;
+    }
+    if (input === 's' || input === 'S') {
+      setSelectedIndex(3);
       onNavigateToSettings?.() || setScreen('SETTINGS');
       return;
     }
