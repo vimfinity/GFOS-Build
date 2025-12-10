@@ -36,7 +36,7 @@ import { getFileSystem } from '../infrastructure/ServiceLocator.js';
 import { MainMenuView } from './views/MainMenuView.js';
 import { RepoListView } from './views/RepoListView.js';
 import { RepoDetailView } from './views/RepoDetailView.js';
-import type { BuildConfigData } from './views/RepoDetailView.js';
+import type { BuildConfigData, SelectedModuleData } from './views/RepoDetailView.js';
 import { BuildConfigView } from './views/BuildConfigView.js';
 import type { BuildOptions } from './views/BuildConfigView.js';
 import { JobsView } from './views/JobsView.js';
@@ -55,7 +55,7 @@ import type { Shortcut } from './components/index.js';
 interface PendingBuildConfig {
   projectPath: string;
   projectName: string;
-  selectedModules: Array<{ artifactId: string; pomPath: string; relativePath?: string }>;
+  selectedModules: SelectedModuleData[];
   availableProfiles: string[];
   jdkPath: string;
   jdkVersion: string;
@@ -217,7 +217,6 @@ export function App(): React.ReactElement {
         projectPath: job.projectPath,
         name: job.name,
         goals: job.mavenGoals,
-        modules: job.modulePath ? [job.modulePath] : undefined,
         environment: {
           JAVA_HOME: job.jdkPath || '',
         },
@@ -457,9 +456,9 @@ export function App(): React.ReactElement {
                 
                 // We'll mark all but the first as 'waiting' and handle them in job processor
                 pendingBuildConfig.selectedModules.forEach((module, index) => {
+                  const moduleProjectPath = module.projectPath || pendingBuildConfig.projectPath;
                   addJob({
-                    projectPath: pendingBuildConfig.projectPath,
-                    modulePath: module.relativePath,
+                    projectPath: moduleProjectPath,
                     name: `${pendingBuildConfig.projectName}:${module.artifactId}`,
                     jdkPath: pendingBuildConfig.jdkPath,
                     mavenGoals: options.goals,
@@ -475,9 +474,9 @@ export function App(): React.ReactElement {
               } else {
                 // Parallel builds or single module - all jobs start as pending, no sequence
                 pendingBuildConfig.selectedModules.forEach(module => {
+                  const moduleProjectPath = module.projectPath || pendingBuildConfig.projectPath;
                   addJob({
-                    projectPath: pendingBuildConfig.projectPath,
-                    modulePath: module.relativePath,
+                    projectPath: moduleProjectPath,
                     name: `${pendingBuildConfig.projectName}:${module.artifactId}`,
                     jdkPath: pendingBuildConfig.jdkPath,
                     mavenGoals: options.goals,

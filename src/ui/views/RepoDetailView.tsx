@@ -159,10 +159,17 @@ function getJavaVersionColor(version: string): string {
 // ============================================================================
 
 /** Data passed to BuildConfigView */
+export interface SelectedModuleData {
+  artifactId?: string;
+  pomPath: string;
+  projectPath: string;
+  relativePath?: string;
+}
+
 export interface BuildConfigData {
   projectPath: string;
   projectName: string;
-  selectedModules: Array<{ artifactId: string; pomPath: string; relativePath?: string }>;
+  selectedModules: SelectedModuleData[];
   availableProfiles: string[];
   jdkPath: string;
   jdkVersion: string;
@@ -385,6 +392,7 @@ export function RepoDetailView({
         artifactId: module.artifactId,
         pomPath: module.pomPath,
         relativePath,
+        projectPath: module.projectPath,
       };
     });
 
@@ -402,8 +410,7 @@ export function RepoDetailView({
       // Fallback: directly add jobs (legacy behavior)
       modulesWithRelativePaths.forEach(module => {
         addJob({
-          projectPath: project.path,
-          modulePath: module.relativePath,
+          projectPath: module.projectPath || project.path,
           name: `${project.name}:${module.artifactId}`,
           jdkPath: javaHome,
           mavenGoals: settings.defaultMavenGoal.split(' '),

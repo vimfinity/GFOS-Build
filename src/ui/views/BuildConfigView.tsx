@@ -26,6 +26,7 @@ import {
   useAppStore,
   useSettings,
 } from '../../core/store/useAppStore.js';
+import type { SelectedModuleData } from './RepoDetailView.js';
 
 // ============================================================================
 // Types
@@ -49,7 +50,7 @@ export interface BuildOptions {
 export interface BuildConfigViewProps {
   projectPath: string;
   projectName: string;
-  selectedModules: Array<{ artifactId: string; pomPath: string; relativePath?: string }>;
+  selectedModules: SelectedModuleData[];
   availableProfiles?: string[];
   jdkPath: string;
   jdkVersion: string;
