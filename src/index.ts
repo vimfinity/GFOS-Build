@@ -122,8 +122,9 @@ async function main(): Promise<void> {
     appendJobLog(jobId, '[INFO] Running tests...');
     
     const runningJob = useAppStore.getState().activeJobs.find(j => j.id === jobId);
+    const runningJobLogs = useAppStore.getState().jobLogs[jobId] ?? [];
     console.log(`    Progress: ${runningJob?.progress}%`);
-    console.log(`    Logs: ${runningJob?.logs.length} entries`);
+    console.log(`    Logs: ${runningJobLogs.length} entries`);
     
     // Complete the job
     updateJobStatus(jobId, 'success');

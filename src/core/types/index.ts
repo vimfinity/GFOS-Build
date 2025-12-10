@@ -173,10 +173,12 @@ export interface BuildJob {
   mavenGoals: string[];
   status: BuildStatus;
   progress: number;
-  logs: string[];
   createdAt: Date;
-  startTime?: Date;
-  endTime?: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  command?: string;
+  logFilePath?: string;
+  exitCode?: number | null;
   output?: string;
   error?: string;
   /** Skip tests flag */

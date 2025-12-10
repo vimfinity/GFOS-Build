@@ -7,8 +7,9 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { JDK, BuildStatus } from '../types';
+import type { JDK, BuildStatus, BuildJob } from '../types';
 import type { DiscoveredProject, MavenModule } from '../services/WorkspaceScanner';
+import { getJobLogService } from '../services/JobLogService.js';
 
 // ============================================================================
 // Store Types
@@ -85,50 +86,6 @@ export interface NavigationState {
 }
 
 /**
- * Build job with extended properties for UI.
- */
-export interface BuildJob {
-  /** Unique job identifier */
-  id: string;
-  /** Project path being built */
-  projectPath: string;
-  /** Module path (if building specific module) */
-  modulePath?: string;
-  /** Display name */
-  name: string;
-  /** JDK path to use */
-  jdkPath: string;
-  /** Maven goals to execute */
-  mavenGoals: string[];
-  /** Current job status */
-  status: BuildStatus;
-  /** Build progress (0-100) */
-  progress: number;
-  /** Build output logs */
-  logs: string[];
-  /** Error message if failed */
-  error?: string;
-  /** Job creation time */
-  createdAt: Date;
-  /** Job start time */
-  startedAt?: Date;
-  /** Job completion time */
-  completedAt?: Date;
-  /** Skip tests flag */
-  skipTests?: boolean;
-  /** Offline mode */
-  offline?: boolean;
-  /** Custom Maven arguments */
-  customArgs?: string[];
-  /** Index in sequence for sequential builds */
-  sequenceIndex?: number;
-  /** Total jobs in sequence */
-  sequenceTotal?: number;
-  /** Unique ID for the sequence group */
-  sequenceId?: string;
-}
-
-/**
  * Notification message.
  */
 export interface Notification {
@@ -158,6 +115,7 @@ export interface AppState {
   // Build Jobs
   activeJobs: BuildJob[];
   jobHistory: BuildJob[];
+  jobLogs: Record<string, string[]>;
   
   // Notifications
   notifications: Notification[];
@@ -194,13 +152,17 @@ export interface AppActions {
   clearScannedData: () => void;
   
   // Job Actions
-  addJob: (job: Omit<BuildJob, 'id' | 'createdAt' | 'logs' | 'progress'>) => string;
+  addJob: (job: Omit<BuildJob, 'id' | 'createdAt' | 'progress'>) => string;
   updateJobStatus: (id: string, status: BuildStatus) => void;
   updateJobProgress: (id: string, progress: number) => void;
   appendJobLog: (id: string, log: string) => void;
   setJobError: (id: string, error: string) => void;
   removeJob: (id: string) => void;
   clearCompletedJobs: () => void;
+  loadJobHistory: (jobs: BuildJob[]) => void;
+  setJobCommand: (id: string, command: string) => void;
+  setJobExitCode: (id: string, exitCode: number | null) => void;
+  removeJobLogs: (id: string) => void;
   
   // Selection Actions
   selectProject: (path: string | null) => void;
@@ -260,6 +222,7 @@ export const useAppStore = create<AppState & AppActions>()(
     navigation: DEFAULT_NAVIGATION,
     activeJobs: [],
     jobHistory: [],
+    jobLogs: {},
     notifications: [],
     selectedProjectPath: null,
     selectedModulePath: null,
@@ -378,16 +341,21 @@ export const useAppStore = create<AppState & AppActions>()(
     
     addJob: (jobData) => {
       const id = `job-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const logFilePath = getJobLogService().getLogPath(id);
       const job: BuildJob = {
         ...jobData,
         id,
         createdAt: new Date(),
-        logs: [],
         progress: 0,
+        logFilePath,
       };
       
       set((state) => ({
         activeJobs: [...state.activeJobs, job],
+        jobLogs: {
+          ...state.jobLogs,
+          [id]: [],
+        },
       }));
       
       return id;
@@ -405,15 +373,15 @@ export const useAppStore = create<AppState & AppActions>()(
           ...job,
           status,
           startedAt: status === 'running' && !job.startedAt ? new Date() : job.startedAt,
-          completedAt: ['success', 'failed', 'cancelled'].includes(status) ? new Date() : undefined,
+          completedAt: ['success', 'failed', 'cancelled'].includes(status) ? new Date() : job.completedAt,
           progress: status === 'success' ? 100 : job.progress,
         };
         
-        // Move to history if completed
         if (['success', 'failed', 'cancelled'].includes(status)) {
+          const trimmedHistory = [updatedJob, ...state.jobHistory].slice(0, 50);
           return {
             activeJobs: state.activeJobs.filter((j) => j.id !== id),
-            jobHistory: [updatedJob, ...state.jobHistory].slice(0, 50), // Keep last 50
+            jobHistory: trimmedHistory,
           };
         }
         
@@ -434,19 +402,26 @@ export const useAppStore = create<AppState & AppActions>()(
 
     appendJobLog: (id, log) => {
       set((state) => {
-        const activeJobs = state.activeJobs.map((job) =>
-          job.id === id ? { ...job, logs: [...job.logs, log] } : job
-        );
-        return { activeJobs };
+        const currentLogs = state.jobLogs[id] ?? [];
+        return {
+          jobLogs: {
+            ...state.jobLogs,
+            [id]: [...currentLogs, log],
+          },
+        };
       });
     },
 
     setJobError: (id, error) => {
       set((state) => {
-        const activeJobs = state.activeJobs.map((job) =>
-          job.id === id ? { ...job, error, status: 'failed' as BuildStatus } : job
-        );
-        return { activeJobs };
+        const updateList = (list: BuildJob[]) =>
+          list.map((job) =>
+            job.id === id ? { ...job, error, status: 'failed' as BuildStatus } : job
+          );
+        return {
+          activeJobs: updateList(state.activeJobs),
+          jobHistory: updateList(state.jobHistory),
+        };
       });
     },
 
@@ -454,11 +429,59 @@ export const useAppStore = create<AppState & AppActions>()(
       set((state) => ({
         activeJobs: state.activeJobs.filter((j) => j.id !== id),
         jobHistory: state.jobHistory.filter((j) => j.id !== id),
+        jobLogs: Object.fromEntries(
+          Object.entries(state.jobLogs).filter(([key]) => key !== id)
+        ),
       }));
     },
 
     clearCompletedJobs: () => {
-      set({ jobHistory: [] });
+      set((state) => {
+        const jobLogs = { ...state.jobLogs };
+        for (const job of state.jobHistory) {
+          delete jobLogs[job.id];
+        }
+        return {
+          jobHistory: [],
+          jobLogs,
+        };
+      });
+    },
+
+    loadJobHistory: (jobs) => {
+      set({ jobHistory: jobs });
+    },
+
+    setJobCommand: (id, command) => {
+      set((state) => {
+        const updateList = (list: BuildJob[]) =>
+          list.map((job) => (job.id === id ? { ...job, command } : job));
+
+        return {
+          activeJobs: updateList(state.activeJobs),
+          jobHistory: updateList(state.jobHistory),
+        };
+      });
+    },
+
+    setJobExitCode: (id, exitCode) => {
+      set((state) => {
+        const updateList = (list: BuildJob[]) =>
+          list.map((job) => (job.id === id ? { ...job, exitCode } : job));
+
+        return {
+          activeJobs: updateList(state.activeJobs),
+          jobHistory: updateList(state.jobHistory),
+        };
+      });
+    },
+
+    removeJobLogs: (id) => {
+      set((state) => {
+        const jobLogs = { ...state.jobLogs };
+        delete jobLogs[id];
+        return { jobLogs };
+      });
     },
 
     // ========================================================================
@@ -554,6 +577,9 @@ export const useActiveJobs = () => useAppStore((state) => state.activeJobs);
  * Selects job history.
  */
 export const useJobHistory = () => useAppStore((state) => state.jobHistory);
+
+export const useJobLogs = (jobId: string) =>
+  useAppStore((state) => state.jobLogs[jobId] ?? []);
 
 /**
  * Selects pending jobs count.

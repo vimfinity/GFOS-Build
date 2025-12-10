@@ -25,11 +25,17 @@ import {
   useAppStore,
   useActiveJobs,
   useJobHistory,
+  useJobLogs,
   usePendingJobsCount,
   useRunningJobsCount,
-  type BuildJob,
 } from '../../core/store/useAppStore.js';
+import type { BuildJob } from '../../core/types/index.js';
 import { getBuildRunner } from '../../core/services/BuildRunner.js';
+import { getJobHistoryService } from '../../core/services/JobHistoryService.js';
+import { getJobLogService } from '../../core/services/JobLogService.js';
+
+const jobHistoryService = getJobHistoryService();
+const jobLogService = getJobLogService();
 import type { ActionItem, Shortcut } from '../components/index.js';
 import type { BadgeVariant } from '../components/Badge.js';
 
@@ -59,7 +65,7 @@ function getStatusIcon(status: BuildJob['status']): string {
     case 'pending': return icons.pending;
     case 'running': return icons.running;
     case 'success': return icons.success;
-    case 'failed': return icons.error;
+    case 'failed': return icons.cross;
     case 'cancelled': return icons.cross;
     default: return icons.bullet;
   }
@@ -338,6 +344,7 @@ function JobListView({ onSelectJob, onBack }: JobListViewProps): React.ReactElem
     
     // Clear completed with 'c'
     if (input === 'c' || input === 'C') {
+      void jobHistoryService.clear();
       clearCompletedJobs();
       return;
     }
@@ -502,9 +509,10 @@ function SequenceHeader({ group, isExpanded, isHighlighted }: SequenceHeaderProp
           group.status === 'running' ? colors.info :
           colors.textDim
         }>
-          {group.status === 'running' ? '◐' : 
-           group.status === 'success' ? '✔' : 
-           group.status === 'failed' ? '✖' : '○'}
+          {group.status === 'running' ? icons.running :
+           group.status === 'success' ? icons.success :
+           group.status === 'failed' ? icons.cross :
+           icons.pending}
         </Text>
       </Box>
       
@@ -603,9 +611,9 @@ function JobListItem({ job, isHighlighted, indent }: JobListItemProps): React.Re
       </Box>
       
       {/* Progress/duration */}
-      <Box width={12}>
+      <Box width={16}>
         <Text color={isWaiting ? colors.warning : isRunning ? colors.info : colors.textDim}>
-          {isRunning ? `${job.progress}%` : isWaiting ? 'waiting' : duration}
+          {isRunning ? `${job.progress}% • ${duration}` : isWaiting ? (job.startedAt ? duration : 'waiting') : duration}
         </Text>
       </Box>
       
@@ -640,10 +648,33 @@ function JobDetailView({ jobId, onBack }: JobDetailViewProps): React.ReactElemen
     return activeJobs.find(j => j.id === jobId) 
       || jobHistory.find(j => j.id === jobId);
   }, [activeJobs, jobHistory, jobId]);
+  const memoryLogs = useJobLogs(jobId);
+  const [persistedLogs, setPersistedLogs] = useState<string[]>([]);
+  const logSource = job && (job.status === 'running' || memoryLogs.length > 0)
+    ? memoryLogs
+    : persistedLogs;
+
+  React.useEffect(() => {
+    if (!job?.logFilePath || job.status === 'running') {
+      setPersistedLogs([]);
+      return;
+    }
+
+    let isActive = true;
+    jobLogService.read(job.id).then(lines => {
+      if (isActive) {
+        setPersistedLogs(lines);
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [job?.id, job?.logFilePath, job?.status]);
   
   // Calculate visible lines (approx 20 lines visible)
   const visibleLines = 20;
-  const totalLines = job?.logs.length || 0;
+  const totalLines = logSource.length;
   const maxOffset = Math.max(0, totalLines - visibleLines);
   
   // Auto-scroll in follow mode
@@ -744,7 +775,7 @@ function JobDetailView({ jobId, onBack }: JobDetailViewProps): React.ReactElemen
   const isRunning = job.status === 'running';
   
   // Get visible log lines
-  const visibleLogs = job.logs.slice(scrollOffset, scrollOffset + visibleLines);
+  const visibleLogs = logSource.slice(scrollOffset, scrollOffset + visibleLines);
   
   // Shortcuts
   const shortcuts: Shortcut[] = [
@@ -769,11 +800,27 @@ function JobDetailView({ jobId, onBack }: JobDetailViewProps): React.ReactElemen
           <Box marginBottom={1} flexDirection="column">
             <Box>
               <Text color={colors.textDim}>Command: </Text>
-              <Text>mvn {job.mavenGoals.join(' ')}</Text>
+              <Text>{job.command || `mvn ${job.mavenGoals.join(' ')}`}</Text>
             </Box>
             <Box>
               <Text color={colors.textDim}>JDK: </Text>
               <Text>{extractJdkVersion(job.jdkPath)}</Text>
+            </Box>
+            <Box>
+              <Text color={colors.textDim}>Duration: </Text>
+              <Text>{duration}</Text>
+            </Box>
+            <Box>
+              <Text color={colors.textDim}>Started: </Text>
+              <Text>{job.startedAt ? formatTime(job.startedAt) : '—'}</Text>
+            </Box>
+            <Box>
+              <Text color={colors.textDim}>Finished: </Text>
+              <Text>{job.completedAt ? formatTime(job.completedAt) : (isRunning ? 'running' : '—')}</Text>
+            </Box>
+            <Box>
+              <Text color={colors.textDim}>Log file: </Text>
+              <Text color={colors.info}>{job.logFilePath || 'Not available'}</Text>
             </Box>
             
             {/* Progress bar for running jobs */}

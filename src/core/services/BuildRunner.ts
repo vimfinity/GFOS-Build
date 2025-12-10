@@ -7,6 +7,8 @@
 
 import { useAppStore } from '../store/useAppStore.js';
 import type { BuildStatus } from '../types/index.js';
+import { getJobLogService } from './JobLogService.js';
+import { getJobHistoryService, type PersistedJob } from './JobHistoryService.js';
 
 // ============================================================================
 // Types
@@ -154,6 +156,9 @@ const MOCK_MAVEN_FAILURE_LOGS = [
   '[INFO] ------------------------------------------------------------------------',
   '[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project ${artifactId}: Compilation failure',
 ];
+
+const jobLogService = getJobLogService();
+const jobHistoryService = getJobHistoryService();
 
 /**
  * Replace template variables in mock log lines.
@@ -342,6 +347,7 @@ async function runRealBuild(
   const startTime = Date.now();
   const store = useAppStore.getState();
   const settings = store.settings;
+  void jobLogService.reset(jobId);
   
   // Determine Maven executable - use full path if MAVEN_HOME is configured
   const isWindows = process.platform === 'win32';
@@ -364,6 +370,10 @@ async function runRealBuild(
   
   const args = buildMavenCommand(config);
   const env = buildProcessEnv(config.environment);
+  const appendLog = (text: string) => {
+    store.appendJobLog(jobId, text);
+    void jobLogService.append(jobId, text);
+  };
   
   // Update status to running
   store.updateJobStatus(jobId, 'running');
@@ -371,13 +381,14 @@ async function runRealBuild(
   
   // Log the command being executed
   const fullCommand = `${mavenCmd} ${args.join(' ')}`;
-  store.appendJobLog(jobId, `[GFOS-Build] Executing: ${fullCommand}`);
-  store.appendJobLog(jobId, `[GFOS-Build] JAVA_HOME: ${config.environment.JAVA_HOME || '(system default)'}`);
-  store.appendJobLog(jobId, `[GFOS-Build] Working directory: ${config.projectPath}`);
+  store.setJobCommand(jobId, fullCommand);
+  appendLog(`[GFOS-Build] Executing: ${fullCommand}`);
+  appendLog(`[GFOS-Build] JAVA_HOME: ${config.environment.JAVA_HOME || '(system default)'}`);
+  appendLog(`[GFOS-Build] Working directory: ${config.projectPath}`);
   if (config.modules && config.modules.length > 0) {
-    store.appendJobLog(jobId, `[GFOS-Build] Modules: ${config.modules.join(', ')}`);
+    appendLog(`[GFOS-Build] Modules: ${config.modules.join(', ')}`);
   }
-  store.appendJobLog(jobId, '');
+  appendLog('');
   
   return new Promise<BuildResult>((resolve) => {
     try {
@@ -429,7 +440,7 @@ async function runRealBuild(
           buffer = lines.pop() || '';
           
           for (const line of lines) {
-            store.appendJobLog(jobId, line);
+            appendLog(line);
             callbacks.onLog?.(jobId, line);
             logLineCount++;
             
@@ -524,7 +535,7 @@ async function runRealBuild(
         
         // Handle remaining buffer
         if (buffer) {
-          store.appendJobLog(jobId, buffer);
+          appendLog(buffer);
           callbacks.onLog?.(jobId, buffer);
         }
       };
@@ -544,13 +555,13 @@ async function runRealBuild(
           buffer = lines.pop() || '';
           
           for (const line of lines) {
-            store.appendJobLog(jobId, `[STDERR] ${line}`);
+            appendLog(`[STDERR] ${line}`);
             callbacks.onLog?.(jobId, `[STDERR] ${line}`);
           }
         }
         
         if (buffer) {
-          store.appendJobLog(jobId, `[STDERR] ${buffer}`);
+          appendLog(`[STDERR] ${buffer}`);
           callbacks.onLog?.(jobId, `[STDERR] ${buffer}`);
         }
       };
@@ -559,10 +570,12 @@ async function runRealBuild(
       Promise.all([streamStdout(), streamStderr(), proc.exited]).then(([, , exitCode]) => {
         const duration = Date.now() - startTime;
         const status: BuildStatus = exitCode === 0 ? 'success' : 'failed';
+        const exitValue = exitCode ?? 1;
         
         // Check if cancelled
         const currentJob = useAppStore.getState().activeJobs.find(j => j.id === jobId);
         if (!currentJob || currentJob.status === 'cancelled') {
+          void persistCompletedJob(jobId, 'cancelled', null, 'Cancelled by user');
           resolve({
             jobId,
             status: 'cancelled',
@@ -572,6 +585,7 @@ async function runRealBuild(
           return;
         }
         
+        store.setJobExitCode(jobId, exitValue);
         // Update final status
         store.updateJobStatus(jobId, status);
         store.updateJobProgress(jobId, 100);
@@ -579,12 +593,13 @@ async function runRealBuild(
         const result: BuildResult = {
           jobId,
           status,
-          exitCode: exitCode ?? 1,
+          exitCode: exitValue,
           duration,
           error: exitCode !== 0 ? `Build failed with exit code ${exitCode}` : undefined,
         };
         
         callbacks.onComplete?.(result);
+        void persistCompletedJob(jobId, status, exitValue, result.error);
         resolve(result);
       });
     } catch (error) {
@@ -594,9 +609,12 @@ async function runRealBuild(
       // Provide helpful message if Maven not found
       if (errorMessage.includes('not found') || errorMessage.includes('ENOENT')) {
         errorMessage = `Maven not found: ${mavenCmd}\n\nTo fix this:\n1. Set 'defaultMavenHome' in Settings (e.g., C:\\apache-maven-3.9.6)\n2. Or add Maven to your system PATH`;
-        store.appendJobLog(jobId, `[ERROR] ${errorMessage}`);
+        appendLog(`[ERROR] ${errorMessage}`);
       }
       
+      store.setJobExitCode(jobId, 1);
+      store.updateJobStatus(jobId, 'failed');
+      store.updateJobProgress(jobId, 100);
       store.setJobError(jobId, errorMessage);
       
       const result: BuildResult = {
@@ -608,9 +626,49 @@ async function runRealBuild(
       };
       
       callbacks.onComplete?.(result);
+      void persistCompletedJob(jobId, 'failed', 1, errorMessage);
       resolve(result);
     }
   });
+}
+
+async function persistCompletedJob(
+  jobId: string,
+  status: BuildStatus,
+  exitCode: number | null,
+  error?: string
+): Promise<void> {
+  const store = useAppStore.getState();
+  const job = store.jobHistory.find(j => j.id === jobId);
+  if (!job) {
+    return;
+  }
+
+  const record: PersistedJob = {
+    id: job.id,
+    projectPath: job.projectPath,
+    name: job.name,
+    status,
+    createdAt: job.createdAt.toISOString(),
+    startedAt: job.startedAt?.toISOString(),
+    completedAt: job.completedAt?.toISOString(),
+    jdkPath: job.jdkPath,
+    mavenGoals: job.mavenGoals,
+    command: job.command,
+    logFilePath: job.logFilePath,
+    exitCode,
+    error: error ?? job.error,
+    sequenceId: job.sequenceId,
+    sequenceIndex: job.sequenceIndex,
+    sequenceTotal: job.sequenceTotal,
+    progress: job.progress,
+  };
+
+  try {
+    await jobHistoryService.append(record);
+  } finally {
+    store.removeJobLogs(jobId);
+  }
 }
 
 // ============================================================================

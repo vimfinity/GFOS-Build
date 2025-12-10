@@ -28,9 +28,11 @@ import { getConfigService } from '../core/services/ConfigService.js';
 import { processManager } from '../core/services/ProcessManager.js';
 import { getBuildRunner } from '../core/services/BuildRunner.js';
 import type { BuildConfig } from '../core/services/BuildRunner.js';
+import type { BuildJob } from '../core/types/index.js';
 import { WorkspaceScanner } from '../core/services/WorkspaceScanner.js';
 import { getCacheService } from '../core/services/CacheService.js';
 import { getFileSystem } from '../infrastructure/ServiceLocator.js';
+import { getJobHistoryService, type PersistedJob } from '../core/services/JobHistoryService.js';
 
 // Views
 import { MainMenuView } from './views/MainMenuView.js';
@@ -61,6 +63,28 @@ interface PendingBuildConfig {
   jdkVersion: string;
 }
 
+function toBuildJob(data: PersistedJob): BuildJob {
+  return {
+    id: data.id,
+    projectPath: data.projectPath,
+    name: data.name,
+    jdkPath: data.jdkPath,
+    mavenGoals: data.mavenGoals,
+    status: data.status,
+    progress: data.progress,
+    createdAt: new Date(data.createdAt),
+    startedAt: data.startedAt ? new Date(data.startedAt) : undefined,
+    completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
+    command: data.command,
+    logFilePath: data.logFilePath,
+    exitCode: data.exitCode,
+    error: data.error,
+    sequenceId: data.sequenceId,
+    sequenceIndex: data.sequenceIndex,
+    sequenceTotal: data.sequenceTotal,
+  };
+}
+
 // ============================================================================
 // App Component
 // ============================================================================
@@ -85,6 +109,7 @@ export function App(): React.ReactElement {
   const goBack = useAppStore((state) => state.goBack);
   const loadProjects = useAppStore((state) => state.loadProjects);
   const loadJdks = useAppStore((state) => state.loadJdks);
+  const loadJobHistory = useAppStore((state) => state.loadJobHistory);
   const setScanning = useAppStore((state) => state.setScanning);
   const addNotification = useAppStore((state) => state.addNotification);
   
@@ -98,6 +123,12 @@ export function App(): React.ReactElement {
         // 1. Load configuration
         const configService = getConfigService();
         await configService.loadIntoStore();
+
+        const historyService = getJobHistoryService();
+        const persistedJobs = await historyService.load();
+        if (persistedJobs.length > 0) {
+          loadJobHistory(persistedJobs.map(toBuildJob));
+        }
         
         // 2. Try to load from cache first
         const cacheService = getCacheService();

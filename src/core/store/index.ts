@@ -24,8 +24,9 @@ export {
   type AppSettings,
   type ScannedData,
   type NavigationState,
-  type BuildJob,
   type Notification,
   type AppState,
   type AppActions,
 } from './useAppStore';
+
+export type { BuildJob } from '../types';
