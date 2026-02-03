@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from 'react';
+import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import { 
   Save, 
@@ -29,7 +30,7 @@ export function SettingsView() {
   };
 
   const handleSelectFolder = async (key: 'scanRootPath' | 'defaultMavenHome') => {
-    const path = await window.electronAPI.selectFolder();
+    const path = await api.selectFolder();
     if (path) {
       handleChange(key, path);
     }
@@ -38,15 +39,15 @@ export function SettingsView() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await window.electronAPI.saveConfig(localSettings);
+      await api.saveConfig(localSettings);
       updateSettings(localSettings);
       setSaved(true);
       
       // Re-scan with new paths
-      const projects = await window.electronAPI.scanProjects(localSettings.scanRootPath);
+      const projects = await api.scanProjects(localSettings.scanRootPath);
       setProjects(projects);
       
-      const jdks = await window.electronAPI.scanJDKs(localSettings.jdkScanPaths);
+      const jdks = await api.scanJDKs(localSettings.jdkScanPaths);
       setJdks(jdks);
     } catch (error) {
       console.error('Failed to save settings:', error);

@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
+import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import { 
   CheckCircle2, 
@@ -40,7 +41,7 @@ export function JobDetailView() {
   const handleCancel = async () => {
     if (!job) return;
     try {
-      await window.electronAPI.cancelBuild(job.id);
+      await api.cancelBuild(job.id);
     } catch (error) {
       console.error('Failed to cancel:', error);
     }
@@ -65,7 +66,7 @@ export function JobDetailView() {
     updateJob(newJobId, { status: 'running', startedAt: new Date() });
 
     try {
-      await window.electronAPI.startBuild({
+      await api.startBuild({
         ...job,
         id: newJobId,
         status: 'running',
@@ -80,7 +81,7 @@ export function JobDetailView() {
 
   const handleOpenFolder = () => {
     if (job) {
-      window.electronAPI.openPath(job.projectPath);
+      api.openPath(job.projectPath);
     }
   };
 

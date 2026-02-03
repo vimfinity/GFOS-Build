@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import type { MavenModule } from '../types';
 import { 
@@ -40,7 +41,7 @@ export function ProjectDetailView() {
     
     setLoading(true);
     try {
-      const modules = await window.electronAPI.scanModules(project.pomPath);
+      const modules = await api.scanModules(project.pomPath);
       setModules(project.path, modules);
     } catch (error) {
       console.error('Failed to load modules:', error);
@@ -59,7 +60,7 @@ export function ProjectDetailView() {
 
   const handleOpenFolder = () => {
     if (project) {
-      window.electronAPI.openPath(project.path);
+      api.openPath(project.path);
     }
   };
 

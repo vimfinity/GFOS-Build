@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from 'react';
+import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import { 
   Play, 
@@ -47,7 +48,7 @@ export function JobsView() {
 
   const handleCancelJob = async (jobId: string) => {
     try {
-      await window.electronAPI.cancelBuild(jobId);
+      await api.cancelBuild(jobId);
     } catch (error) {
       console.error('Failed to cancel job:', error);
     }

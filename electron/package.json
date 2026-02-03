@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "GFOS-Build - Maven Build Manager with GUI",
   "main": "dist/main/main.js",
-  "type": "module",
   "author": "GFOS",
   "license": "MIT",
   "scripts": {

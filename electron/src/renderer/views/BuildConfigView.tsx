@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import type { BuildJob } from '../types';
 import { 
@@ -52,7 +53,7 @@ export function BuildConfigView() {
   const loadProfiles = async () => {
     if (!project?.pomPath) return;
     try {
-      const profiles = await window.electronAPI.scanProfiles(project.pomPath);
+      const profiles = await api.scanProfiles(project.pomPath);
       setProfiles(project.path, profiles);
     } catch (error) {
       console.error('Failed to load profiles:', error);
@@ -102,7 +103,7 @@ export function BuildConfigView() {
     };
 
     try {
-      await window.electronAPI.startBuild(job);
+      await api.startBuild(job);
       setScreen('JOBS');
     } catch (error) {
       console.error('Failed to start build:', error);

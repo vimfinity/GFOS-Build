@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { api } from '../api';
 import { ChevronLeft, RefreshCw, FolderOpen } from 'lucide-react';
 
 export function Header() {
@@ -41,10 +42,10 @@ export function Header() {
   const handleRefresh = async () => {
     setScanning(true);
     try {
-      const projects = await window.electronAPI.scanProjects(settings.scanRootPath);
+      const projects = await api.scanProjects(settings.scanRootPath);
       setProjects(projects);
       
-      const jdks = await window.electronAPI.scanJDKs(settings.jdkScanPaths);
+      const jdks = await api.scanJDKs(settings.jdkScanPaths);
       setJdks(jdks);
     } catch (error) {
       console.error('Scan failed:', error);
@@ -54,7 +55,7 @@ export function Header() {
   };
 
   const handleOpenFolder = () => {
-    window.electronAPI.openPath(settings.scanRootPath);
+    api.openPath(settings.scanRootPath);
   };
 
   return (

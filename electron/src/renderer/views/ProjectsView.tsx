@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import { 
   FolderGit2, 
@@ -49,7 +50,7 @@ export function ProjectsView() {
 
   const handleOpenFolder = (e: React.MouseEvent, path: string) => {
     e.stopPropagation();
-    window.electronAPI.openPath(path);
+    api.openPath(path);
   };
 
   return (
