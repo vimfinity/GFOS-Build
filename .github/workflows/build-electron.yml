@@ -3,9 +3,6 @@ name: Build Electron App
 on:
   push:
     branches: [main]
-    paths:
-      - 'electron/**'
-      - '.github/workflows/build-electron.yml'
   pull_request:
     branches: [main]
   workflow_dispatch:  # Manuell auslösbar
