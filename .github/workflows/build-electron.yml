@@ -1,0 +1,81 @@
+name: Build Electron App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'electron/**'
+      - '.github/workflows/build-electron.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Manuell auslösbar
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build application
+        working-directory: electron
+        run: npm run build
+
+      - name: Package for Windows
+        working-directory: electron
+        run: npm run package:win
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GFOS-Build-Windows
+          path: electron/release/*.exe
+          retention-days: 30
+
+  # Optional: Linux build für Entwicklung/Testing
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build application
+        working-directory: electron
+        run: npm run build
+
+      - name: Package for Linux
+        working-directory: electron
+        run: npx electron-builder --linux --x64
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GFOS-Build-Linux
+          path: |
+            electron/release/*.AppImage
+            electron/release/*.deb
+          retention-days: 30

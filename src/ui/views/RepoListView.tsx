@@ -1,207 +1,132 @@
 /**
- * RepoListView Component
+ * Repository List View
  * 
- * Repository list screen with fuzzy search.
- * Features:
- * - Auto-scan on mount (if data is empty)
- * - Fuzzy search filtering
- * - Navigation to repository details
+ * Searchable list of discovered Maven repositories.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Text, useInput } from 'ink';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Box, Text, useInput, useStdout } from 'ink';
 import { matchSorter } from 'match-sorter';
 
-import {
-  ScreenContainer,
-  SimpleList,
-  Spinner,
-  Header,
-  StatusBar,
-} from '../components/index.js';
-import type { SimpleListItem } from '../components/index.js';
-import { colors, icons } from '../theme.js';
+import { theme, icons, palette } from '../theme/index.js';
+import { 
+  Spinner, 
+  Divider, 
+  EmptyState,
+} from '../primitives/index.js';
+import { 
+  useNavigator, 
+} from '../hooks/index.js';
 import {
   useAppStore,
   useProjects,
   useIsScanning,
-  usePendingJobsCount,
-  useRunningJobsCount,
   useSettings,
 } from '../../core/store/useAppStore.js';
 import { WorkspaceScanner } from '../../core/services/WorkspaceScanner.js';
 import { getFileSystem } from '../../infrastructure/ServiceLocator.js';
 import type { DiscoveredProject } from '../../core/services/WorkspaceScanner.js';
-import type { Shortcut } from '../components/index.js';
-
-/**
- * Hook to perform workspace scanning.
- */
-function useWorkspaceScan() {
-  const settings = useSettings();
-  const loadProjects = useAppStore((state) => state.loadProjects);
-  const loadJdks = useAppStore((state) => state.loadJdks);
-  const setScanning = useAppStore((state) => state.setScanning);
-  const addNotification = useAppStore((state) => state.addNotification);
-
-  const scan = useCallback(async () => {
-    setScanning(true);
-    
-    try {
-      const fs = getFileSystem();
-      const scanner = new WorkspaceScanner(fs);
-      
-      // Scan for repositories
-      const projects = await scanner.findRepositories(settings.scanRootPath);
-      loadProjects(projects);
-      
-      // Scan for JDKs in all configured paths
-      const jdkPaths = settings.jdkScanPaths?.split(';').filter(p => p.trim()) || [];
-      const allJdks: Awaited<ReturnType<typeof scanner.scanJdks>> = [];
-      
-      for (const jdkPath of jdkPaths) {
-        try {
-          const jdks = await scanner.scanJdks(jdkPath.trim());
-          allJdks.push(...jdks);
-        } catch {
-          // Ignore errors for individual paths
-        }
-      }
-      
-      // Remove duplicates
-      const uniqueJdks = allJdks.filter((jdk, index, self) => 
-        index === self.findIndex(j => j.jdkHome === jdk.jdkHome)
-      );
-      
-      loadJdks(uniqueJdks);
-      
-      addNotification('success', `Found ${projects.length} repos, ${uniqueJdks.length} JDKs`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown scan error';
-      addNotification('error', `Scan failed: ${message}`);
-    } finally {
-      setScanning(false);
-    }
-  }, [settings.scanRootPath, settings.jdkScanPaths, loadProjects, loadJdks, setScanning, addNotification]);
-
-  return { scan };
-}
-
-/**
- * Convert discovered project to list item.
- */
-function projectToListItem(project: DiscoveredProject): SimpleListItem<string> {
-  const pathParts = project.path.split('\\');
-  const versionFolder = pathParts[pathParts.length - 2] || '';
-  
-  // Determine badge based on version folder
-  let badge = '';
-  let badgeColor: string = colors.textDim;
-  
-  if (versionFolder === '2025') {
-    badge = 'JAVA 21';
-    badgeColor = colors.success;
-  } else if (versionFolder === '4.8plus') {
-    badge = 'JAVA 17';
-    badgeColor = colors.info;
-  } else if (versionFolder === '4.8') {
-    badge = 'JAVA 11';
-    badgeColor = colors.warning;
-  }
-  
-  return {
-    value: project.path,
-    label: project.name,
-    badge: badge || (project.hasMaven ? 'Maven' : ''),
-    badgeColor: badge ? badgeColor : colors.secondary,
-  };
-}
+import { useNotifications } from '../system/notifications.js';
 
 // ============================================================================
 // Props
 // ============================================================================
 
 export interface RepoListViewProps {
-  /** Callback when navigating to a repository */
-  onNavigateToRepo?: (path: string) => void;
-  /** Callback when going back to main menu */
-  onBack?: () => void;
+  initialSearch?: string;
 }
 
-/**
- * RepoListView - Repository list with fuzzy search.
- */
-export function RepoListView({
-  onNavigateToRepo,
-  onBack,
-}: RepoListViewProps): React.ReactElement {
-  const [searchQuery, setSearchQuery] = useState('');
+// ============================================================================
+// Repo Row Component
+// ============================================================================
+
+interface RepoRowProps {
+  project: DiscoveredProject;
+  isSelected: boolean;
+}
+
+function RepoRow({ project, isSelected }: RepoRowProps): React.ReactElement {
+  const pathParts = project.path.split(/[/\\]/);
+  const versionFolder = pathParts[pathParts.length - 2] || '';
   
-  // Store selectors
+  // Determine badge based on version folder
+  let badge = '';
+  let badgeColor: string = theme.text.muted;
+  
+  if (versionFolder === '2025') {
+    badge = 'Java 21';
+    badgeColor = 'green';
+  } else if (versionFolder === '4.8plus') {
+    badge = 'Java 17';
+    badgeColor = 'blue';
+  } else if (versionFolder === '4.8') {
+    badge = 'Java 11';
+    badgeColor = 'yellow';
+  } else if (project.hasMaven) {
+    badge = 'Maven';
+  }
+
+  return (
+    <Box paddingX={1}>
+      <Text color={isSelected ? theme.accent.primary : theme.text.muted}>
+        {isSelected ? icons.pointer : ' '}{' '}
+      </Text>
+      <Text>{project.hasMaven ? icons.maven : icons.folder} </Text>
+      <Text color={theme.text.primary} bold={isSelected}>
+        {project.name}
+      </Text>
+      {badge && (
+        <Text color={badgeColor}> [{badge}]</Text>
+      )}
+    </Box>
+  );
+}
+
+// ============================================================================
+// Component
+// ============================================================================
+
+export function RepoListView({ 
+  initialSearch = '' 
+}: RepoListViewProps): React.ReactElement {
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  
+  // Terminal dimensions for virtual scrolling
+  const { stdout } = useStdout();
+  const terminalRows = stdout?.rows ?? 24;
+  
+  // Calculate available height for list (reserve space for header, search, dividers, footer)
+  const reservedRows = 10;
+  const listHeight = Math.max(5, terminalRows - reservedRows);
+  
+  // Navigation
+  const { toRepoDetail, goBack } = useNavigator();
+  
+  // Store
   const projects = useProjects();
   const isScanning = useIsScanning();
-  const pendingJobs = usePendingJobsCount();
-  const runningJobs = useRunningJobsCount();
-  const lastScanTime = useAppStore((state) => state.scannedData.lastScanTime);
-  
-  // Store actions
-  const setScreen = useAppStore((state) => state.setScreen);
-  const goBack = useAppStore((state) => state.goBack);
-  const selectProject = useAppStore((state) => state.selectProject);
-  
-  // Workspace scan hook
-  const { scan } = useWorkspaceScan();
+  const settings = useSettings();
+  const { success, error } = useNotifications();
 
-  // Auto-scan on mount if no data
-  useEffect(() => {
-    if (projects.length === 0 && !isScanning) {
-      scan();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Get stable action references
+  const loadProjects = useCallback(
+    (p: typeof projects) => useAppStore.getState().loadProjects(p),
+    []
+  );
+  const loadJdks = useCallback(
+    (j: any[]) => useAppStore.getState().loadJdks(j),
+    []
+  );
+  const setScanning = useCallback(
+    (scanning: boolean) => useAppStore.getState().setScanning(scanning),
+    []
+  );
 
-  // Keyboard input handling - typing adds to search, special keys for actions
-  useInput((input, key) => {
-    // ESC: clear search if searching, otherwise go back
-    if (key.escape) {
-      if (searchQuery) {
-        setSearchQuery('');
-      } else {
-        onBack?.() || goBack();
-      }
-      return;
-    }
-    
-    // Backspace removes from search
-    if (key.backspace || key.delete) {
-      if (searchQuery.length > 0) {
-        setSearchQuery(prev => prev.slice(0, -1));
-      }
-      return;
-    }
-    
-    // Skip navigation keys - let SimpleList handle them
-    if (key.upArrow || key.downArrow || key.return || key.tab) {
-      return;
-    }
-    
-    // Ctrl+U clears search
-    if (input === '\u0015') {
-      setSearchQuery('');
-      return;
-    }
-    
-    // Printable characters add to search
-    if (input && input.length === 1 && input.charCodeAt(0) >= 32) {
-      setSearchQuery(prev => prev + input);
-      return;
-    }
-  });
-
-  // Filter projects using fuzzy search
+  // Filter projects
   const filteredProjects = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return projects;
-    }
+    if (!searchQuery.trim()) return projects;
     
     return matchSorter(projects, searchQuery, {
       keys: ['name', 'path'],
@@ -209,110 +134,255 @@ export function RepoListView({
     });
   }, [projects, searchQuery]);
 
-  // Convert to list items
-  const listItems = useMemo(() => {
-    return filteredProjects.map(projectToListItem);
-  }, [filteredProjects]);
+  // Virtual scrolling - calculate visible window
+  const scrollOffset = useMemo(() => {
+    const halfVisible = Math.floor(listHeight / 2);
+    let offset = Math.max(0, focusedIndex - halfVisible);
+    const maxOffset = Math.max(0, filteredProjects.length - listHeight);
+    return Math.min(offset, maxOffset);
+  }, [focusedIndex, listHeight, filteredProjects.length]);
+  
+  const visibleProjects = useMemo(() => 
+    filteredProjects.slice(scrollOffset, scrollOffset + listHeight),
+    [filteredProjects, scrollOffset, listHeight]
+  );
+  
+  // Scroll indicators
+  const showScrollUp = scrollOffset > 0;
+  const showScrollDown = scrollOffset + listHeight < filteredProjects.length;
 
-  // Handle repository selection
-  const handleSelect = useCallback((item: SimpleListItem<string>) => {
-    selectProject(item.value);
-    if (onNavigateToRepo) {
-      onNavigateToRepo(item.value);
-    } else {
-      setScreen('REPO_DETAIL', { projectPath: item.value });
+  // Refresh function
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    setScanning(true);
+    
+    try {
+      const fs = getFileSystem();
+      const scanner = new WorkspaceScanner(fs);
+      const newProjects = await scanner.findRepositories(settings.scanRootPath);
+      loadProjects(newProjects);
+      
+      // Also scan JDKs
+      const jdkPaths = settings.jdkScanPaths.split(';').filter((p) => p.trim());
+      const allJdks: Awaited<ReturnType<typeof scanner.scanJdks>> = [];
+      for (const path of jdkPaths) {
+        try {
+          const jdks = await scanner.scanJdks(path.trim());
+          allJdks.push(...jdks);
+        } catch {}
+      }
+      const uniqueJdks = allJdks.filter(
+        (jdk, idx, self) => idx === self.findIndex((j) => j.jdkHome === jdk.jdkHome)
+      );
+      loadJdks(uniqueJdks);
+      
+      success(`Found ${newProjects.length} repositories`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      error(`Scan failed: ${msg}`);
+    } finally {
+      setScanning(false);
+      setIsRefreshing(false);
     }
-  }, [selectProject, setScreen, onNavigateToRepo]);
+  }, [settings.scanRootPath, settings.jdkScanPaths, loadProjects, loadJdks, setScanning, success, error]);
 
-  // Status bar shortcuts
-  const shortcuts: Shortcut[] = [
-    { key: 'Type', label: 'Search' },
-    { key: 'ESC', label: searchQuery ? 'Clear' : 'Back' },
-    { key: '↑↓', label: 'Navigate' },
-    { key: '⏎', label: 'Select' },
-  ];
+  // Use refs to avoid stale closures in useInput
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+  
+  const filteredProjectsRef = useRef(filteredProjects);
+  filteredProjectsRef.current = filteredProjects;
+  
+  const focusedIndexRef = useRef(focusedIndex);
+  focusedIndexRef.current = focusedIndex;
 
-  // Format last scan time
-  const formatScanTime = (date: Date | null): string => {
-    if (!date) return 'Never';
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    return date.toLocaleTimeString();
-  };
+  // Reset focus when filter changes
+  useEffect(() => {
+    setFocusedIndex(0);
+  }, [filteredProjects.length]);
+
+  // Direct keyboard handling using Ink's useInput (bypasses the layer system)
+  useInput(useCallback((input: string, key: { 
+    escape?: boolean; 
+    ctrl?: boolean; 
+    meta?: boolean; 
+    backspace?: boolean;
+    delete?: boolean;
+    return?: boolean;
+    upArrow?: boolean;
+    downArrow?: boolean;
+  }) => {
+    // Escape: clear search or go back
+    if (key.escape) {
+      if (searchQueryRef.current) {
+        setSearchQuery('');
+      } else {
+        goBack();
+      }
+      return;
+    }
+    
+    // Ctrl+U: clear search
+    if (key.ctrl && input === 'u') {
+      setSearchQuery('');
+      return;
+    }
+    
+    // Ctrl+R: refresh
+    if (key.ctrl && input === 'r') {
+      handleRefresh();
+      return;
+    }
+    
+    // Backspace or Delete: handle text deletion
+    if (key.backspace || key.delete) {
+      if (searchQueryRef.current.length > 0) {
+        setSearchQuery(searchQueryRef.current.slice(0, -1));
+      }
+      return;
+    }
+    
+    // Enter key - directly handle selection
+    if (key.return) {
+      const projects = filteredProjectsRef.current;
+      const idx = focusedIndexRef.current;
+      const item = projects[idx];
+      if (item) {
+        toRepoDetail(item.path);
+      }
+      return;
+    }
+    
+    // Navigation keys
+    if (key.upArrow || input === 'k') {
+      setFocusedIndex((i) => Math.max(0, i - 1));
+      return;
+    }
+    if (key.downArrow || input === 'j') {
+      const maxIdx = filteredProjectsRef.current.length - 1;
+      setFocusedIndex((i) => Math.min(Math.max(0, maxIdx), i + 1));
+      return;
+    }
+    
+    // Page navigation
+    if (key.ctrl && input === 'd') {
+      const maxIdx = filteredProjectsRef.current.length - 1;
+      setFocusedIndex((i) => Math.min(maxIdx, i + 10));
+      return;
+    }
+    if (key.ctrl && input === 'u') {
+      if (!searchQueryRef.current) {
+        setFocusedIndex((i) => Math.max(0, i - 10));
+      }
+      return;
+    }
+    
+    // Printable characters: add to search
+    if (input && input.length === 1 && input.charCodeAt(0) >= 32 && !key.ctrl && !key.meta) {
+      setSearchQuery(searchQueryRef.current + input);
+      return;
+    }
+  }, [goBack, handleRefresh, toRepoDetail]));
+
+  // Loading state
+  if (isScanning && projects.length === 0) {
+    return (
+      <Box flexDirection="column" padding={1} alignItems="center" justifyContent="center" flexGrow={1}>
+        <Spinner label="Scanning for repositories..." />
+      </Box>
+    );
+  }
+
+  // Empty state
+  if (projects.length === 0) {
+    return (
+      <Box flexDirection="column" padding={1} flexGrow={1}>
+        <EmptyState
+          icon={icons.folder}
+          title="No Repositories Found"
+          description={`No Maven projects found in ${settings.scanRootPath}`}
+          action="Press Ctrl+R to scan again"
+        />
+      </Box>
+    );
+  }
 
   return (
-    <Box flexDirection="column" height="100%">
-      <Header title="GFOS-Build" version="1.0.0" isMockMode={process.env['MOCK_MODE'] === 'true'} />
-      
-      <ScreenContainer
-        title="Repositories"
-        subtitle={`${filteredProjects.length} of ${projects.length} projects`}
-        padding={1}
-        fillHeight
-      >
-        {/* Search Bar */}
-        <Box marginBottom={1}>
-          <Box marginRight={1}>
-            <Text color={colors.textDim}>{icons.search}</Text>
-          </Box>
-          <Text color={searchQuery ? colors.text : colors.textDim}>
-            {searchQuery || 'Type to filter...'}
-          </Text>
-          {searchQuery && (
-            <Text color={colors.textDim}> (ESC to clear)</Text>
-          )}
-        </Box>
-        
-        {/* Divider */}
-        <Box marginBottom={1}>
-          <Text color={colors.border}>{'─'.repeat(60)}</Text>
-        </Box>
-        
-        {/* Content */}
-        {isScanning ? (
-          <Box flexDirection="column" alignItems="center" paddingY={2}>
-            <Spinner message="Scanning workspace..." />
-            <Box marginTop={1}>
-              <Text color={colors.textDim}>Looking for Git repositories and Maven projects...</Text>
-            </Box>
-          </Box>
-        ) : listItems.length === 0 ? (
-          <Box flexDirection="column" alignItems="center" paddingY={2}>
-            <Text color={colors.textDim}>
-              {searchQuery ? 'No repositories match your search.' : 'No repositories found.'}
-            </Text>
-          </Box>
+    <Box flexDirection="column" padding={1} flexGrow={1}>
+      {/* Search bar */}
+      <Box marginBottom={1}>
+        <Text color={theme.accent.primary}>{icons.search} </Text>
+        {searchQuery ? (
+          <Text color={theme.text.primary}>{searchQuery}</Text>
         ) : (
-          <SimpleList
-            items={listItems}
-            onSelect={handleSelect}
-            limit={15}
-            isFocused={true}
-          />
+          <Text color={theme.text.muted}>Type to filter repositories...</Text>
         )}
-        
-        {/* Stats Footer */}
-        <Box marginTop={1} justifyContent="space-between">
-          <Text color={colors.textDim}>
-            Last scan: {formatScanTime(lastScanTime)}
-          </Text>
-          {projects.length > 0 && (
-            <Text color={colors.textDim}>
-              {projects.filter(p => p.hasMaven).length} Maven projects
-            </Text>
-          )}
-        </Box>
-      </ScreenContainer>
+        <Text color={theme.text.muted}>_</Text>
+        {searchQuery && (
+          <Text color={theme.text.muted}> ({filteredProjects.length}/{projects.length})</Text>
+        )}
+      </Box>
 
-      <StatusBar
-        shortcuts={shortcuts}
-        pendingJobs={pendingJobs}
-        runningJobs={runningJobs}
-        mode={process.env['MOCK_MODE'] === 'true' ? 'MOCK' : undefined}
-      />
+      {/* Refresh indicator */}
+      {isRefreshing && (
+        <Box marginBottom={1}>
+          <Spinner label="Refreshing..." />
+        </Box>
+      )}
+
+      <Divider />
+
+      {/* Scroll up indicator */}
+      {showScrollUp && (
+        <Box paddingX={1}>
+          <Text color={theme.text.muted}>{icons.arrowUp} {scrollOffset} more above</Text>
+        </Box>
+      )}
+
+      {/* Results */}
+      <Box marginTop={1} flexGrow={1} flexDirection="column">
+        {filteredProjects.length === 0 ? (
+          <EmptyState
+            title="No matches"
+            description={`No repositories match "${searchQuery}"`}
+            action="Try a different search term"
+          />
+        ) : (
+          visibleProjects.map((project, idx) => {
+            const actualIndex = scrollOffset + idx;
+            return (
+              <RepoRow
+                key={project.path}
+                project={project}
+                isSelected={actualIndex === focusedIndex}
+              />
+            );
+          })
+        )}
+      </Box>
+
+      {/* Scroll down indicator */}
+      {showScrollDown && (
+        <Box paddingX={1}>
+          <Text color={theme.text.muted}>
+            {icons.arrowDown} {filteredProjects.length - scrollOffset - listHeight} more below
+          </Text>
+        </Box>
+      )}
+
+      <Divider />
+
+      {/* Footer hints */}
+      <Box marginTop={1} justifyContent="space-between">
+        <Text color={theme.text.muted}>
+          <Text color={theme.accent.primary}>↑↓</Text> Navigate{' '}
+          <Text color={theme.accent.primary}>⏎</Text> Select
+        </Text>
+        <Text color={theme.text.muted}>
+          <Text color={theme.accent.secondary}>Ctrl+R</Text> Refresh{' '}
+          <Text color={theme.accent.secondary}>Esc</Text> Back
+        </Text>
+      </Box>
     </Box>
   );
 }

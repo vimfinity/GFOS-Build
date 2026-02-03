@@ -2,50 +2,54 @@
  * Theme Configuration
  * 
  * Centralized color palette and styling constants for consistent UI.
+ * Primary brand color: GFOS Teal #007d8f
  */
 
 /**
  * Color palette for the application.
+ * Built around GFOS Teal (#007d8f) as the primary brand color.
  */
 export const colors = {
-  // Primary colors (Pastel Indigo-Blue)
-  primary: '#818CF8',
-  primaryBright: '#A5B4FC',
+  // Primary colors (GFOS Teal)
+  primary: '#007d8f',
+  primaryBright: '#00a3b8',
+  primaryDim: '#005a66',
   
-  // Secondary colors
-  secondary: 'magenta',
-  secondaryBright: 'magentaBright',
+  // Secondary colors (Complementary warm tone)
+  secondary: '#8f4500',
+  secondaryBright: '#b85a00',
   
-  // Accent colors
-  accent: 'yellow',
-  accentBright: 'yellowBright',
+  // Accent colors (Golden highlight)
+  accent: '#d4a017',
+  accentBright: '#ffc107',
   
   // Status colors
-  success: 'green',
-  successBright: 'greenBright',
-  warning: 'yellow',
-  warningBright: 'yellowBright',
-  error: 'red',
-  errorBright: 'redBright',
-  info: 'blue',
-  infoBright: 'blueBright',
+  success: '#22c55e',
+  successBright: '#4ade80',
+  warning: '#eab308',
+  warningBright: '#facc15',
+  error: '#ef4444',
+  errorBright: '#f87171',
+  info: '#3b82f6',
+  infoBright: '#60a5fa',
   
   // Neutral colors
   text: 'white',
   textDim: 'gray',
-  textMuted: 'blackBright',
+  textMuted: '#6b7280',
   
   // Background (for inverse/badges)
-  bgPrimary: 'bgCyan',
-  bgSecondary: 'bgMagenta',
-  bgSuccess: 'bgGreen',
-  bgWarning: 'bgYellow',
-  bgError: 'bgRed',
-  bgInfo: 'bgBlue',
+  bgPrimary: '#007d8f',
+  bgSecondary: '#374151',
+  bgSuccess: '#166534',
+  bgWarning: '#854d0e',
+  bgError: '#991b1b',
+  bgInfo: '#1e40af',
   
   // Border colors
-  border: 'gray',
-  borderFocus: 'cyan',
+  border: '#4b5563',
+  borderFocus: '#007d8f',
+  borderDim: '#374151',
 } as const;
 
 /**
@@ -93,43 +97,44 @@ export const spacing = {
 
 /**
  * Icon/Symbol definitions.
+ * Using Unicode symbols for better visual appearance.
  */
 export const icons = {
   // Navigation
-  pointer: '❯',
+  pointer: '▸',
   pointerSmall: '›',
   arrowRight: '→',
   arrowLeft: '←',
   arrowUp: '↑',
   arrowDown: '↓',
-  search: '/',
+  search: '⌕',
   
-  // Checkboxes (Square style - guaranteed same width)
-  checkboxOn: '■',
-  checkboxOff: '□',
-  checkboxPartial: '▣',
+  // Checkboxes (Square style - consistent width)
+  checkboxOn: '◉',
+  checkboxOff: '○',
+  checkboxPartial: '◐',
   
   // Status
   success: '✔',
-  error: '✖',
-  warning: '⚠',
-  info: 'ℹ',
-  pending: '○',
-  running: '◐',
+  error: '✘',
+  warning: '!',
+  info: 'i',
+  pending: '◌',
+  running: '●',
   
   // Objects
-  folder: '▪',
-  file: '▫',
-  package: '□',
-  git: '',
-  java: '◆',
+  folder: '📁',
+  file: '📄',
+  package: '📦',
+  git: '⎇',
+  java: '☕',
   maven: '◈',
   
   // Actions
   play: '▶',
   stop: '■',
   pause: '⏸',
-  refresh: '⟳',
+  refresh: '↻',
   
   // Misc
   bullet: '•',
@@ -137,6 +142,11 @@ export const icons = {
   star: '★',
   check: '✓',
   cross: '✗',
+  hourglass: '⏳',
+  clock: '⏱',
+  gear: '⚙',
+  wrench: '🔧',
+  rocket: '🚀',
 } as const;
 
 /**

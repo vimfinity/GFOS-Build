@@ -1,11 +1,15 @@
 /**
- * UI Views Index
+ * Views V2 Barrel Export
  * 
- * Central export point for all view components (screens).
+ * All redesigned view components using the new primitive system.
  */
 
-export { MainMenuView } from './MainMenuView.js';
+export { HomeView } from './HomeView.js';
 export { RepoListView } from './RepoListView.js';
 export { RepoDetailView } from './RepoDetailView.js';
-export { BuildConfigView } from './BuildConfigView.js';
-export type { BuildOptions, BuildConfigViewProps } from './BuildConfigView.js';
+export { JobsView } from './JobsView.js';
+export { JobDetailView } from './JobDetailView.js';
+export { SettingsView } from './SettingsView.js';
+export { HelpView } from './HelpView.js';
+export { PipelineListView } from './PipelineListView.js';
+export { SetupWizardView } from './SetupWizardView.js';

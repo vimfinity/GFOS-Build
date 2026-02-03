@@ -162,6 +162,11 @@ export interface MavenModule {
 export type BuildStatus = 'pending' | 'waiting' | 'running' | 'success' | 'failed' | 'cancelled';
 
 /**
+ * Alias for BuildStatus (compatibility)
+ */
+export type JobStatus = BuildStatus;
+
+/**
  * Represents a build job in the queue.
  */
 export interface BuildJob {
@@ -185,6 +190,12 @@ export interface BuildJob {
   skipTests?: boolean;
   /** Offline mode */
   offline?: boolean;
+  /** Enable Maven multi-threading (-T flag) */
+  enableThreads?: boolean;
+  /** Thread count for Maven -T option (e.g., '1C', '2C', '4') */
+  threads?: string;
+  /** Maven profiles (use ! prefix to deactivate, e.g., "!jsminify") */
+  profiles?: string[];
   /** Custom Maven arguments */
   customArgs?: string[];
   /** Index in sequence for sequential builds */

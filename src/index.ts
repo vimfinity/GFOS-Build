@@ -143,13 +143,13 @@ async function main(): Promise<void> {
     
     const notifications = useAppStore.getState().notifications;
     for (const notif of notifications) {
-      const icon = { info: 'ℹ️', success: '✅', warning: '⚠️', error: '❌' }[notif.type];
+      const icon = { info: '[i]', success: '[ok]', warning: '[!]', error: '[x]' }[notif.type];
       console.log(`  ${icon} ${notif.message}`);
     }
     console.log('');
 
     // Show settings
-    console.log('⚙️  Current Settings:');
+    console.log('[*] Current Settings:');
     console.log('─'.repeat(50));
     const settings = useAppStore.getState().settings;
     console.log(`  Default Maven Goal: ${settings.defaultMavenGoal}`);

@@ -46,6 +46,10 @@ export interface BuildConfig {
   skipTests?: boolean;
   /** Offline mode flag */
   offline?: boolean;
+  /** Enable Maven multi-threading (-T flag) */
+  enableThreads?: boolean;
+  /** Thread count for Maven -T option (e.g., '1C', '2C', '4') */
+  threads?: string;
   /** Custom arguments (profiles, etc.) */
   customArgs?: string[];
 }
@@ -283,6 +287,11 @@ function buildMavenCommand(config: BuildConfig): string[] {
     args.push('-o');
   }
   
+  // Add thread count for parallel module compilation (-T flag)
+  if (config.enableThreads && config.threads) {
+    args.push('-T', config.threads);
+  }
+  
   // Add additional arguments
   if (config.mavenArgs) {
     args.push(...config.mavenArgs);
@@ -370,8 +379,10 @@ async function runRealBuild(
   
   const args = buildMavenCommand(config);
   const env = buildProcessEnv(config.environment);
+  
+  // PERFORMANCE: Only write to file, NOT to state!
+  // Writing to state causes a re-render for every single log line which kills performance
   const appendLog = (text: string) => {
-    store.appendJobLog(jobId, text);
     void jobLogService.append(jobId, text);
   };
   
@@ -410,6 +421,8 @@ async function runRealBuild(
       let inReactorOrder = false;
       let reactorModuleCount = 0;
       let logLineCount = 0;
+      let lastProgressUpdate = 0; // Throttle progress updates
+      const PROGRESS_UPDATE_INTERVAL = 500; // Only update progress every 500ms
       
       // Phase progress for single-module builds
       const phaseProgress: Record<string, number> = {
@@ -441,7 +454,7 @@ async function runRealBuild(
           
           for (const line of lines) {
             appendLog(line);
-            callbacks.onLog?.(jobId, line);
+            // NOTE: onLog callback removed for performance - logs are written to file only
             logLineCount++;
             
             // Detect start of reactor build order listing
@@ -467,14 +480,22 @@ async function runRealBuild(
             }
             
             // Detect module build: "[INFO] Building moduleName (X/Y)" or "[INFO] Building moduleName version (X/Y)"
-            const multiModuleMatch = line.match(/\[INFO\] Building .+ \((\d+)\/(\d+)\)/);
+            // Also handles: "[INFO] Building moduleName 1.0.0-SNAPSHOT (X/Y)"
+            const multiModuleMatch = line.match(/\[INFO\] Building .+? \((\d+)\/(\d+)\)/);
             if (multiModuleMatch?.[1] && multiModuleMatch?.[2]) {
               currentModuleNum = parseInt(multiModuleMatch[1], 10);
               const parsedTotal = parseInt(multiModuleMatch[2], 10);
-              // Only update total if not set or if this is higher (handles nested builds)
-              if (totalModules === 0 || parsedTotal > totalModules) {
+              // Update total - always trust the value from Maven
+              if (parsedTotal > 0) {
                 totalModules = parsedTotal;
               }
+            }
+            
+            // Also detect simple "Building moduleName" for single-module builds
+            const singleModuleMatch = line.match(/\[INFO\] Building [\w\-\.]+(\s+[\d\w\.\-]+)?$/);
+            if (singleModuleMatch && totalModules === 0) {
+              totalModules = 1;
+              currentModuleNum = 1;
             }
             
             // Detect Maven phase/goal for single-module builds
@@ -499,36 +520,42 @@ async function runRealBuild(
             
             // Calculate progress
             let progress: number;
-            if (totalModules > 1) {
+            if (totalModules > 1 && currentModuleNum > 0) {
               // Multi-module: progress based on module number
-              // currentModuleNum-1 completed, currentModuleNum in progress
-              const completedModules = Math.max(0, currentModuleNum - 1);
-              const baseProgress = (completedModules / totalModules) * 100;
-              // Add small increment for current module in progress
-              progress = Math.min(99, Math.round(baseProgress + (currentModuleNum > 0 && currentModuleNum <= totalModules ? 2 : 0)));
-            } else if (totalModules === 1 || currentPhaseProgress > 0) {
+              // Calculate progress as: completed modules + partial progress of current module
+              const moduleProgress = currentPhaseProgress / 100; // 0-1 for current module
+              const baseProgress = ((currentModuleNum - 1) + moduleProgress) / totalModules;
+              progress = Math.min(99, Math.round(baseProgress * 100));
+            } else if (currentPhaseProgress > 0) {
               // Single module: use phase-based progress
               progress = Math.min(99, currentPhaseProgress);
-            } else {
+            } else if (logLineCount > 10) {
               // Fallback: steady progress based on log lines (for very long builds)
-              // Use logarithmic scale for large builds
-              const estimatedLines = 1000; // Baseline
-              const logProgress = Math.log10(logLineCount + 1) / Math.log10(estimatedLines + 1);
-              progress = Math.min(50, Math.round(logProgress * 50));
+              // Use smooth logarithmic scale
+              const estimatedLines = 5000; // Baseline for large builds
+              const logProgress = Math.log(logLineCount + 1) / Math.log(estimatedLines + 1);
+              progress = Math.min(30, Math.round(logProgress * 30)); // Cap at 30% until we get real progress
+            } else {
+              progress = 0;
             }
             
             // Only update if progress increased (prevents jumping backward)
-            if (progress > lastReportedProgress) {
+            // THROTTLE: Only update every PROGRESS_UPDATE_INTERVAL ms to reduce state updates
+            const now = Date.now();
+            if (progress > lastReportedProgress && (now - lastProgressUpdate) >= PROGRESS_UPDATE_INTERVAL) {
               lastReportedProgress = progress;
+              lastProgressUpdate = now;
               store.updateJobProgress(jobId, progress);
               callbacks.onProgress?.(jobId, progress);
             }
             
-            // Check for cancellation
-            const currentJob = useAppStore.getState().activeJobs.find(j => j.id === jobId);
-            if (!currentJob || currentJob.status === 'cancelled') {
-              proc.kill();
-              return;
+            // Check for cancellation (throttled - not every line)
+            if (logLineCount % 100 === 0) {
+              const currentJob = useAppStore.getState().activeJobs.find(j => j.id === jobId);
+              if (!currentJob || currentJob.status === 'cancelled') {
+                proc.kill();
+                return;
+              }
             }
           }
         }
@@ -536,7 +563,6 @@ async function runRealBuild(
         // Handle remaining buffer
         if (buffer) {
           appendLog(buffer);
-          callbacks.onLog?.(jobId, buffer);
         }
       };
       
@@ -556,13 +582,11 @@ async function runRealBuild(
           
           for (const line of lines) {
             appendLog(`[STDERR] ${line}`);
-            callbacks.onLog?.(jobId, `[STDERR] ${line}`);
           }
         }
         
         if (buffer) {
           appendLog(`[STDERR] ${buffer}`);
-          callbacks.onLog?.(jobId, `[STDERR] ${buffer}`);
         }
       };
       

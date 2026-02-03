@@ -241,6 +241,26 @@ export class ConfigService {
   }
   
   /**
+   * Check if this is the first run (no config file exists).
+   * This is used to determine if the setup wizard should be shown.
+   */
+  async isFirstRun(): Promise<boolean> {
+    return !(await this.exists());
+  }
+  
+  /**
+   * Mark setup as complete by saving default config if it doesn't exist.
+   * Called after setup wizard completes.
+   */
+  async markSetupComplete(): Promise<boolean> {
+    const exists = await this.exists();
+    if (!exists) {
+      return this.save(DEFAULT_CONFIG);
+    }
+    return true;
+  }
+  
+  /**
    * Get default settings.
    */
   getDefaults(): AppSettings {

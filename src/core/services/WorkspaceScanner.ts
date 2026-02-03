@@ -35,6 +35,10 @@ export interface MavenModule {
   javaVersion?: string;
   parentArtifactId?: string;
   isRoot: boolean;
+  /** The directory name containing the module (relative to project root) */
+  directoryName: string;
+  /** Available Maven profiles in this module */
+  profiles?: string[];
 }
 
 /**
@@ -434,6 +438,12 @@ export class WorkspaceScanner {
     if (hasPom) {
       const parsed = await this.parsePom(pomPath);
       if (parsed) {
+        // Calculate directory name relative to project root
+        const relativePath = currentPath === rootPath 
+          ? '.' 
+          : currentPath.replace(rootPath, '').replace(/^[\\/]+/, '');
+        const dirName = relativePath === '.' ? this.getNameFromPath(rootPath) : relativePath;
+        
         modules.push({
           pomPath,
           projectPath: currentPath,
@@ -444,6 +454,8 @@ export class WorkspaceScanner {
           javaVersion: parsed.javaVersion,
           parentArtifactId: parsed.parentArtifactId,
           isRoot: currentPath === rootPath,
+          directoryName: dirName,
+          profiles: parsed.profiles,
         });
       }
     }
@@ -494,7 +506,7 @@ export class WorkspaceScanner {
         const majorVersion = versionMatch?.[1] ? parseInt(versionMatch[1], 10) : 0;
         
         // Determine vendor from name
-        let vendor = 'Unknown';
+        let vendor = '';
         const nameLower = entry.name.toLowerCase();
         if (nameLower.includes('temurin') || nameLower.includes('adoptium')) {
           vendor = 'Eclipse Temurin';
@@ -506,8 +518,11 @@ export class WorkspaceScanner {
           vendor = 'GraalVM';
         } else if (nameLower.includes('openjdk')) {
           vendor = 'OpenJDK';
-        } else if (nameLower.includes('oracle') || nameLower.includes('jdk-')) {
+        } else if (nameLower.includes('oracle')) {
           vendor = 'Oracle';
+        } else if (nameLower.match(/^jdk-?\d+/)) {
+          // Generic JDK directory like "jdk17" or "jdk-21"
+          vendor = 'JDK';
         }
         
         jdks.push({

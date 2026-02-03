@@ -597,6 +597,11 @@ export const useProjectProfiles = (projectPath: string) =>
 export const useActiveJobs = () => useAppStore((state) => state.activeJobs);
 
 /**
+ * Alias for useActiveJobs (compatibility)
+ */
+export const useJobs = useActiveJobs;
+
+/**
  * Selects job history.
  */
 export const useJobHistory = () => useAppStore((state) => state.jobHistory);
