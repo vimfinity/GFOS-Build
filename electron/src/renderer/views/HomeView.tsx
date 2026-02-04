@@ -1,49 +1,24 @@
 /**
- * Home View / Terminal Dashboard - Premium Edition
+ * Home View / Terminal Dashboard
  * 
- * Neon-terminal dashboard with sophisticated animations and micro-interactions.
+ * Neon-terminal inspired dashboard with system overview.
  */
 
-import { motion, AnimatePresence, Variants } from 'framer-motion';
+import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { 
   FolderGit2, 
   Coffee, 
   Activity, 
   CheckCircle2, 
+  XCircle, 
+  Clock,
   ChevronRight,
   Zap,
   Terminal,
   GitBranch,
-  Sparkles,
-  Gauge
+  ArrowUpRight
 } from 'lucide-react';
-
-// Animation variants
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.05,
-    },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: { 
-    opacity: 1, 
-    y: 0,
-    scale: 1,
-    transition: {
-      type: "spring" as const,
-      stiffness: 300,
-      damping: 24,
-    },
-  },
-};
 
 export function HomeView() {
   const projects = useAppStore((state) => state.projects);
@@ -72,69 +47,33 @@ export function HomeView() {
   };
 
   return (
-    <motion.div 
-      className="space-y-5"
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-    >
+    <div className="space-y-6 animate-fade-in">
       {/* Header Section */}
-      <motion.div 
-        className="flex items-end justify-between mb-6"
-        variants={itemVariants}
-      >
+      <div className="flex items-end justify-between mb-2">
         <div>
-          <motion.div 
-            className="flex items-center gap-2 mb-1"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <motion.div
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-            >
-              <Terminal size={14} className="text-neon-green" />
-            </motion.div>
+          <div className="flex items-center gap-2 mb-2">
+            <Terminal size={14} className="text-[#22ffaa]" />
             <span className="text-[10px] text-zinc-600 uppercase tracking-[0.2em] font-display">System Overview</span>
-          </motion.div>
-          <motion.h1 
-            className="font-display text-2xl font-bold text-zinc-100 uppercase tracking-wide"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
+          </div>
+          <h1 className="font-display text-2xl font-bold text-zinc-100 uppercase tracking-wide">
             Dashboard
-          </motion.h1>
+          </h1>
         </div>
-        <motion.div 
-          className="text-right"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Session Active</p>
-          <motion.p 
-            className="text-xs text-neon-green font-mono"
-            animate={{ opacity: [0.7, 1, 0.7] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
-            {new Date().toLocaleDateString('de-DE')}
-          </motion.p>
-        </motion.div>
-      </motion.div>
+        <div className="text-right">
+          <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Session Active</p>
+          <p className="text-xs text-[#22ffaa] font-mono tabular-nums">{new Date().toLocaleDateString('de-DE')}</p>
+        </div>
+      </div>
 
       {/* Stats Grid */}
-      <motion.div 
-        className="grid grid-cols-4 gap-4"
-        variants={containerVariants}
-      >
+      <div className="grid grid-cols-4 gap-4">
         <StatCard
           icon={<FolderGit2 size={20} strokeWidth={1.5} />}
           label="Projekte"
           value={stats.projects}
           sublabel={`${stats.mavenProjects} maven`}
           accent="green"
+          delay={0}
         />
         <StatCard
           icon={<Coffee size={20} strokeWidth={1.5} />}
@@ -142,6 +81,7 @@ export function HomeView() {
           value={stats.jdks}
           sublabel="verfügbar"
           accent="cyan"
+          delay={1}
         />
         <StatCard
           icon={<Activity size={20} strokeWidth={1.5} />}
@@ -149,6 +89,7 @@ export function HomeView() {
           value={stats.runningJobs}
           sublabel={`${stats.pendingJobs} queue`}
           accent="orange"
+          delay={2}
         />
         <StatCard
           icon={<CheckCircle2 size={20} strokeWidth={1.5} />}
@@ -156,207 +97,113 @@ export function HomeView() {
           value={stats.completedJobs}
           sublabel={`${stats.failedJobs} failed`}
           accent={stats.failedJobs > 0 ? 'red' : 'green'}
+          delay={3}
         />
-      </motion.div>
+      </div>
 
       {/* Quick Actions */}
-      <motion.div 
-        className="card overflow-hidden"
-        variants={itemVariants}
-      >
-        <div className="card-header">
-          <span className="card-title flex items-center gap-2">
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              <Zap size={14} className="text-neon-orange" />
-            </motion.div>
+      <div className="bg-[#0c0c0e] border border-[#1a1a1f] animate-slide-up" style={{ animationDelay: '100ms' }}>
+        <div className="px-5 py-3 border-b border-[#1a1a1f] flex items-center justify-between">
+          <span className="text-[10px] text-[#22ffaa] uppercase tracking-[0.15em] font-display font-bold flex items-center gap-2">
+            <Zap size={14} />
             Quick Actions
           </span>
         </div>
-        <div className="card-body">
+        <div className="p-4">
           <div className="grid grid-cols-3 gap-3">
             <QuickAction
               label="Neuer Build"
+              description="Maven Projekt starten"
               shortcut="01"
               onClick={() => setScreen('PROJECTS')}
-              icon={<Sparkles size={16} />}
-              delay={0}
             />
             <QuickAction
               label="Prozesse"
+              description="Build Queue anzeigen"
               shortcut="02"
               onClick={() => setScreen('JOBS')}
-              icon={<Activity size={16} />}
-              delay={0.1}
             />
             <QuickAction
               label="Konfiguration"
+              description="System Settings"
               shortcut="03"
               onClick={() => setScreen('SETTINGS')}
-              icon={<Gauge size={16} />}
-              delay={0.2}
             />
           </div>
         </div>
-      </motion.div>
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         {/* Recent Projects */}
-        <motion.div className="card overflow-hidden" variants={itemVariants}>
-          <div className="card-header">
-            <span className="card-title flex items-center gap-2">
+        <div className="bg-[#0c0c0e] border border-[#1a1a1f] animate-slide-up" style={{ animationDelay: '150ms' }}>
+          <div className="px-5 py-3 border-b border-[#1a1a1f] flex items-center justify-between">
+            <span className="text-[10px] text-[#22ffaa] uppercase tracking-[0.15em] font-display font-bold flex items-center gap-2">
               <GitBranch size={14} />
               Maven Projekte
             </span>
-            <motion.button
+            <button
               onClick={() => setScreen('PROJECTS')}
-              className="text-[10px] text-zinc-500 hover:text-neon-green flex items-center gap-1 uppercase tracking-wider transition-colors"
-              whileHover={{ x: 3 }}
-              whileTap={{ scale: 0.95 }}
+              className="text-[10px] text-zinc-500 hover:text-[#22ffaa] flex items-center gap-1 uppercase tracking-wider transition-colors group"
             >
-              Alle <ChevronRight size={12} />
-            </motion.button>
+              Alle 
+              <ChevronRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+            </button>
           </div>
-          <div className="card-body p-0">
-            <AnimatePresence>
-              {projects.filter((p) => p.hasPom).slice(0, 5).map((project, i) => (
-                <motion.button
-                  key={project.path}
-                  onClick={() => handleProjectClick(project.path)}
-                  className="w-full flex items-center gap-3 px-4 py-3 
-                             hover:bg-terminal-mid/80 text-left group
-                             border-b border-terminal-border/50 last:border-b-0
-                             relative overflow-hidden"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  whileHover={{ x: 4, backgroundColor: "rgba(0, 255, 136, 0.03)" }}
-                  whileTap={{ scale: 0.99 }}
-                >
-                  {/* Hover glow effect */}
-                  <motion.div 
-                    className="absolute inset-0 bg-gradient-to-r from-neon-green/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
-                  />
-                  
-                  <span className="text-[10px] text-zinc-700 font-mono w-5 relative z-10">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <motion.div
-                    className="relative z-10"
-                    whileHover={{ rotate: 15 }}
-                    transition={{ type: "spring", stiffness: 300 }}
-                  >
-                    <FolderGit2 size={16} className="text-zinc-600 group-hover:text-neon-green transition-colors" />
-                  </motion.div>
-                  <div className="flex-1 min-w-0 relative z-10">
-                    <p className="text-sm text-zinc-300 group-hover:text-neon-green truncate transition-colors">
-                      {project.name}
-                    </p>
-                    <p className="text-[10px] text-zinc-600 truncate font-mono">
-                      {project.path}
-                    </p>
-                  </div>
-                  <motion.div
-                    className="relative z-10"
-                    initial={{ x: -5, opacity: 0 }}
-                    whileHover={{ x: 0, opacity: 1 }}
-                  >
-                    <ChevronRight size={14} className="text-neon-green" />
-                  </motion.div>
-                </motion.button>
-              ))}
-            </AnimatePresence>
+          <div>
+            {projects.filter((p) => p.hasPom).slice(0, 5).map((project, i) => (
+              <ProjectListItem
+                key={project.path}
+                name={project.name}
+                path={project.path}
+                index={i}
+                onClick={() => handleProjectClick(project.path)}
+              />
+            ))}
             {projects.filter((p) => p.hasPom).length === 0 && (
-              <motion.div 
-                className="px-4 py-8 text-center"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
+              <div className="px-5 py-10 text-center">
+                <FolderGit2 size={24} className="mx-auto text-zinc-700 mb-3" />
                 <p className="text-xs text-zinc-600">Keine Maven-Projekte gefunden</p>
-              </motion.div>
+              </div>
             )}
           </div>
-        </motion.div>
+        </div>
 
         {/* Recent Jobs */}
-        <motion.div className="card overflow-hidden" variants={itemVariants}>
-          <div className="card-header">
-            <span className="card-title flex items-center gap-2">
+        <div className="bg-[#0c0c0e] border border-[#1a1a1f] animate-slide-up" style={{ animationDelay: '200ms' }}>
+          <div className="px-5 py-3 border-b border-[#1a1a1f] flex items-center justify-between">
+            <span className="text-[10px] text-[#22ffaa] uppercase tracking-[0.15em] font-display font-bold flex items-center gap-2">
               <Activity size={14} />
               Letzte Prozesse
             </span>
-            <motion.button
+            <button
               onClick={() => setScreen('JOBS')}
-              className="text-[10px] text-zinc-500 hover:text-neon-green flex items-center gap-1 uppercase tracking-wider transition-colors"
-              whileHover={{ x: 3 }}
-              whileTap={{ scale: 0.95 }}
+              className="text-[10px] text-zinc-500 hover:text-[#22ffaa] flex items-center gap-1 uppercase tracking-wider transition-colors group"
             >
-              Alle <ChevronRight size={12} />
-            </motion.button>
+              Alle 
+              <ChevronRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+            </button>
           </div>
-          <div className="card-body p-0">
-            <AnimatePresence>
-              {recentJobs.map((job, i) => (
-                <motion.div
-                  key={job.id}
-                  className="flex items-center gap-3 px-4 py-3 
-                             border-b border-terminal-border/50 last:border-b-0
-                             hover:bg-terminal-mid/50 transition-colors"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                >
-                  <JobStatusIndicator status={job.status} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-zinc-300 truncate">{job.name}</p>
-                    <p className="text-[10px] text-zinc-600 font-mono">
-                      {job.mavenGoals.join(' ')}
-                    </p>
-                  </div>
-                  {job.status === 'running' && (
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 bg-terminal-mid overflow-hidden relative">
-                        <motion.div 
-                          className="absolute inset-y-0 left-0 bg-neon-green"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${job.progress}%` }}
-                          transition={{ duration: 0.3 }}
-                        />
-                        {/* Animated shimmer */}
-                        <motion.div
-                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-                          animate={{ x: ["-100%", "200%"] }}
-                          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                        />
-                      </div>
-                      <motion.span 
-                        className="text-[10px] text-neon-green font-mono w-8 tabular-nums"
-                        key={job.progress}
-                        initial={{ scale: 1.2 }}
-                        animate={{ scale: 1 }}
-                      >
-                        {job.progress}%
-                      </motion.span>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
+          <div>
+            {recentJobs.map((job, i) => (
+              <JobListItem
+                key={job.id}
+                name={job.name}
+                goals={job.mavenGoals.join(' ')}
+                status={job.status}
+                progress={job.progress}
+                index={i}
+              />
+            ))}
             {recentJobs.length === 0 && (
-              <motion.div 
-                className="px-4 py-8 text-center"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
+              <div className="px-5 py-10 text-center">
+                <Activity size={24} className="mx-auto text-zinc-700 mb-3" />
                 <p className="text-xs text-zinc-600">Noch keine Builds ausgeführt</p>
-              </motion.div>
+              </div>
             )}
           </div>
-        </motion.div>
+        </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -367,151 +214,232 @@ interface StatCardProps {
   value: number;
   sublabel: string;
   accent: 'green' | 'cyan' | 'orange' | 'red';
+  delay: number;
 }
 
-function StatCard({ icon, label, value, sublabel, accent }: StatCardProps) {
-  const accentColors = {
-    green: {
-      border: 'border-neon-green/30 hover:border-neon-green/60',
-      bg: 'bg-neon-green/5',
-      text: 'text-neon-green',
-      glow: 'rgba(0, 255, 136, 0.15)',
+function StatCard({ icon, label, value, sublabel, accent, delay }: StatCardProps) {
+  const [hovered, setHovered] = useState(false);
+  
+  const colors = {
+    green: { 
+      text: 'text-[#22ffaa]', 
+      border: 'border-[#22ffaa]/30', 
+      bg: 'bg-[#22ffaa]/5',
+      glow: 'shadow-[0_0_20px_rgba(34,255,170,0.15)]'
     },
-    cyan: {
-      border: 'border-neon-cyan/30 hover:border-neon-cyan/60',
-      bg: 'bg-neon-cyan/5',
-      text: 'text-neon-cyan',
-      glow: 'rgba(0, 229, 255, 0.15)',
+    cyan: { 
+      text: 'text-[#00d4ff]', 
+      border: 'border-[#00d4ff]/30', 
+      bg: 'bg-[#00d4ff]/5',
+      glow: 'shadow-[0_0_20px_rgba(0,212,255,0.15)]'
     },
-    orange: {
-      border: 'border-neon-orange/30 hover:border-neon-orange/60',
-      bg: 'bg-neon-orange/5',
-      text: 'text-neon-orange',
-      glow: 'rgba(255, 149, 0, 0.15)',
+    orange: { 
+      text: 'text-[#ffaa00]', 
+      border: 'border-[#ffaa00]/30', 
+      bg: 'bg-[#ffaa00]/5',
+      glow: 'shadow-[0_0_20px_rgba(255,170,0,0.15)]'
     },
-    red: {
-      border: 'border-neon-red/30 hover:border-neon-red/60',
-      bg: 'bg-neon-red/5',
-      text: 'text-neon-red',
-      glow: 'rgba(255, 51, 102, 0.15)',
+    red: { 
+      text: 'text-[#ff4477]', 
+      border: 'border-[#ff4477]/30', 
+      bg: 'bg-[#ff4477]/5',
+      glow: 'shadow-[0_0_20px_rgba(255,68,119,0.15)]'
     },
   };
 
-  const colors = accentColors[accent];
+  const c = colors[accent];
 
   return (
-    <motion.div 
-      className={`card group cursor-pointer transition-all duration-300 ${colors.border}`}
-      variants={itemVariants}
-      whileHover={{ 
-        scale: 1.03, 
-        y: -4,
-        boxShadow: `0 10px 40px -10px ${colors.glow}`,
-      }}
-      whileTap={{ scale: 0.98 }}
+    <div 
+      className={`
+        bg-[#0c0c0e] border border-[#1a1a1f] relative overflow-hidden
+        transition-all duration-300 cursor-default animate-slide-up
+        ${hovered ? `${c.border} ${c.glow}` : ''}
+      `}
+      style={{ animationDelay: `${delay * 50}ms` }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <div className="p-4 relative overflow-hidden">
-        {/* Subtle background pattern */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-current opacity-5" />
-        </div>
-        
-        <div className="flex items-start justify-between mb-3 relative z-10">
-          <motion.div 
-            className={`p-2.5 border ${colors.border} ${colors.bg} ${colors.text}`}
-            whileHover={{ rotate: 5, scale: 1.1 }}
-            transition={{ type: "spring", stiffness: 300 }}
-          >
+      {/* Corner accent */}
+      <div className={`absolute top-0 right-0 w-8 h-8 ${c.bg} transition-all ${hovered ? 'w-12 h-12' : ''}`} />
+      
+      <div className="p-5 relative">
+        <div className="flex items-start justify-between mb-4">
+          <div className={`p-2.5 border ${c.border} ${c.bg} ${c.text} transition-transform ${hovered ? 'scale-110' : ''}`}>
             {icon}
-          </motion.div>
+          </div>
           <span className="text-[9px] text-zinc-600 uppercase tracking-wider font-display">
             {label}
           </span>
         </div>
-        <div className="flex items-end justify-between relative z-10">
-          <motion.p 
-            className="text-3xl font-display font-bold text-zinc-100"
-            key={value}
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 300, damping: 15 }}
-          >
+        <div className="flex items-end justify-between">
+          <p className={`text-3xl font-display font-bold text-zinc-100 tabular-nums transition-colors ${hovered ? c.text : ''}`}>
             {value}
-          </motion.p>
+          </p>
           <p className="text-[10px] text-zinc-600 uppercase tracking-wider">{sublabel}</p>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 interface QuickActionProps {
   label: string;
+  description: string;
   shortcut: string;
   onClick: () => void;
-  icon: React.ReactNode;
-  delay: number;
 }
 
-function QuickAction({ label, shortcut, onClick, icon, delay }: QuickActionProps) {
+function QuickAction({ label, description, shortcut, onClick }: QuickActionProps) {
+  const [hovered, setHovered] = useState(false);
+  
   return (
-    <motion.button
+    <button
       onClick={onClick}
-      className="p-4 border border-terminal-border bg-terminal-mid/50
-                 hover:border-neon-green/50 hover:bg-neon-green/5
-                 transition-colors text-left group relative overflow-hidden"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
-      whileHover={{ scale: 1.02, y: -2 }}
-      whileTap={{ scale: 0.98 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={`
+        p-4 border bg-[#0e0e11] text-left relative overflow-hidden
+        transition-all duration-200 group
+        ${hovered 
+          ? 'border-[#22ffaa]/50 bg-[#22ffaa]/5' 
+          : 'border-[#1a1a1f] hover:border-[#252528]'
+        }
+      `}
     >
-      {/* Hover effect */}
-      <motion.div
-        className="absolute inset-0 bg-gradient-to-r from-neon-green/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
-      />
-      
-      {/* Corner accent */}
-      <motion.div
-        className="absolute top-0 right-0 w-0 h-0 border-t-[20px] border-r-[20px] border-t-neon-green/20 border-r-transparent opacity-0 group-hover:opacity-100 transition-opacity"
-      />
-      
-      <span className="absolute top-2 right-2 text-[9px] text-zinc-700 font-mono group-hover:text-neon-green/60 transition-colors">
+      {/* Shortcut badge */}
+      <span className={`
+        absolute top-2 right-2 text-[9px] font-mono
+        transition-colors
+        ${hovered ? 'text-[#22ffaa]/60' : 'text-zinc-700'}
+      `}>
         {shortcut}
       </span>
       
-      <div className="relative z-10 flex items-center gap-2">
-        <motion.span 
-          className="text-zinc-600 group-hover:text-neon-green transition-colors"
-          whileHover={{ rotate: 15, scale: 1.1 }}
-        >
-          {icon}
-        </motion.span>
-        <p className="text-xs text-zinc-400 group-hover:text-neon-green transition-colors uppercase tracking-wider">
-          {label}
-        </p>
-      </div>
-    </motion.button>
+      {/* Label */}
+      <p className={`
+        text-sm font-medium uppercase tracking-wider mb-1
+        transition-colors
+        ${hovered ? 'text-[#22ffaa]' : 'text-zinc-300'}
+      `}>
+        {label}
+      </p>
+      
+      {/* Description */}
+      <p className="text-[10px] text-zinc-600">
+        {description}
+      </p>
+      
+      {/* Arrow indicator */}
+      <ArrowUpRight 
+        size={14} 
+        className={`
+          absolute bottom-3 right-3 transition-all
+          ${hovered ? 'text-[#22ffaa] opacity-100 translate-x-0 translate-y-0' : 'text-zinc-700 opacity-0 translate-x-1 translate-y-1'}
+        `}
+      />
+    </button>
   );
 }
 
-function JobStatusIndicator({ status }: { status: string }) {
+interface ProjectListItemProps {
+  name: string;
+  path: string;
+  index: number;
+  onClick: () => void;
+}
+
+function ProjectListItem({ name, path, index, onClick }: ProjectListItemProps) {
+  const [hovered, setHovered] = useState(false);
+  
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={`
+        w-full flex items-center gap-3 px-5 py-3.5 text-left
+        border-b border-[#1a1a1f] last:border-b-0
+        transition-all duration-150
+        ${hovered ? 'bg-[#151518]' : ''}
+      `}
+    >
+      {/* Line indicator */}
+      <div className={`
+        w-[2px] h-6 bg-[#22ffaa] transition-all
+        ${hovered ? 'opacity-100' : 'opacity-0'}
+      `} />
+      
+      <span className={`
+        text-[10px] font-mono w-5 tabular-nums transition-colors
+        ${hovered ? 'text-zinc-500' : 'text-zinc-700'}
+      `}>
+        {String(index + 1).padStart(2, '0')}
+      </span>
+      
+      <FolderGit2 
+        size={16} 
+        className={`transition-colors ${hovered ? 'text-[#22ffaa]' : 'text-zinc-600'}`}
+      />
+      
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm truncate transition-colors ${hovered ? 'text-[#22ffaa]' : 'text-zinc-300'}`}>
+          {name}
+        </p>
+        <p className="text-[10px] text-zinc-600 truncate font-mono">
+          {path}
+        </p>
+      </div>
+      
+      <ChevronRight 
+        size={14} 
+        className={`
+          transition-all
+          ${hovered ? 'text-[#22ffaa] translate-x-0 opacity-100' : 'text-zinc-700 -translate-x-1 opacity-0'}
+        `}
+      />
+    </button>
+  );
+}
+
+interface JobListItemProps {
+  name: string;
+  goals: string;
+  status: string;
+  progress: number;
+  index: number;
+}
+
+function JobListItem({ name, goals, status, progress, index }: JobListItemProps) {
   const config = {
-    running: { color: 'bg-neon-green', glow: 'shadow-[0_0_10px_rgba(0,255,136,0.5)]', pulse: true },
-    success: { color: 'bg-neon-green', glow: '', pulse: false },
-    failed: { color: 'bg-neon-red', glow: 'shadow-[0_0_8px_rgba(255,51,102,0.5)]', pulse: false },
-    pending: { color: 'bg-neon-orange', glow: '', pulse: true },
-    cancelled: { color: 'bg-zinc-600', glow: '', pulse: false },
-  }[status] || { color: 'bg-zinc-600', glow: '', pulse: false };
+    running: { color: 'bg-[#22ffaa]', pulse: true, text: 'text-[#22ffaa]' },
+    success: { color: 'bg-[#22ffaa]', pulse: false, text: 'text-[#22ffaa]' },
+    failed: { color: 'bg-[#ff4477]', pulse: false, text: 'text-[#ff4477]' },
+    pending: { color: 'bg-[#ffaa00]', pulse: false, text: 'text-[#ffaa00]' },
+    cancelled: { color: 'bg-zinc-600', pulse: false, text: 'text-zinc-600' },
+  }[status] || { color: 'bg-zinc-600', pulse: false, text: 'text-zinc-600' };
 
   return (
-    <motion.div 
-      className={`w-2 h-2 ${config.color} ${config.glow}`}
-      animate={config.pulse ? { 
-        scale: [1, 1.3, 1],
-        opacity: [1, 0.7, 1],
-      } : {}}
-      transition={{ duration: 1.5, repeat: Infinity }}
-    />
+    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-[#1a1a1f] last:border-b-0 hover:bg-[#151518] transition-colors">
+      {/* Status dot */}
+      <div className={`w-2 h-2 ${config.color} ${config.pulse ? 'animate-pulse shadow-[0_0_8px_#22ffaa]' : ''}`} />
+      
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-zinc-300 truncate">{name}</p>
+        <p className="text-[10px] text-zinc-600 font-mono truncate">{goals}</p>
+      </div>
+      
+      {status === 'running' && (
+        <div className="flex items-center gap-2">
+          <div className="w-16 h-1 bg-[#1a1a1f] overflow-hidden">
+            <div 
+              className="h-full bg-[#22ffaa] transition-all shadow-[0_0_8px_#22ffaa]"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-[#22ffaa] font-mono w-8 tabular-nums">{progress}%</span>
+        </div>
+      )}
+    </div>
   );
 }

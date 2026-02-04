@@ -1,14 +1,13 @@
 /**
- * Header Component - Premium Edition
+ * Header Component
  * 
- * Terminal-style header with path breadcrumb, animations, and system actions.
+ * Terminal-style header with path breadcrumb and system actions.
  */
 
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { api } from '../api';
-import { ChevronLeft, RotateCw, ExternalLink, Clock, Activity } from 'lucide-react';
+import { ChevronLeft, RotateCw, ExternalLink, Clock, Circle } from 'lucide-react';
 
 export function Header() {
   const navigation = useAppStore((state) => state.navigation);
@@ -22,9 +21,12 @@ export function Header() {
   const selectedProjectPath = useAppStore((state) => state.selectedProjectPath);
   const projects = useAppStore((state) => state.projects);
   const jobs = useAppStore((state) => state.jobs);
+  
+  const [refreshHovered, setRefreshHovered] = useState(false);
+  const [openHovered, setOpenHovered] = useState(false);
 
-  const runningJobs = jobs.filter(j => j.status === 'running').length;
   const canGoBack = navigation.history.length > 0;
+  const runningJobs = jobs.filter(j => j.status === 'running').length;
   
   const getPath = (): string[] => {
     const base = ['GFOS'];
@@ -69,159 +71,110 @@ export function Header() {
   });
 
   return (
-    <motion.header 
-      className="h-12 bg-terminal-dark border-b border-terminal-border flex items-center px-4 gap-4"
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-    >
+    <header className="h-14 bg-[#0a0a0c] border-b border-[#1a1a1f] flex items-center px-5 gap-4">
       {/* Back Button */}
-      <AnimatePresence>
-        {canGoBack && (
-          <motion.button
-            onClick={goBack}
-            className="p-1.5 text-zinc-600 hover:text-neon-green transition-colors"
-            title="Zurück"
-            initial={{ opacity: 0, x: -10, scale: 0.8 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: -10, scale: 0.8 }}
-            whileHover={{ scale: 1.1, x: -2 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            <ChevronLeft size={18} strokeWidth={1.5} />
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {canGoBack && (
+        <button
+          onClick={goBack}
+          className="p-2 text-zinc-600 hover:text-[#22ffaa] hover:bg-[#22ffaa]/10 transition-all rounded group"
+          title="Zurück"
+        >
+          <ChevronLeft size={18} strokeWidth={1.5} className="group-hover:-translate-x-0.5 transition-transform" />
+        </button>
+      )}
 
       {/* Path Breadcrumb - Terminal Style */}
-      <div className="flex items-center gap-1 flex-1 font-mono text-xs">
-        <motion.span 
-          className="text-neon-green"
-          animate={{ opacity: [0.7, 1, 0.7] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-        >
-          ›
-        </motion.span>
+      <div className="flex items-center gap-1.5 flex-1 font-mono text-xs">
+        <span className="text-[#22ffaa] text-sm">›</span>
         {path.map((segment, i) => (
           <React.Fragment key={i}>
-            <motion.span 
-              className={i === path.length - 1 ? 'text-zinc-300' : 'text-zinc-600'}
-              initial={{ opacity: 0, x: -5 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
+            <span 
+              className={`
+                transition-colors
+                ${i === path.length - 1 
+                  ? 'text-zinc-200 hover:text-[#22ffaa]' 
+                  : 'text-zinc-600 hover:text-zinc-400'
+                }
+              `}
             >
               {segment.toLowerCase()}
-            </motion.span>
+            </span>
             {i < path.length - 1 && <span className="text-zinc-700">/</span>}
           </React.Fragment>
         ))}
-        {!isScanning && (
-          <motion.span 
-            className="text-neon-green ml-0.5"
-            animate={{ opacity: [0, 1, 0] }}
-            transition={{ duration: 1, repeat: Infinity }}
-          >
-            _
-          </motion.span>
-        )}
+        {!isScanning && <span className="text-[#22ffaa] animate-blink ml-0.5">_</span>}
       </div>
 
-      {/* Running Jobs Indicator */}
-      <AnimatePresence>
-        {runningJobs > 0 && (
-          <motion.div 
-            className="flex items-center gap-2 px-2 py-1 border border-neon-orange/30 bg-neon-orange/5"
-            initial={{ opacity: 0, scale: 0.8, x: 20 }}
-            animate={{ opacity: 1, scale: 1, x: 0 }}
-            exit={{ opacity: 0, scale: 0.8, x: 20 }}
-          >
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-            >
-              <Activity size={12} className="text-neon-orange" />
-            </motion.div>
-            <span className="text-[10px] text-neon-orange uppercase tracking-wider font-mono">
-              {runningJobs} active
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Scan Status */}
-      <AnimatePresence>
-        {(isScanning || scanStatus) && (
-          <motion.div 
-            className="flex items-center gap-2 px-3 py-1 border border-neon-green/30 bg-neon-green/5"
-            initial={{ opacity: 0, scale: 0.8, x: 20 }}
-            animate={{ opacity: 1, scale: 1, x: 0 }}
-            exit={{ opacity: 0, scale: 0.8, x: 20 }}
-          >
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            >
-              <RotateCw size={12} className="text-neon-green" />
-            </motion.div>
-            <span className="text-[10px] text-neon-green uppercase tracking-wider font-mono">
-              {scanStatus || 'Scanning'}
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {(isScanning || scanStatus) && (
+        <div className="flex items-center gap-2 px-4 py-1.5 border border-[#22ffaa]/30 bg-[#22ffaa]/5 animate-fade-in">
+          <RotateCw size={12} className="text-[#22ffaa] animate-spin" />
+          <span className="text-[10px] text-[#22ffaa] uppercase tracking-wider font-mono">
+            {scanStatus || 'Scanning...'}
+          </span>
+        </div>
+      )}
+
+      {/* Running Jobs Indicator */}
+      {runningJobs > 0 && !isScanning && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border border-[#ffaa00]/30 bg-[#ffaa00]/5 animate-fade-in">
+          <Circle size={8} className="text-[#ffaa00] fill-[#ffaa00] animate-pulse" />
+          <span className="text-[10px] text-[#ffaa00] uppercase tracking-wider font-mono">
+            {runningJobs} Running
+          </span>
+        </div>
+      )}
 
       {/* Time */}
-      <motion.div 
-        className="flex items-center gap-2 text-zinc-600"
-        whileHover={{ color: "#00ff88" }}
-      >
+      <div className="flex items-center gap-2 text-zinc-600 hover:text-zinc-400 transition-colors cursor-default">
         <Clock size={12} strokeWidth={1.5} />
-        <motion.span 
-          className="text-[10px] font-mono tracking-wider"
-          key={currentTime}
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          {currentTime}
-        </motion.span>
-      </motion.div>
+        <span className="text-[10px] font-mono tracking-wider tabular-nums">{currentTime}</span>
+      </div>
 
       {/* Separator */}
-      <div className="w-px h-4 bg-terminal-border" />
+      <div className="w-px h-5 bg-[#1a1a1f]" />
 
       {/* Actions */}
       <div className="flex items-center gap-1">
-        <motion.button
+        <button
           onClick={handleOpenFolder}
-          className="p-1.5 text-zinc-600 hover:text-neon-cyan transition-colors"
+          onMouseEnter={() => setOpenHovered(true)}
+          onMouseLeave={() => setOpenHovered(false)}
+          className={`
+            p-2 transition-all rounded relative
+            ${openHovered 
+              ? 'text-[#00d4ff] bg-[#00d4ff]/10' 
+              : 'text-zinc-600 hover:text-[#00d4ff]'
+            }
+          `}
           title="Projektordner öffnen"
-          whileHover={{ scale: 1.15, rotate: 5 }}
-          whileTap={{ scale: 0.9 }}
         >
-          <ExternalLink size={14} strokeWidth={1.5} />
-        </motion.button>
-        <motion.button
+          <ExternalLink size={14} strokeWidth={1.5} className={openHovered ? 'translate-x-0.5 -translate-y-0.5' : ''} style={{ transition: 'transform 0.15s ease' }} />
+        </button>
+        <button
           onClick={handleRefresh}
+          onMouseEnter={() => setRefreshHovered(true)}
+          onMouseLeave={() => setRefreshHovered(false)}
           disabled={isScanning}
           className={`
-            p-1.5 transition-colors
+            p-2 transition-all rounded relative
             ${isScanning 
               ? 'text-zinc-700 cursor-not-allowed' 
-              : 'text-zinc-600 hover:text-neon-green'
+              : refreshHovered 
+                ? 'text-[#22ffaa] bg-[#22ffaa]/10' 
+                : 'text-zinc-600 hover:text-[#22ffaa]'
             }
           `}
           title="Neu scannen"
-          whileHover={!isScanning ? { scale: 1.15 } : {}}
-          whileTap={!isScanning ? { scale: 0.9 } : {}}
         >
-          <motion.div
-            animate={isScanning ? { rotate: 360 } : {}}
-            transition={isScanning ? { duration: 1, repeat: Infinity, ease: "linear" } : {}}
-          >
-            <RotateCw size={14} strokeWidth={1.5} />
-          </motion.div>
-        </motion.button>
+          <RotateCw 
+            size={14} 
+            strokeWidth={1.5} 
+            className={isScanning ? 'animate-spin' : refreshHovered ? 'rotate-45' : ''}
+            style={{ transition: 'transform 0.2s ease' }}
+          />
+        </button>
       </div>
-    </motion.header>
+    </header>
   );
 }

@@ -1,31 +1,13 @@
 /**
- * Settings View - Premium Terminal Edition
+ * Settings View - Terminal-Neon Design (Polished)
  * 
- * System configuration interface with advanced animations.
+ * System configuration interface with enhanced interactions.
  */
 
 import React, { useState } from 'react';
-import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
-import { Settings, Folder, Save, RotateCcw, Check } from 'lucide-react';
-
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1, delayChildren: 0.05 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { 
-    opacity: 1, 
-    y: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
-  },
-};
+import { Settings, Folder, Save, RotateCcw, Check, AlertCircle } from 'lucide-react';
 
 export function SettingsView() {
   const settings = useAppStore((state) => state.settings);
@@ -72,30 +54,23 @@ export function SettingsView() {
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(localSettings);
 
   return (
-    <motion.div 
-      className="max-w-3xl mx-auto space-y-4"
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-    >
+    <div className="max-w-3xl mx-auto space-y-5 animate-fade-in">
       {/* Header */}
-      <motion.div 
-        className="terminal-window overflow-hidden"
-        variants={itemVariants}
-      >
-        <div className="terminal-header flex items-center gap-2">
-          <motion.span 
-            className="text-neon-cyan"
-            animate={{ rotate: [0, 360] }}
-            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-          >
-            <Settings size={14} />
-          </motion.span>
-          <span>SYSTEM_CONFIG</span>
-          <span className="text-zinc-700">//</span>
-          <span className="text-zinc-500">v1.0.0</span>
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Settings size={14} className="text-[#22ffaa]" />
+            <span className="text-[10px] text-zinc-600 uppercase tracking-[0.2em] font-display">Configuration</span>
+          </div>
+          <h1 className="font-display text-xl font-bold text-zinc-100 uppercase tracking-wide">
+            System Settings
+          </h1>
         </div>
-      </motion.div>
+        <div className="text-right">
+          <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Version</p>
+          <p className="text-xs text-[#00d4ff] font-mono">v1.0.0</p>
+        </div>
+      </div>
 
       {/* Paths Section */}
       <ConfigSection 
@@ -103,7 +78,7 @@ export function SettingsView() {
         description="Configure scan paths for projects and JDKs"
         index={0}
       >
-        <div className="space-y-4">
+        <div className="space-y-5">
           <ConfigInput
             label="SCAN_ROOT"
             value={localSettings.scanRootPath}
@@ -137,7 +112,7 @@ export function SettingsView() {
         description="Default settings for new build jobs"
         index={1}
       >
-        <div className="space-y-4">
+        <div className="space-y-5">
           <ConfigInput
             label="DEFAULT_GOALS"
             value={localSettings.defaultMavenGoal}
@@ -147,37 +122,46 @@ export function SettingsView() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">
+              <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2 tracking-wider">
                 MAX_PARALLEL
               </label>
-              <motion.input
+              <input
                 type="number"
                 min={1}
                 max={8}
                 value={localSettings.maxParallelBuilds}
                 onChange={(e) => handleChange('maxParallelBuilds', parseInt(e.target.value) || 1)}
-                className="terminal-input w-full"
-                whileFocus={{ scale: 1.01, borderColor: "rgba(0, 255, 136, 0.5)" }}
+                className="
+                  w-full py-2.5 px-4 bg-[#0a0a0c] border border-[#1a1a1f] text-sm text-zinc-200 font-mono
+                  focus:border-[#00d4ff] focus:bg-[#0c0c0e]
+                  focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1)]
+                  transition-all outline-none
+                "
               />
             </div>
             
             <div>
-              <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">
+              <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2 tracking-wider">
                 THREAD_COUNT
               </label>
-              <motion.input
+              <input
                 type="text"
                 value={localSettings.threadCount}
                 onChange={(e) => handleChange('threadCount', e.target.value)}
                 placeholder="1C"
                 disabled={!localSettings.enableThreads}
-                className={`terminal-input w-full ${!localSettings.enableThreads ? 'opacity-50' : ''}`}
-                whileFocus={{ scale: 1.01 }}
+                className={`
+                  w-full py-2.5 px-4 bg-[#0a0a0c] border border-[#1a1a1f] text-sm text-zinc-200 font-mono
+                  focus:border-[#00d4ff] focus:bg-[#0c0c0e]
+                  focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1)]
+                  transition-all outline-none
+                  ${!localSettings.enableThreads ? 'opacity-40 cursor-not-allowed' : ''}
+                `}
               />
             </div>
           </div>
 
-          <div className="border-t border-terminal-border pt-4 space-y-3">
+          <div className="border-t border-[#1a1a1f] pt-5 space-y-4">
             <ConfigToggle
               label="SKIP_TESTS"
               description="-DskipTests on all builds"
@@ -203,95 +187,70 @@ export function SettingsView() {
       </ConfigSection>
 
       {/* Actions */}
-      <motion.div 
-        className="terminal-window overflow-hidden"
-        variants={itemVariants}
-      >
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <AnimatePresence mode="wait">
-              {hasChanges && (
-                <motion.span 
-                  className="text-neon-orange text-xs font-mono flex items-center gap-2"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                >
-                  <motion.span 
-                    animate={{ scale: [1, 1.3, 1] }}
-                    transition={{ duration: 1, repeat: Infinity }}
-                  >
-                    ●
-                  </motion.span>
-                  UNSAVED_CHANGES
-                </motion.span>
-              )}
-              {saved && !hasChanges && (
-                <motion.span 
-                  className="text-neon-green text-xs font-mono flex items-center gap-2"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <Check size={12} /> CONFIG_SAVED
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <motion.button
-              onClick={() => setLocalSettings(settings)}
-              disabled={!hasChanges}
-              className="btn-ghost text-xs disabled:opacity-30 flex items-center gap-2"
-              whileHover={hasChanges ? { scale: 1.02 } : {}}
-              whileTap={hasChanges ? { scale: 0.98 } : {}}
-            >
-              <RotateCcw size={12} />
-              RESET
-            </motion.button>
-            <motion.button
-              onClick={handleSave}
-              disabled={!hasChanges || saving}
-              className={`text-xs font-mono px-4 py-2 border transition-all flex items-center gap-2 ${
-                hasChanges && !saving
-                  ? 'border-neon-green text-terminal-black bg-neon-green hover:shadow-[0_0_20px_rgba(0,255,136,0.3)]'
-                  : 'border-zinc-700 text-zinc-600 cursor-not-allowed'
-              }`}
-              whileHover={hasChanges && !saving ? { scale: 1.02, y: -1 } : {}}
-              whileTap={hasChanges && !saving ? { scale: 0.98 } : {}}
-            >
-              {saving ? (
-                <>
-                  <motion.span
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  >
-                    ◐
-                  </motion.span>
-                  SAVING...
-                </>
-              ) : (
-                <>
-                  <Save size={12} />
-                  SAVE_CONFIG
-                </>
-              )}
-            </motion.button>
-          </div>
+      <div className="bg-[#0c0c0e] border border-[#1a1a1f] p-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          {hasChanges && (
+            <span className="flex items-center gap-2 text-[#ffaa00] text-xs font-mono animate-pulse">
+              <AlertCircle size={14} />
+              UNSAVED_CHANGES
+            </span>
+          )}
+          {saved && !hasChanges && (
+            <span className="flex items-center gap-2 text-[#22ffaa] text-xs font-mono">
+              <Check size={14} />
+              CONFIG_SAVED
+            </span>
+          )}
         </div>
-      </motion.div>
+        
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setLocalSettings(settings)}
+            disabled={!hasChanges}
+            className={`
+              flex items-center gap-2 px-4 py-2 text-xs font-mono uppercase tracking-wider
+              border transition-all
+              ${hasChanges 
+                ? 'border-zinc-600 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 hover:bg-[#151518]' 
+                : 'border-[#1a1a1f] text-zinc-700 cursor-not-allowed'
+              }
+            `}
+          >
+            <RotateCcw size={12} />
+            Reset
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            className={`
+              flex items-center gap-2 px-5 py-2 text-xs font-mono uppercase tracking-wider
+              border transition-all
+              ${hasChanges && !saving
+                ? 'border-[#22ffaa] text-[#22ffaa] hover:bg-[#22ffaa] hover:text-[#0a0a0c] hover:shadow-[0_0_20px_rgba(34,255,170,0.2)]'
+                : 'border-[#1a1a1f] text-zinc-700 cursor-not-allowed'
+              }
+            `}
+          >
+            {saving ? (
+              <>
+                <span className="animate-spin">◐</span>
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={12} />
+                Save Config
+              </>
+            )}
+          </button>
+        </div>
+      </div>
 
       {/* Debug Info */}
-      <motion.div 
-        className="text-[10px] font-mono text-zinc-700 text-right px-2"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-      >
+      <div className="text-[10px] font-mono text-zinc-700 text-right px-2">
         CONFIG_PATH: ~/.gfos-build/config.json
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
 
@@ -304,27 +263,21 @@ interface ConfigSectionProps {
 
 function ConfigSection({ title, description, children, index }: ConfigSectionProps) {
   return (
-    <motion.div 
-      className="terminal-window overflow-hidden"
-      variants={itemVariants}
+    <div 
+      className="bg-[#0c0c0e] border border-[#1a1a1f] animate-slide-up"
+      style={{ animationDelay: `${index * 80}ms` }}
     >
-      <div className="terminal-header flex items-center gap-2">
-        <motion.span 
-          className="text-neon-green"
-          animate={{ opacity: [0.5, 1, 0.5] }}
-          transition={{ duration: 2, repeat: Infinity, delay: index * 0.2 }}
-        >
-          ▸
-        </motion.span>
-        <span>{title}</span>
+      <div className="px-5 py-3 border-b border-[#1a1a1f] flex items-center gap-2">
+        <span className="text-[#22ffaa]">▸</span>
+        <span className="text-[10px] text-zinc-300 uppercase tracking-[0.15em] font-display font-medium">{title}</span>
       </div>
-      <div className="px-4 py-1 border-b border-terminal-border bg-terminal-mid/30">
-        <p className="text-xs text-zinc-500 font-mono"># {description}</p>
+      <div className="px-5 py-2 border-b border-[#1a1a1f]/50 bg-[#0a0a0c]">
+        <p className="text-xs text-zinc-600 font-mono"># {description}</p>
       </div>
-      <div className="p-4">
+      <div className="p-5">
         {children}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -341,21 +294,18 @@ function ConfigInput({ label, value, onChange, placeholder, hint, onBrowse }: Co
   const [focused, setFocused] = useState(false);
   
   return (
-    <motion.div
-      animate={focused ? { x: 2 } : { x: 0 }}
-      transition={{ type: "spring", stiffness: 300 }}
-    >
-      <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">
+    <div>
+      <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2 tracking-wider">
         {label}
       </label>
       <div className="flex gap-2">
         <div className="flex-1 relative">
-          <motion.span 
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 font-mono text-sm"
-            animate={{ color: focused ? "#00ff88" : "#52525b" }}
-          >
+          <span className={`
+            absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm transition-colors
+            ${focused ? 'text-[#00d4ff]' : 'text-zinc-700'}
+          `}>
             $
-          </motion.span>
+          </span>
           <input
             type="text"
             value={value}
@@ -363,35 +313,34 @@ function ConfigInput({ label, value, onChange, placeholder, hint, onBrowse }: Co
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={placeholder}
-            className={`terminal-input w-full pl-7 transition-all duration-200 ${
-              focused ? 'border-neon-green/50 shadow-[0_0_10px_rgba(0,255,136,0.1)]' : ''
-            }`}
+            className="
+              w-full py-2.5 pl-7 pr-4 bg-[#0a0a0c] border border-[#1a1a1f] text-sm text-zinc-200 font-mono
+              placeholder:text-zinc-700
+              focus:border-[#00d4ff] focus:bg-[#0c0c0e]
+              focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1),0_0_20px_rgba(0,212,255,0.1)]
+              transition-all outline-none
+            "
           />
         </div>
         {onBrowse && (
-          <motion.button
+          <button
             onClick={onBrowse}
-            className="px-3 py-2 bg-terminal-mid border border-terminal-border text-zinc-400 
-                       hover:text-neon-cyan hover:border-neon-cyan/50 transition-colors font-mono text-xs
-                       flex items-center gap-1"
-            whileHover={{ scale: 1.02, y: -1 }}
-            whileTap={{ scale: 0.98 }}
+            className="
+              px-4 py-2 bg-[#0e0e11] border border-[#1a1a1f] text-zinc-500 
+              hover:text-[#00d4ff] hover:border-[#00d4ff]/50 hover:bg-[#00d4ff]/5
+              transition-all font-mono text-xs
+            "
           >
-            <Folder size={12} />
-          </motion.button>
+            <Folder size={14} />
+          </button>
         )}
       </div>
       {hint && (
-        <motion.p 
-          className="text-[10px] text-zinc-600 font-mono mt-1"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-        >
+        <p className="text-[10px] text-zinc-700 font-mono mt-1.5">
           // {hint}
-        </motion.p>
+        </p>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -403,46 +352,55 @@ interface ConfigToggleProps {
 }
 
 function ConfigToggle({ label, description, checked, onChange }: ConfigToggleProps) {
+  const [hovered, setHovered] = useState(false);
+  
   return (
-    <motion.label 
-      className="flex items-center gap-3 cursor-pointer group"
-      whileHover={{ x: 2 }}
-      whileTap={{ scale: 0.995 }}
+    <label 
+      className="flex items-center gap-4 cursor-pointer py-2 group"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <motion.div 
-        className={`w-10 h-5 border relative transition-colors ${
-          checked 
-            ? 'border-neon-green bg-neon-green/20' 
-            : 'border-zinc-600 bg-zinc-900 hover:border-zinc-500'
-        }`}
+      <button 
+        type="button"
         onClick={() => onChange(!checked)}
-        whileHover={{ scale: 1.05 }}
+        className={`
+          w-11 h-6 border relative transition-all flex-shrink-0
+          ${checked 
+            ? 'border-[#22ffaa]/60 bg-[#22ffaa]/10' 
+            : hovered 
+              ? 'border-zinc-600 bg-[#151518]' 
+              : 'border-[#1a1a1f] bg-[#0a0a0c]'
+          }
+        `}
       >
-        <motion.div 
-          className="absolute top-0.5 w-4 h-4"
-          animate={{
-            x: checked ? 20 : 2,
-            backgroundColor: checked ? "#00ff88" : "#52525b",
-          }}
-          transition={{ type: "spring", stiffness: 400, damping: 20 }}
+        <div 
+          className={`
+            absolute top-1 w-4 h-4 transition-all
+            ${checked 
+              ? 'right-1 bg-[#22ffaa] shadow-[0_0_8px_#22ffaa]' 
+              : 'left-1 bg-zinc-600'
+            }
+          `}
         />
-      </motion.div>
-      <div className="flex-1">
-        <p className={`text-sm font-mono transition-colors ${
-          checked ? 'text-neon-green' : 'text-zinc-300 group-hover:text-zinc-100'
-        }`}>
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className={`
+          text-sm font-mono transition-colors
+          ${checked ? 'text-[#22ffaa]' : hovered ? 'text-zinc-200' : 'text-zinc-400'}
+        `}>
           {label}
         </p>
-        <p className="text-xs text-zinc-600 font-mono">{description}</p>
+        <p className="text-[10px] text-zinc-600 font-mono truncate">{description}</p>
       </div>
-      <motion.span 
-        className="text-xs font-mono"
-        animate={{ 
-          color: checked ? "#00ff88" : "#52525b",
-        }}
-      >
-        {checked ? '[ON]' : '[OFF]'}
-      </motion.span>
-    </motion.label>
+      <span className={`
+        text-[10px] font-mono uppercase tracking-wider px-2 py-1 border transition-all
+        ${checked 
+          ? 'text-[#22ffaa] border-[#22ffaa]/30 bg-[#22ffaa]/5' 
+          : 'text-zinc-600 border-[#1a1a1f] bg-transparent'
+        }
+      `}>
+        {checked ? 'ON' : 'OFF'}
+      </span>
+    </label>
   );
 }
