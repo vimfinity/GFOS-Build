@@ -4,7 +4,7 @@
  * Provides fake data when running outside of Electron.
  */
 
-import type { ElectronAPI, AppSettings, DiscoveredProject, JDK, MavenModule } from './index';
+import type { ElectronAPI, AppSettings, DiscoveredProject, JDK, MavenModule, BuildJob, Pipeline } from './index';
 
 // Mock Data
 const mockSettings: AppSettings = {
@@ -17,6 +17,7 @@ const mockSettings: AppSettings = {
   offlineMode: false,
   enableThreads: false,
   threadCount: '1C',
+  setupComplete: true,
 };
 
 const mockProjects: DiscoveredProject[] = [
@@ -35,13 +36,19 @@ const mockJDKs: JDK[] = [
 ];
 
 const mockModules: MavenModule[] = [
-  { artifactId: 'gfos-workflow', groupId: 'de.gfos', pomPath: 'pom.xml', packaging: 'pom', relativePath: '.' },
-  { artifactId: 'workflow-api', groupId: 'de.gfos.workflow', pomPath: 'workflow-api/pom.xml', packaging: 'jar', relativePath: 'workflow-api' },
-  { artifactId: 'workflow-core', groupId: 'de.gfos.workflow', pomPath: 'workflow-core/pom.xml', packaging: 'jar', relativePath: 'workflow-core' },
-  { artifactId: 'workflow-engine', groupId: 'de.gfos.workflow', pomPath: 'workflow-engine/pom.xml', packaging: 'jar', relativePath: 'workflow-engine' },
+  { artifactId: 'gfos-workflow', groupId: 'de.gfos', pomPath: 'pom.xml', packaging: 'pom', relativePath: '.', displayName: 'gfos-workflow (Root)', depth: 0 },
+  { artifactId: 'workflow-api', groupId: 'de.gfos.workflow', pomPath: 'workflow-api/pom.xml', packaging: 'jar', relativePath: 'workflow-api', displayName: 'workflow-api (workflow-api)', depth: 1 },
+  { artifactId: 'workflow-core', groupId: 'de.gfos.workflow', pomPath: 'workflow-core/pom.xml', packaging: 'jar', relativePath: 'workflow-core', displayName: 'workflow-core (workflow-core)', depth: 1 },
+  { artifactId: 'workflow-engine', groupId: 'de.gfos.workflow', pomPath: 'workflow-engine/pom.xml', packaging: 'jar', relativePath: 'workflow-engine', displayName: 'workflow-engine (workflow-engine)', depth: 1 },
+  { artifactId: 'engine-api', groupId: 'de.gfos.workflow.engine', pomPath: 'workflow-engine/engine-api/pom.xml', packaging: 'jar', relativePath: 'workflow-engine/engine-api', displayName: 'engine-api (workflow-engine/engine-api)', depth: 2 },
+  { artifactId: 'engine-impl', groupId: 'de.gfos.workflow.engine', pomPath: 'workflow-engine/engine-impl/pom.xml', packaging: 'jar', relativePath: 'workflow-engine/engine-impl', displayName: 'engine-impl (workflow-engine/engine-impl)', depth: 2 },
 ];
 
 const mockProfiles = ['development', 'production', 'test', 'jsminify', 'docker'];
+
+// Stored jobs and pipelines (mock persistence)
+let storedJobs: BuildJob[] = [];
+let storedPipelines: Pipeline[] = [];
 
 // Event listeners storage
 type EventCallback = (...args: unknown[]) => void;
@@ -60,6 +67,28 @@ export const mockElectronAPI: ElectronAPI = {
   saveConfig: async (config) => {
     await delay(100);
     Object.assign(mockSettings, config);
+  },
+
+  // Jobs Persistence
+  loadJobs: async () => {
+    await delay(50);
+    return [...storedJobs];
+  },
+  
+  saveJobs: async (jobs) => {
+    await delay(50);
+    storedJobs = [...jobs];
+  },
+  
+  // Pipelines Persistence
+  loadPipelines: async () => {
+    await delay(50);
+    return [...storedPipelines];
+  },
+  
+  savePipelines: async (pipelines) => {
+    await delay(50);
+    storedPipelines = [...pipelines];
   },
 
   // Scanning

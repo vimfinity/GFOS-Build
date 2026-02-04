@@ -143,8 +143,8 @@ export function Header() {
           className={`
             p-2 transition-all rounded relative
             ${openHovered 
-              ? 'text-[#00d4ff] bg-[#00d4ff]/10' 
-              : 'text-zinc-600 hover:text-[#00d4ff]'
+              ? 'text-[#22ffaa] bg-[#22ffaa]/10' 
+              : 'text-zinc-600 hover:text-[#22ffaa]'
             }
           `}
           title="Projektordner öffnen"

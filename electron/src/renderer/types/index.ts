@@ -22,7 +22,9 @@ export interface MavenModule {
   groupId: string;
   pomPath: string;
   packaging: string;
-  relativePath?: string;
+  relativePath: string;
+  displayName: string;
+  depth: number;
 }
 
 export interface AppSettings {
@@ -35,6 +37,29 @@ export interface AppSettings {
   offlineMode: boolean;
   enableThreads: boolean;
   threadCount: string;
+  setupComplete?: boolean;
+}
+
+// ============================================================================
+// Pipeline Types
+// ============================================================================
+
+export interface PipelineStep {
+  name: string;
+  goals: string[];
+  jdkPath?: string;
+  skipTests?: boolean;
+  profiles?: string[];
+  modulePath?: string;
+}
+
+export interface Pipeline {
+  id: string;
+  name: string;
+  projectPath: string;
+  steps: PipelineStep[];
+  createdAt: Date;
+  lastRun?: Date;
 }
 
 export type BuildStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
@@ -57,12 +82,22 @@ export interface BuildJob {
   enableThreads?: boolean;
   threads?: string;
   profiles?: string[];
+  pipelineId?: string;
+  pipelineStep?: number;
 }
 
 export interface ElectronAPI {
   // Config
   loadConfig: () => Promise<AppSettings>;
   saveConfig: (config: AppSettings) => Promise<void>;
+  
+  // Jobs Persistence
+  loadJobs: () => Promise<BuildJob[]>;
+  saveJobs: (jobs: BuildJob[]) => Promise<void>;
+  
+  // Pipelines Persistence
+  loadPipelines: () => Promise<Pipeline[]>;
+  savePipelines: (pipelines: Pipeline[]) => Promise<void>;
   
   // Scanning
   scanProjects: (rootPath: string) => Promise<DiscoveredProject[]>;

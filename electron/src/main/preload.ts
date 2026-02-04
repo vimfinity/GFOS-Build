@@ -43,6 +43,14 @@ const electronAPI = {
   loadConfig: (): Promise<AppSettings> => ipcRenderer.invoke('config:load'),
   saveConfig: (config: AppSettings): Promise<void> => ipcRenderer.invoke('config:save', config),
 
+  // Jobs Persistence
+  loadJobs: () => ipcRenderer.invoke('jobs:load'),
+  saveJobs: (jobs: BuildJob[]) => ipcRenderer.invoke('jobs:save', jobs),
+
+  // Pipelines Persistence
+  loadPipelines: () => ipcRenderer.invoke('pipelines:load'),
+  savePipelines: (pipelines: unknown[]) => ipcRenderer.invoke('pipelines:save', pipelines),
+
   // Scanning
   scanProjects: (rootPath: string) => ipcRenderer.invoke('scan:projects', rootPath),
   scanJDKs: (scanPaths: string) => ipcRenderer.invoke('scan:jdks', scanPaths),

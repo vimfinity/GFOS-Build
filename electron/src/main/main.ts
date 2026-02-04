@@ -33,6 +33,26 @@ interface BuildJob {
   enableThreads?: boolean;
   threads?: string;
   profiles?: string[];
+  pipelineId?: string;
+  pipelineStep?: number;
+}
+
+interface Pipeline {
+  id: string;
+  name: string;
+  projectPath: string;
+  steps: PipelineStep[];
+  createdAt: Date;
+  lastRun?: Date;
+}
+
+interface PipelineStep {
+  name: string;
+  goals: string[];
+  jdkPath?: string;
+  skipTests?: boolean;
+  profiles?: string[];
+  modulePath?: string;
 }
 
 interface JDK {
@@ -55,7 +75,9 @@ interface MavenModule {
   groupId: string;
   pomPath: string;
   packaging: string;
-  relativePath?: string;
+  relativePath: string;
+  displayName: string;
+  depth: number;
 }
 
 interface AppSettings {
@@ -68,6 +90,7 @@ interface AppSettings {
   offlineMode: boolean;
   enableThreads: boolean;
   threadCount: string;
+  setupComplete?: boolean;
 }
 
 // ============================================================================
@@ -77,6 +100,8 @@ interface AppSettings {
 let mainWindow: BrowserWindow | null = null;
 const runningProcesses = new Map<string, ChildProcess>();
 const CONFIG_FILE = 'gfos-build-config.json';
+const JOBS_FILE = 'gfos-build-jobs.json';
+const PIPELINES_FILE = 'gfos-build-pipelines.json';
 
 // ============================================================================
 // Window Management
@@ -125,6 +150,14 @@ function getConfigPath(): string {
   return path.join(app.getPath('userData'), CONFIG_FILE);
 }
 
+function getJobsPath(): string {
+  return path.join(app.getPath('userData'), JOBS_FILE);
+}
+
+function getPipelinesPath(): string {
+  return path.join(app.getPath('userData'), PIPELINES_FILE);
+}
+
 async function loadConfig(): Promise<AppSettings> {
   const configPath = getConfigPath();
   const defaultConfig: AppSettings = {
@@ -137,6 +170,7 @@ async function loadConfig(): Promise<AppSettings> {
     offlineMode: false,
     enableThreads: false,
     threadCount: '1C',
+    setupComplete: false,
   };
 
   try {
@@ -153,6 +187,62 @@ async function loadConfig(): Promise<AppSettings> {
 async function saveConfig(config: AppSettings): Promise<void> {
   const configPath = getConfigPath();
   await fs.writeJson(configPath, config, { spaces: 2 });
+}
+
+// ============================================================================
+// Job Persistence
+// ============================================================================
+
+async function loadJobs(): Promise<BuildJob[]> {
+  const jobsPath = getJobsPath();
+  try {
+    if (await fs.pathExists(jobsPath)) {
+      const data = await fs.readJson(jobsPath);
+      // Convert date strings back to Date objects
+      return data.map((job: any) => ({
+        ...job,
+        createdAt: new Date(job.createdAt),
+        startedAt: job.startedAt ? new Date(job.startedAt) : undefined,
+        completedAt: job.completedAt ? new Date(job.completedAt) : undefined,
+      }));
+    }
+  } catch (error) {
+    console.error('Failed to load jobs:', error);
+  }
+  return [];
+}
+
+async function saveJobs(jobs: BuildJob[]): Promise<void> {
+  const jobsPath = getJobsPath();
+  // Only save completed/failed jobs, not running ones
+  const jobsToSave = jobs.filter(j => j.status !== 'running' && j.status !== 'pending');
+  await fs.writeJson(jobsPath, jobsToSave, { spaces: 2 });
+}
+
+// ============================================================================
+// Pipeline Persistence
+// ============================================================================
+
+async function loadPipelines(): Promise<Pipeline[]> {
+  const pipelinesPath = getPipelinesPath();
+  try {
+    if (await fs.pathExists(pipelinesPath)) {
+      const data = await fs.readJson(pipelinesPath);
+      return data.map((p: any) => ({
+        ...p,
+        createdAt: new Date(p.createdAt),
+        lastRun: p.lastRun ? new Date(p.lastRun) : undefined,
+      }));
+    }
+  } catch (error) {
+    console.error('Failed to load pipelines:', error);
+  }
+  return [];
+}
+
+async function savePipelines(pipelines: Pipeline[]): Promise<void> {
+  const pipelinesPath = getPipelinesPath();
+  await fs.writeJson(pipelinesPath, pipelines, { spaces: 2 });
 }
 
 // ============================================================================
@@ -248,51 +338,68 @@ async function scanMavenModules(pomPath: string): Promise<MavenModule[]> {
   const modules: MavenModule[] = [];
   const projectDir = path.dirname(pomPath);
 
-  try {
-    const pomContent = await fs.readFile(pomPath, 'utf-8');
-    
-    // Parse main project info
-    const groupIdMatch = pomContent.match(/<groupId>([^<]+)<\/groupId>/);
-    const artifactIdMatch = pomContent.match(/<artifactId>([^<]+)<\/artifactId>/);
-    const packagingMatch = pomContent.match(/<packaging>([^<]+)<\/packaging>/);
+  // Recursive function to scan modules
+  async function scanModuleRecursive(
+    currentPomPath: string, 
+    basePath: string, 
+    depth: number = 0
+  ): Promise<void> {
+    try {
+      const pomContent = await fs.readFile(currentPomPath, 'utf-8');
+      const currentDir = path.dirname(currentPomPath);
+      const relativePath = path.relative(basePath, currentDir) || '.';
+      
+      // Parse module info
+      const groupIdMatch = pomContent.match(/<groupId>([^<]+)<\/groupId>/);
+      const artifactIdMatch = pomContent.match(/<artifactId>([^<]+)<\/artifactId>/);
+      const packagingMatch = pomContent.match(/<packaging>([^<]+)<\/packaging>/);
+      const nameMatch = pomContent.match(/<name>([^<]+)<\/name>/);
+      
+      // Get parent groupId if not defined locally
+      let groupId = groupIdMatch?.[1];
+      if (!groupId) {
+        const parentGroupMatch = pomContent.match(/<parent>[\s\S]*?<groupId>([^<]+)<\/groupId>/);
+        groupId = parentGroupMatch?.[1] || 'unknown';
+      }
 
-    // Add root module
-    modules.push({
-      artifactId: artifactIdMatch?.[1] || path.basename(projectDir),
-      groupId: groupIdMatch?.[1] || 'unknown',
-      pomPath: pomPath,
-      packaging: packagingMatch?.[1] || 'jar',
-      relativePath: '.',
-    });
+      const artifactId = artifactIdMatch?.[1] || path.basename(currentDir);
+      const displayName = nameMatch?.[1] || artifactId;
+      const dirName = path.basename(currentDir);
+      
+      // Create a more informative display name showing directory
+      const fullDisplayName = relativePath === '.' 
+        ? displayName 
+        : `${displayName} (${relativePath.replace(/\\/g, '/')})`;
 
-    // Find submodules
-    const modulesMatch = pomContent.match(/<modules>([\s\S]*?)<\/modules>/);
-    if (modulesMatch) {
-      const moduleMatches = modulesMatch[1].matchAll(/<module>([^<]+)<\/module>/g);
-      for (const match of moduleMatches) {
-        const moduleName = match[1];
-        const modulePomPath = path.join(projectDir, moduleName, 'pom.xml');
-        
-        if (await fs.pathExists(modulePomPath)) {
-          const modulePomContent = await fs.readFile(modulePomPath, 'utf-8');
-          const modGroupId = modulePomContent.match(/<groupId>([^<]+)<\/groupId>/)?.[1] || groupIdMatch?.[1] || 'unknown';
-          const modArtifactId = modulePomContent.match(/<artifactId>([^<]+)<\/artifactId>/)?.[1] || moduleName;
-          const modPackaging = modulePomContent.match(/<packaging>([^<]+)<\/packaging>/)?.[1] || 'jar';
+      modules.push({
+        artifactId,
+        groupId,
+        pomPath: currentPomPath,
+        packaging: packagingMatch?.[1] || 'jar',
+        relativePath: relativePath.replace(/\\/g, '/'),
+        displayName: fullDisplayName,
+        depth,
+      });
 
-          modules.push({
-            artifactId: modArtifactId,
-            groupId: modGroupId,
-            pomPath: modulePomPath,
-            packaging: modPackaging,
-            relativePath: moduleName,
-          });
+      // Find and process submodules recursively
+      const modulesMatch = pomContent.match(/<modules>([\s\S]*?)<\/modules>/);
+      if (modulesMatch) {
+        const moduleMatches = modulesMatch[1].matchAll(/<module>([^<]+)<\/module>/g);
+        for (const match of moduleMatches) {
+          const moduleName = match[1].trim();
+          const modulePomPath = path.join(currentDir, moduleName, 'pom.xml');
+          
+          if (await fs.pathExists(modulePomPath)) {
+            await scanModuleRecursive(modulePomPath, basePath, depth + 1);
+          }
         }
       }
+    } catch (error) {
+      console.error(`Error scanning module at ${currentPomPath}:`, error);
     }
-  } catch (error) {
-    console.error('Error scanning modules:', error);
   }
 
+  await scanModuleRecursive(pomPath, projectDir, 0);
   return modules;
 }
 
@@ -423,6 +530,14 @@ function setupIpcHandlers(): void {
   // Config
   ipcMain.handle('config:load', loadConfig);
   ipcMain.handle('config:save', (_event, config: AppSettings) => saveConfig(config));
+
+  // Jobs persistence
+  ipcMain.handle('jobs:load', loadJobs);
+  ipcMain.handle('jobs:save', (_event, jobs: BuildJob[]) => saveJobs(jobs));
+
+  // Pipelines
+  ipcMain.handle('pipelines:load', loadPipelines);
+  ipcMain.handle('pipelines:save', (_event, pipelines: Pipeline[]) => savePipelines(pipelines));
 
   // Scanning
   ipcMain.handle('scan:projects', async (_event, rootPath: string) => {

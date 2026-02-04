@@ -4,7 +4,7 @@
  * Root component with terminal-inspired layout.
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from './store/useAppStore';
 import { api } from './api';
 import { Sidebar } from './components/Sidebar';
@@ -16,15 +16,56 @@ import { BuildConfigView } from './views/BuildConfigView';
 import { JobsView } from './views/JobsView';
 import { JobDetailView } from './views/JobDetailView';
 import { SettingsView } from './views/SettingsView';
+import { PipelinesView } from './views/PipelinesView';
+import { PipelineEditorView } from './views/PipelineEditorView';
+import { SetupWizardView } from './views/SetupWizardView';
 import { Cpu, AlertTriangle } from 'lucide-react';
 
 // Initialize app
 const initApp = async () => {
-  const { setSettings, setProjects, setJdks, setScanStatus } = useAppStore.getState();
+  const { setSettings, setProjects, setJdks, setScanStatus, setJobs, setPipelines, setScreen } = useAppStore.getState();
   
   // Load saved settings
   const settings = await api.loadConfig();
   setSettings(settings);
+  
+  // Check if setup is needed
+  if (!settings.setupComplete) {
+    setScreen('SETUP_WIZARD');
+    return;
+  }
+  
+  // Load saved jobs and pipelines
+  try {
+    const savedJobs = await api.loadJobs();
+    if (savedJobs && savedJobs.length > 0) {
+      // Convert date strings back to Date objects
+      const jobs = savedJobs.map((job: any) => ({
+        ...job,
+        createdAt: new Date(job.createdAt),
+        startedAt: job.startedAt ? new Date(job.startedAt) : undefined,
+        completedAt: job.completedAt ? new Date(job.completedAt) : undefined,
+      }));
+      setJobs(jobs);
+    }
+  } catch (err) {
+    console.warn('Could not load saved jobs:', err);
+  }
+  
+  try {
+    const savedPipelines = await api.loadPipelines();
+    if (savedPipelines && savedPipelines.length > 0) {
+      // Convert date strings back to Date objects
+      const pipelines = savedPipelines.map((pipeline: any) => ({
+        ...pipeline,
+        createdAt: new Date(pipeline.createdAt),
+        lastRun: pipeline.lastRun ? new Date(pipeline.lastRun) : undefined,
+      }));
+      setPipelines(pipelines);
+    }
+  } catch (err) {
+    console.warn('Could not load saved pipelines:', err);
+  }
   
   // Setup event listeners
   api.onScanStatus((status) => {
@@ -37,6 +78,26 @@ const initApp = async () => {
   
   const jdks = await api.scanJDKs(settings.jdkScanPaths);
   setJdks(jdks);
+};
+
+// Debounced job save function
+let saveJobsTimeout: ReturnType<typeof setTimeout> | null = null;
+const saveJobsDebounced = () => {
+  if (saveJobsTimeout) clearTimeout(saveJobsTimeout);
+  saveJobsTimeout = setTimeout(() => {
+    const jobs = useAppStore.getState().jobs;
+    api.saveJobs(jobs).catch(console.error);
+  }, 500);
+};
+
+// Debounced pipeline save function
+let savePipelinesTimeout: ReturnType<typeof setTimeout> | null = null;
+export const savePipelinesDebounced = () => {
+  if (savePipelinesTimeout) clearTimeout(savePipelinesTimeout);
+  savePipelinesTimeout = setTimeout(() => {
+    const pipelines = useAppStore.getState().pipelines;
+    api.savePipelines(pipelines).catch(console.error);
+  }, 500);
 };
 
 export default function App() {
@@ -70,6 +131,8 @@ export default function App() {
         completedAt: new Date(),
         exitCode: exitCode as number | null,
       });
+      // Save jobs after build completes
+      saveJobsDebounced();
     });
 
     const unsubError = api.onBuildError((jobId, error) => {
@@ -78,6 +141,8 @@ export default function App() {
         completedAt: new Date(),
       });
       appendJobLog(jobId as string, `[ERROR] ${error}`);
+      // Save jobs after error
+      saveJobsDebounced();
     });
 
     return () => {
@@ -104,6 +169,12 @@ export default function App() {
         return <JobDetailView />;
       case 'SETTINGS':
         return <SettingsView />;
+      case 'PIPELINES':
+        return <PipelinesView />;
+      case 'PIPELINE_EDITOR':
+        return <PipelineEditorView />;
+      case 'SETUP_WIZARD':
+        return <SetupWizardView />;
       default:
         return <HomeView />;
     }

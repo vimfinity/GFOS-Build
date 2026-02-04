@@ -133,8 +133,8 @@ export function SettingsView() {
                 onChange={(e) => handleChange('maxParallelBuilds', parseInt(e.target.value) || 1)}
                 className="
                   w-full py-2.5 px-4 bg-[#0a0a0c] border border-[#1a1a1f] text-sm text-zinc-200 font-mono
-                  focus:border-[#00d4ff] focus:bg-[#0c0c0e]
-                  focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1)]
+                  focus:border-[#22ffaa] focus:bg-[#0c0c0e]
+                  focus:shadow-[0_0_0_3px_rgba(34,255,170,0.1)]
                   transition-all outline-none
                 "
               />
@@ -152,8 +152,8 @@ export function SettingsView() {
                 disabled={!localSettings.enableThreads}
                 className={`
                   w-full py-2.5 px-4 bg-[#0a0a0c] border border-[#1a1a1f] text-sm text-zinc-200 font-mono
-                  focus:border-[#00d4ff] focus:bg-[#0c0c0e]
-                  focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1)]
+                  focus:border-[#22ffaa] focus:bg-[#0c0c0e]
+                  focus:shadow-[0_0_0_3px_rgba(34,255,170,0.1)]
                   transition-all outline-none
                   ${!localSettings.enableThreads ? 'opacity-40 cursor-not-allowed' : ''}
                 `}
@@ -302,7 +302,7 @@ function ConfigInput({ label, value, onChange, placeholder, hint, onBrowse }: Co
         <div className="flex-1 relative">
           <span className={`
             absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm transition-colors
-            ${focused ? 'text-[#00d4ff]' : 'text-zinc-700'}
+            ${focused ? 'text-[#22ffaa]' : 'text-zinc-700'}
           `}>
             $
           </span>
@@ -316,8 +316,8 @@ function ConfigInput({ label, value, onChange, placeholder, hint, onBrowse }: Co
             className="
               w-full py-2.5 pl-7 pr-4 bg-[#0a0a0c] border border-[#1a1a1f] text-sm text-zinc-200 font-mono
               placeholder:text-zinc-700
-              focus:border-[#00d4ff] focus:bg-[#0c0c0e]
-              focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1),0_0_20px_rgba(0,212,255,0.1)]
+              focus:border-[#22ffaa] focus:bg-[#0c0c0e]
+              focus:shadow-[0_0_0_3px_rgba(34,255,170,0.1),0_0_20px_rgba(34,255,170,0.1)]
               transition-all outline-none
             "
           />
@@ -327,7 +327,7 @@ function ConfigInput({ label, value, onChange, placeholder, hint, onBrowse }: Co
             onClick={onBrowse}
             className="
               px-4 py-2 bg-[#0e0e11] border border-[#1a1a1f] text-zinc-500 
-              hover:text-[#00d4ff] hover:border-[#00d4ff]/50 hover:bg-[#00d4ff]/5
+              hover:text-[#22ffaa] hover:border-[#22ffaa]/50 hover:bg-[#22ffaa]/5
               transition-all font-mono text-xs
             "
           >

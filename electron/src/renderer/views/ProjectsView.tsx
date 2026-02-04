@@ -76,7 +76,7 @@ export function ProjectsView() {
       {/* Search and Filter Bar */}
       <div className="flex items-center gap-3">
         <div className="flex-1 relative group">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-[#00d4ff] transition-colors" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-[#22ffaa] transition-colors" />
           <input
             type="text"
             placeholder="search://projekt..."
@@ -85,8 +85,8 @@ export function ProjectsView() {
             className="
               w-full py-2.5 px-10 bg-[#0a0a0c] border border-[#1a1a1f] text-sm text-zinc-200 font-mono
               placeholder:text-zinc-600
-              focus:border-[#00d4ff] focus:bg-[#0c0c0e]
-              focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1),0_0_20px_rgba(0,212,255,0.1)]
+              focus:border-[#22ffaa] focus:bg-[#0c0c0e]
+              focus:shadow-[0_0_0_3px_rgba(34,255,170,0.1),0_0_20px_rgba(34,255,170,0.1)]
               transition-all outline-none
             "
           />
@@ -231,7 +231,7 @@ export function ProjectsView() {
                         className={`
                           p-1.5 transition-all rounded
                           ${isHovered 
-                            ? 'text-[#00d4ff] hover:bg-[#00d4ff]/10' 
+                            ? 'text-[#22ffaa] hover:bg-[#22ffaa]/10' 
                             : 'text-zinc-700 hover:text-zinc-500'
                           }
                         `}

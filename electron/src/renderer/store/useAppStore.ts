@@ -8,10 +8,10 @@ import { create } from 'zustand';
 import type { 
   AppSettings, 
   BuildJob, 
-  BuildStatus, 
   DiscoveredProject, 
   JDK, 
-  MavenModule 
+  MavenModule,
+  Pipeline 
 } from '../types';
 
 // ============================================================================
@@ -25,7 +25,10 @@ export type AppScreen =
   | 'BUILD_CONFIG'
   | 'JOBS' 
   | 'JOB_DETAIL'
-  | 'SETTINGS';
+  | 'SETTINGS'
+  | 'PIPELINES'
+  | 'PIPELINE_EDITOR'
+  | 'SETUP_WIZARD';
 
 interface NavigationState {
   currentScreen: AppScreen;
@@ -48,6 +51,9 @@ interface AppState {
   jobs: BuildJob[];
   jobLogs: Record<string, string[]>;
   
+  // Pipelines
+  pipelines: Pipeline[];
+  
   // Navigation
   navigation: NavigationState;
   
@@ -56,6 +62,7 @@ interface AppState {
   scanStatus: string | null;
   selectedProjectPath: string | null;
   selectedJobId: string | null;
+  selectedPipelineId: string | null;
 }
 
 interface AppActions {
@@ -70,11 +77,18 @@ interface AppActions {
   setProfiles: (projectPath: string, profiles: string[]) => void;
   
   // Jobs
+  setJobs: (jobs: BuildJob[]) => void;
   addJob: (job: Omit<BuildJob, 'id' | 'createdAt' | 'progress' | 'status'>) => string;
   updateJob: (id: string, updates: Partial<BuildJob>) => void;
   removeJob: (id: string) => void;
   appendJobLog: (id: string, line: string) => void;
   clearJobLogs: (id: string) => void;
+  
+  // Pipelines
+  setPipelines: (pipelines: Pipeline[]) => void;
+  addPipeline: (pipeline: Omit<Pipeline, 'id' | 'createdAt'>) => string;
+  updatePipeline: (id: string, updates: Partial<Pipeline>) => void;
+  removePipeline: (id: string) => void;
   
   // Navigation
   setScreen: (screen: AppScreen, params?: Record<string, unknown>) => void;
@@ -85,6 +99,7 @@ interface AppActions {
   setScanStatus: (status: string | null) => void;
   selectProject: (path: string | null) => void;
   selectJob: (id: string | null) => void;
+  selectPipeline: (id: string | null) => void;
 }
 
 // ============================================================================
@@ -113,7 +128,7 @@ const DEFAULT_NAVIGATION: NavigationState = {
 // Store
 // ============================================================================
 
-export const useAppStore = create<AppState & AppActions>((set, get) => ({
+export const useAppStore = create<AppState & AppActions>((set) => ({
   // Initial State
   settings: DEFAULT_SETTINGS,
   settingsLoaded: false,
@@ -123,11 +138,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   profilesByProject: {},
   jobs: [],
   jobLogs: {},
+  pipelines: [],
   navigation: DEFAULT_NAVIGATION,
   isScanning: false,
   scanStatus: null,
   selectedProjectPath: null,
   selectedJobId: null,
+  selectedPipelineId: null,
 
   // Settings Actions
   setSettings: (settings) => set({ settings, settingsLoaded: true }),
@@ -146,6 +163,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   })),
 
   // Job Actions
+  setJobs: (jobs) => set({ jobs }),
+  
   addJob: (jobData) => {
     const id = `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const job: BuildJob = {
@@ -186,6 +205,32 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     jobLogs: { ...state.jobLogs, [id]: [] },
   })),
 
+  // Pipeline Actions
+  setPipelines: (pipelines) => set({ pipelines }),
+  
+  addPipeline: (pipelineData) => {
+    const id = `pipeline-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const pipeline: Pipeline = {
+      ...pipelineData,
+      id,
+      createdAt: new Date(),
+    };
+    set((state) => ({
+      pipelines: [...state.pipelines, pipeline],
+    }));
+    return id;
+  },
+  
+  updatePipeline: (id, updates) => set((state) => ({
+    pipelines: state.pipelines.map((pipeline) => 
+      pipeline.id === id ? { ...pipeline, ...updates } : pipeline
+    ),
+  })),
+  
+  removePipeline: (id) => set((state) => ({
+    pipelines: state.pipelines.filter((pipeline) => pipeline.id !== id),
+  })),
+
   // Navigation Actions
   setScreen: (screen, params = {}) => set((state) => ({
     navigation: {
@@ -212,4 +257,5 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   setScanStatus: (scanStatus) => set({ scanStatus }),
   selectProject: (path) => set({ selectedProjectPath: path }),
   selectJob: (id) => set({ selectedJobId: id }),
+  selectPipeline: (id) => set({ selectedPipelineId: id }),
 }));

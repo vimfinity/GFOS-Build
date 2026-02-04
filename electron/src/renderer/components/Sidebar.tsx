@@ -13,7 +13,8 @@ import {
   Sliders,
   ChevronRight,
   Cpu,
-  Zap
+  Zap,
+  Workflow
 } from 'lucide-react';
 
 interface NavItem {
@@ -27,8 +28,9 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'HOME', label: 'Terminal', shortcut: '01', icon: <Terminal size={18} strokeWidth={1.5} />, description: 'Dashboard' },
   { id: 'PROJECTS', label: 'Projekte', shortcut: '02', icon: <FolderGit2 size={18} strokeWidth={1.5} />, description: 'Maven Repos' },
-  { id: 'JOBS', label: 'Prozesse', shortcut: '03', icon: <Activity size={18} strokeWidth={1.5} />, description: 'Build Queue' },
-  { id: 'SETTINGS', label: 'System', shortcut: '04', icon: <Sliders size={18} strokeWidth={1.5} />, description: 'Konfiguration' },
+  { id: 'PIPELINES', label: 'Pipelines', shortcut: '03', icon: <Workflow size={18} strokeWidth={1.5} />, description: 'Build Chains' },
+  { id: 'JOBS', label: 'Prozesse', shortcut: '04', icon: <Activity size={18} strokeWidth={1.5} />, description: 'Build Queue' },
+  { id: 'SETTINGS', label: 'System', shortcut: '05', icon: <Sliders size={18} strokeWidth={1.5} />, description: 'Konfiguration' },
 ];
 
 export function Sidebar() {
@@ -83,7 +85,8 @@ export function Sidebar() {
             const isActive = currentScreen === item.id || 
               (item.id === 'PROJECTS' && currentScreen === 'PROJECT_DETAIL') ||
               (item.id === 'PROJECTS' && currentScreen === 'BUILD_CONFIG') ||
-              (item.id === 'JOBS' && currentScreen === 'JOB_DETAIL');
+              (item.id === 'JOBS' && currentScreen === 'JOB_DETAIL') ||
+              (item.id === 'PIPELINES' && currentScreen === 'PIPELINE_EDITOR');
             const isHovered = hoveredItem === item.id;
             
             return (
@@ -123,7 +126,7 @@ export function Sidebar() {
                 {/* Icon with transition */}
                 <span className={`
                   transition-all duration-200
-                  ${isActive ? 'text-[#22ffaa]' : 'text-zinc-600 group-hover:text-[#00d4ff]'}
+                  ${isActive ? 'text-[#22ffaa]' : 'text-zinc-600 group-hover:text-[#22ffaa]'}
                 `}>
                   {item.icon}
                 </span>
