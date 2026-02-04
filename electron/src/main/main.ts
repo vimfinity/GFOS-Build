@@ -71,6 +71,7 @@ interface DiscoveredProject {
   isGitRepo: boolean;
   hasPom: boolean;
   pomPath?: string;
+  relativePath?: string; // Relative path from scan root for disambiguation
 }
 
 interface MavenModule {
@@ -254,39 +255,72 @@ async function savePipelines(pipelines: Pipeline[]): Promise<void> {
 
 async function scanForProjects(rootPath: string): Promise<DiscoveredProject[]> {
   const projects: DiscoveredProject[] = [];
+  const maxDepth = 5; // Maximum recursion depth to prevent infinite loops
   
   if (!(await fs.pathExists(rootPath))) {
     return projects;
   }
 
-  try {
-    const entries = await fs.readdir(rootPath, { withFileTypes: true });
+  // Recursive function to find Git repositories with pom.xml
+  async function scanRecursive(currentPath: string, depth: number): Promise<void> {
+    if (depth > maxDepth) return;
     
-    for (const entry of entries) {
-      if (entry.isDirectory() && !entry.name.startsWith('.')) {
-        const projectPath = path.join(rootPath, entry.name);
-        const gitPath = path.join(projectPath, '.git');
-        const pomPath = path.join(projectPath, 'pom.xml');
+    try {
+      const entries = await fs.readdir(currentPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        // Skip hidden folders, node_modules, target, etc.
+        if (entry.name.startsWith('.') || 
+            entry.name === 'node_modules' || 
+            entry.name === 'target' ||
+            entry.name === 'build' ||
+            entry.name === '.git') {
+          continue;
+        }
         
-        const isGitRepo = await fs.pathExists(gitPath);
-        const hasPom = await fs.pathExists(pomPath);
-        
-        if (isGitRepo || hasPom) {
-          projects.push({
-            path: projectPath,
-            name: entry.name,
-            isGitRepo,
-            hasPom,
-            pomPath: hasPom ? pomPath : undefined,
-          });
+        if (entry.isDirectory()) {
+          const projectPath = path.join(currentPath, entry.name);
+          const gitPath = path.join(projectPath, '.git');
+          const pomPath = path.join(projectPath, 'pom.xml');
+          
+          const isGitRepo = await fs.pathExists(gitPath);
+          const hasPom = await fs.pathExists(pomPath);
+          
+          // Only add if it's a Git repository (our primary criterion)
+          if (isGitRepo) {
+            // Create a display name that includes parent folder for disambiguation
+            const relativePath = path.relative(rootPath, projectPath);
+            const pathParts = relativePath.split(path.sep);
+            
+            // Use parent folder + name for better identification
+            // e.g., "2025/web" or "4.8plus/shared"
+            const displayName = pathParts.length > 1 
+              ? pathParts.slice(-2).join('/') 
+              : entry.name;
+            
+            projects.push({
+              path: projectPath,
+              name: displayName,
+              isGitRepo: true,
+              hasPom,
+              pomPath: hasPom ? pomPath : undefined,
+              relativePath: relativePath.replace(/\\/g, '/'), // Add for disambiguation
+            });
+          } else {
+            // Not a git repo, continue searching deeper
+            await scanRecursive(projectPath, depth + 1);
+          }
         }
       }
+    } catch (error) {
+      console.error(`Error scanning directory ${currentPath}:`, error);
     }
-  } catch (error) {
-    console.error('Error scanning projects:', error);
   }
 
-  return projects;
+  await scanRecursive(rootPath, 0);
+  
+  // Sort by path for consistent ordering
+  return projects.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 async function scanForJDKs(scanPaths: string): Promise<JDK[]> {
@@ -340,6 +374,7 @@ function detectJdkVendor(name: string): string {
 async function scanMavenModules(pomPath: string): Promise<MavenModule[]> {
   const modules: MavenModule[] = [];
   const projectDir = path.dirname(pomPath);
+  const scannedPaths = new Set<string>(); // Track already scanned paths
 
   // Recursive function to scan modules
   async function scanModuleRecursive(
@@ -347,6 +382,11 @@ async function scanMavenModules(pomPath: string): Promise<MavenModule[]> {
     basePath: string, 
     depth: number = 0
   ): Promise<void> {
+    // Prevent duplicate scanning
+    const normalizedPath = currentPomPath.toLowerCase();
+    if (scannedPaths.has(normalizedPath)) return;
+    scannedPaths.add(normalizedPath);
+    
     try {
       const pomContent = await fs.readFile(currentPomPath, 'utf-8');
       const currentDir = path.dirname(currentPomPath);
@@ -384,7 +424,7 @@ async function scanMavenModules(pomPath: string): Promise<MavenModule[]> {
         depth,
       });
 
-      // Find and process submodules recursively
+      // Find and process submodules declared in <modules>
       const modulesMatch = pomContent.match(/<modules>([\s\S]*?)<\/modules>/);
       if (modulesMatch) {
         const moduleMatches = modulesMatch[1].matchAll(/<module>([^<]+)<\/module>/g);
@@ -397,13 +437,35 @@ async function scanMavenModules(pomPath: string): Promise<MavenModule[]> {
           }
         }
       }
+      
+      // ALSO scan subdirectories for pom.xml files not declared in <modules>
+      // This catches modules like xtimeweb-ear-qs that may not be in the parent pom
+      try {
+        const entries = await fs.readdir(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory() && 
+              !entry.name.startsWith('.') && 
+              entry.name !== 'target' &&
+              entry.name !== 'src' &&
+              entry.name !== 'node_modules') {
+            const subPomPath = path.join(currentDir, entry.name, 'pom.xml');
+            if (await fs.pathExists(subPomPath)) {
+              await scanModuleRecursive(subPomPath, basePath, depth + 1);
+            }
+          }
+        }
+      } catch (err) {
+        // Ignore errors when scanning subdirectories
+      }
     } catch (error) {
       console.error(`Error scanning module at ${currentPomPath}:`, error);
     }
   }
 
   await scanModuleRecursive(pomPath, projectDir, 0);
-  return modules;
+  
+  // Sort modules by relativePath for consistent ordering
+  return modules.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
 async function scanMavenProfiles(pomPath: string): Promise<string[]> {

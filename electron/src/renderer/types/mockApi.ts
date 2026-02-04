@@ -20,31 +20,46 @@ const mockSettings: AppSettings = {
   setupComplete: true,
 };
 
+// Mock projects with realistic structure like the user's environment
 const mockProjects: DiscoveredProject[] = [
-  { path: 'C:\\dev\\quellen\\gfos-workflow', name: 'gfos-workflow', isGitRepo: true, hasPom: true, pomPath: 'C:\\dev\\quellen\\gfos-workflow\\pom.xml' },
-  { path: 'C:\\dev\\quellen\\gfos-core', name: 'gfos-core', isGitRepo: true, hasPom: true, pomPath: 'C:\\dev\\quellen\\gfos-core\\pom.xml' },
-  { path: 'C:\\dev\\quellen\\gfos-webservices', name: 'gfos-webservices', isGitRepo: true, hasPom: true, pomPath: 'C:\\dev\\quellen\\gfos-webservices\\pom.xml' },
-  { path: 'C:\\dev\\quellen\\gfos-time', name: 'gfos-time', isGitRepo: true, hasPom: true, pomPath: 'C:\\dev\\quellen\\gfos-time\\pom.xml' },
-  { path: 'C:\\dev\\quellen\\gfos-portal', name: 'gfos-portal', isGitRepo: true, hasPom: true, pomPath: 'C:\\dev\\quellen\\gfos-portal\\pom.xml' },
+  { path: 'J:\\dev\\quellen\\2025\\dashboard', name: '2025/dashboard', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\2025\\dashboard\\pom.xml', relativePath: '2025/dashboard' },
+  { path: 'J:\\dev\\quellen\\2025\\hintergrund', name: '2025/hintergrund', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\2025\\hintergrund\\pom.xml', relativePath: '2025/hintergrund' },
+  { path: 'J:\\dev\\quellen\\2025\\shared', name: '2025/shared', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\2025\\shared\\pom.xml', relativePath: '2025/shared' },
+  { path: 'J:\\dev\\quellen\\2025\\web', name: '2025/web', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\2025\\web\\pom.xml', relativePath: '2025/web' },
+  { path: 'J:\\dev\\quellen\\4.8\\dashboard', name: '4.8/dashboard', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\4.8\\dashboard\\pom.xml', relativePath: '4.8/dashboard' },
+  { path: 'J:\\dev\\quellen\\4.8\\shared', name: '4.8/shared', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\4.8\\shared\\pom.xml', relativePath: '4.8/shared' },
+  { path: 'J:\\dev\\quellen\\4.8\\web', name: '4.8/web', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\4.8\\web\\pom.xml', relativePath: '4.8/web' },
+  { path: 'J:\\dev\\quellen\\4.8plus\\dashboard', name: '4.8plus/dashboard', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\4.8plus\\dashboard\\pom.xml', relativePath: '4.8plus/dashboard' },
+  { path: 'J:\\dev\\quellen\\4.8plus\\hintergrund', name: '4.8plus/hintergrund', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\4.8plus\\hintergrund\\pom.xml', relativePath: '4.8plus/hintergrund' },
+  { path: 'J:\\dev\\quellen\\4.8plus\\shared', name: '4.8plus/shared', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\4.8plus\\shared\\pom.xml', relativePath: '4.8plus/shared' },
+  { path: 'J:\\dev\\quellen\\4.8plus\\web', name: '4.8plus/web', isGitRepo: true, hasPom: true, pomPath: 'J:\\dev\\quellen\\4.8plus\\web\\pom.xml', relativePath: '4.8plus/web' },
+  { path: 'J:\\dev\\quellen\\bruno', name: 'bruno', isGitRepo: true, hasPom: false, relativePath: 'bruno' },
+  { path: 'J:\\dev\\quellen\\tools', name: 'tools', isGitRepo: true, hasPom: false, relativePath: 'tools' },
 ];
 
 const mockJDKs: JDK[] = [
-  { jdkHome: 'C:\\dev\\java\\jdk-21', version: 'jdk-21.0.2', vendor: 'Eclipse Temurin', majorVersion: 21 },
-  { jdkHome: 'C:\\dev\\java\\jdk-17', version: 'jdk-17.0.9', vendor: 'Eclipse Temurin', majorVersion: 17 },
-  { jdkHome: 'C:\\dev\\java\\jdk-11', version: 'jdk-11.0.21', vendor: 'Eclipse Temurin', majorVersion: 11 },
-  { jdkHome: 'C:\\dev\\java\\jdk-8', version: 'jdk1.8.0_392', vendor: 'Oracle', majorVersion: 8 },
+  { jdkHome: 'J:\\dev\\java\\jdk21', version: 'jdk21', vendor: 'OpenJDK', majorVersion: 21 },
+  { jdkHome: 'J:\\dev\\java\\jdk17', version: 'jdk17', vendor: 'OpenJDK', majorVersion: 17 },
+  { jdkHome: 'J:\\dev\\java\\jdk11', version: 'jdk11', vendor: 'OpenJDK', majorVersion: 11 },
+  { jdkHome: 'J:\\dev\\java\\jdk8', version: 'jdk8', vendor: 'OpenJDK', majorVersion: 8 },
 ];
 
+// More realistic module structure
 const mockModules: MavenModule[] = [
-  { artifactId: 'gfos-workflow', groupId: 'de.gfos', pomPath: 'pom.xml', packaging: 'pom', relativePath: '.', displayName: 'gfos-workflow (Root)', depth: 0 },
-  { artifactId: 'workflow-api', groupId: 'de.gfos.workflow', pomPath: 'workflow-api/pom.xml', packaging: 'jar', relativePath: 'workflow-api', displayName: 'workflow-api (workflow-api)', depth: 1 },
-  { artifactId: 'workflow-core', groupId: 'de.gfos.workflow', pomPath: 'workflow-core/pom.xml', packaging: 'jar', relativePath: 'workflow-core', displayName: 'workflow-core (workflow-core)', depth: 1 },
-  { artifactId: 'workflow-engine', groupId: 'de.gfos.workflow', pomPath: 'workflow-engine/pom.xml', packaging: 'jar', relativePath: 'workflow-engine', displayName: 'workflow-engine (workflow-engine)', depth: 1 },
-  { artifactId: 'engine-api', groupId: 'de.gfos.workflow.engine', pomPath: 'workflow-engine/engine-api/pom.xml', packaging: 'jar', relativePath: 'workflow-engine/engine-api', displayName: 'engine-api (workflow-engine/engine-api)', depth: 2 },
-  { artifactId: 'engine-impl', groupId: 'de.gfos.workflow.engine', pomPath: 'workflow-engine/engine-impl/pom.xml', packaging: 'jar', relativePath: 'workflow-engine/engine-impl', displayName: 'engine-impl (workflow-engine/engine-impl)', depth: 2 },
+  { artifactId: 'web', groupId: 'de.gfos', pomPath: 'pom.xml', packaging: 'pom', relativePath: '.', displayName: 'web (Root)', depth: 0 },
+  { artifactId: 'xtimeweb', groupId: 'de.gfos.web', pomPath: 'xtimeweb/pom.xml', packaging: 'pom', relativePath: 'xtimeweb', displayName: 'xtimeweb (xtimeweb)', depth: 1 },
+  { artifactId: 'xtimeweb-api', groupId: 'de.gfos.web', pomPath: 'xtimeweb/xtimeweb-api/pom.xml', packaging: 'jar', relativePath: 'xtimeweb/xtimeweb-api', displayName: 'xtimeweb-api (xtimeweb/xtimeweb-api)', depth: 2 },
+  { artifactId: 'xtimeweb-core', groupId: 'de.gfos.web', pomPath: 'xtimeweb/xtimeweb-core/pom.xml', packaging: 'jar', relativePath: 'xtimeweb/xtimeweb-core', displayName: 'xtimeweb-core (xtimeweb/xtimeweb-core)', depth: 2 },
+  { artifactId: 'xtimeweb-web', groupId: 'de.gfos.web', pomPath: 'xtimeweb/xtimeweb-web/pom.xml', packaging: 'war', relativePath: 'xtimeweb/xtimeweb-web', displayName: 'xtimeweb-web (xtimeweb/xtimeweb-web)', depth: 2 },
+  { artifactId: 'xtimeweb-ear', groupId: 'de.gfos.web', pomPath: 'xtimeweb/xtimeweb-ear/pom.xml', packaging: 'ear', relativePath: 'xtimeweb/xtimeweb-ear', displayName: 'xtimeweb-ear (xtimeweb/xtimeweb-ear)', depth: 2 },
+  { artifactId: 'xtimeweb-ear-qs', groupId: 'de.gfos.web', pomPath: 'xtimeweb/xtimeweb-ear-qs/pom.xml', packaging: 'ear', relativePath: 'xtimeweb/xtimeweb-ear-qs', displayName: 'xtimeweb-ear-qs (xtimeweb/xtimeweb-ear-qs)', depth: 2 },
+  { artifactId: 'xtimeweb-services', groupId: 'de.gfos.web', pomPath: 'xtimeweb/xtimeweb-services/pom.xml', packaging: 'jar', relativePath: 'xtimeweb/xtimeweb-services', displayName: 'xtimeweb-services (xtimeweb/xtimeweb-services)', depth: 2 },
+  { artifactId: 'webportal', groupId: 'de.gfos.web', pomPath: 'webportal/pom.xml', packaging: 'pom', relativePath: 'webportal', displayName: 'webportal (webportal)', depth: 1 },
+  { artifactId: 'webportal-api', groupId: 'de.gfos.web', pomPath: 'webportal/webportal-api/pom.xml', packaging: 'jar', relativePath: 'webportal/webportal-api', displayName: 'webportal-api (webportal/webportal-api)', depth: 2 },
+  { artifactId: 'webportal-core', groupId: 'de.gfos.web', pomPath: 'webportal/webportal-core/pom.xml', packaging: 'jar', relativePath: 'webportal/webportal-core', displayName: 'webportal-core (webportal/webportal-core)', depth: 2 },
 ];
 
-const mockProfiles = ['development', 'production', 'test', 'jsminify', 'docker'];
+const mockProfiles = ['development', 'production', 'test', 'jsminify', 'docker', 'wildfly', 'tomcat'];
 
 // Stored jobs and pipelines (mock persistence)
 let storedJobs: BuildJob[] = [];

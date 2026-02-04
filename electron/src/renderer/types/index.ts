@@ -15,6 +15,7 @@ export interface DiscoveredProject {
   isGitRepo: boolean;
   hasPom: boolean;
   pomPath?: string;
+  relativePath?: string; // Relative path from scan root for disambiguation
 }
 
 export interface MavenModule {

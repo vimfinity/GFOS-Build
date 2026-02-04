@@ -1,12 +1,13 @@
 /**
  * Project Detail View - Terminal-Neon Design
  * 
- * Repository inspection with module discovery.
+ * Repository inspection with module discovery and fuzzy search.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
+import { Search, X, Package, FolderTree, RefreshCw, ExternalLink, Play, Loader2 } from 'lucide-react';
 import type { MavenModule } from '../types';
 
 export function ProjectDetailView() {
@@ -17,9 +18,30 @@ export function ProjectDetailView() {
   const setScreen = useAppStore((state) => state.setScreen);
   
   const [loading, setLoading] = useState(false);
+  const [moduleSearch, setModuleSearch] = useState('');
 
   const project = projects.find((p) => p.path === selectedProjectPath);
   const modules = selectedProjectPath ? modulesByProject[selectedProjectPath] || [] : [];
+
+  // Fuzzy search for modules - search by artifactId, displayName, relativePath, and directory names
+  const filteredModules = useMemo(() => {
+    if (!moduleSearch.trim()) return modules;
+    const search = moduleSearch.toLowerCase();
+    return modules.filter(mod => {
+      // Search in artifactId
+      if (mod.artifactId.toLowerCase().includes(search)) return true;
+      // Search in displayName
+      if (mod.displayName.toLowerCase().includes(search)) return true;
+      // Search in full relativePath
+      if (mod.relativePath.toLowerCase().includes(search)) return true;
+      // Search in individual directory names
+      const pathParts = mod.relativePath.split('/');
+      if (pathParts.some(part => part.toLowerCase().includes(search))) return true;
+      // Search in groupId
+      if (mod.groupId.toLowerCase().includes(search)) return true;
+      return false;
+    });
+  }, [modules, moduleSearch]);
 
   useEffect(() => {
     if (project?.pomPath && !modulesByProject[project.path]) {
@@ -57,10 +79,10 @@ export function ProjectDetailView() {
 
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-64 terminal-window">
+      <div className="flex items-center justify-center h-64 bg-[#0c0c0e] border border-[#1a1a1f]">
         <div className="text-center">
-          <div className="text-4xl text-terminal-700 mb-2 font-mono">404</div>
-          <p className="text-terminal-500 font-mono text-sm">PROJECT_NOT_FOUND</p>
+          <div className="text-4xl text-zinc-700 mb-2 font-mono">404</div>
+          <p className="text-zinc-500 font-mono text-sm">PROJECT_NOT_FOUND</p>
         </div>
       </div>
     );
@@ -69,35 +91,39 @@ export function ProjectDetailView() {
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Project Header */}
-      <div className="terminal-window">
-        <div className="terminal-header">
-          <span className="text-neon-green">▸</span>
-          <span>{project.name}</span>
-          <span className="text-terminal-500">//</span>
-          <span className="text-terminal-400">REPO_INFO</span>
+      <div className="bg-[#0c0c0e] border border-[#1a1a1f]">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-[#1a1a1f] text-xs font-mono">
+          <span className="text-[#22ffaa]">▸</span>
+          <span className="text-zinc-400">{project.name}</span>
+          <span className="text-zinc-600">//</span>
+          <span className="text-zinc-500">REPO_INFO</span>
         </div>
         
         <div className="p-4">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
               {/* Icon */}
-              <div className="w-16 h-16 border-2 border-neon-green flex items-center justify-center bg-terminal-900">
-                <span className="text-neon-green text-2xl font-mono">
+              <div className="w-16 h-16 border-2 border-[#22ffaa] flex items-center justify-center bg-[#080808]">
+                <span className="text-[#22ffaa] text-2xl font-mono">
                   {project.isGitRepo ? '⎇' : '◆'}
                 </span>
               </div>
               
               <div>
-                <h2 className="text-xl font-mono text-terminal-100">{project.name}</h2>
-                <p className="text-terminal-500 font-mono text-sm mt-1 truncate max-w-md">
+                <h2 className="text-xl font-mono text-zinc-100">{project.name}</h2>
+                <p className="text-zinc-500 font-mono text-sm mt-1 truncate max-w-lg">
                   {project.path}
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   {project.hasPom && (
-                    <span className="tag-mvn">MVN</span>
+                    <span className="px-2 py-0.5 text-[9px] font-mono uppercase border border-[#ffaa00]/50 text-[#ffaa00] bg-[#ffaa00]/10">
+                      MVN
+                    </span>
                   )}
                   {project.isGitRepo && (
-                    <span className="tag-git">GIT</span>
+                    <span className="px-2 py-0.5 text-[9px] font-mono uppercase border border-[#00d4ff]/50 text-[#00d4ff] bg-[#00d4ff]/10">
+                      GIT
+                    </span>
                   )}
                 </div>
               </div>
@@ -107,16 +133,20 @@ export function ProjectDetailView() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleOpenFolder}
-                className="btn-ghost text-xs"
+                className="flex items-center gap-2 px-3 py-2 border border-[#1a1a1f] text-zinc-400 text-xs font-mono
+                           hover:border-[#27272b] hover:text-zinc-300 transition-all"
               >
-                [OPEN]
+                <ExternalLink size={12} />
+                <span>OPEN</span>
               </button>
               {project.hasPom && (
                 <button
                   onClick={handleBuildProject}
-                  className="btn-neon text-xs"
+                  className="flex items-center gap-2 px-3 py-2 border border-[#22ffaa] text-[#22ffaa] text-xs font-mono
+                             hover:bg-[#22ffaa]/10 transition-all"
                 >
-                  [BUILD_ALL]
+                  <Play size={12} />
+                  <span>BUILD_ALL</span>
                 </button>
               )}
             </div>
@@ -133,26 +163,58 @@ export function ProjectDetailView() {
 
       {/* Modules Section */}
       {project.hasPom && (
-        <div className="terminal-window">
-          <div className="terminal-header justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-neon-cyan">⬡</span>
-              <span>MODULES</span>
-              <span className="text-terminal-600">[{modules.length}]</span>
+        <div className="bg-[#0c0c0e] border border-[#1a1a1f]">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-[#1a1a1f]">
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <Package size={14} className="text-[#00d4ff]" />
+              <span className="text-zinc-400">MODULES</span>
+              <span className="text-zinc-600">[{modules.length}]</span>
+              {filteredModules.length !== modules.length && (
+                <span className="text-[#22ffaa]">→ {filteredModules.length} gefiltert</span>
+              )}
             </div>
             <button
               onClick={loadModules}
               disabled={loading}
-              className="text-terminal-500 hover:text-neon-cyan transition-colors font-mono text-xs"
+              className="flex items-center gap-1 text-zinc-500 hover:text-[#00d4ff] transition-colors font-mono text-xs disabled:opacity-50"
               title="Reload modules"
             >
-              {loading ? '[...SCANNING]' : '[REFRESH]'}
+              {loading ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <RefreshCw size={12} />
+              )}
+              <span>{loading ? 'SCANNING...' : 'REFRESH'}</span>
             </button>
+          </div>
+          
+          {/* Search Bar */}
+          <div className="px-4 py-3 border-b border-[#1a1a1f]">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+              <input
+                type="text"
+                value={moduleSearch}
+                onChange={(e) => setModuleSearch(e.target.value)}
+                className="w-full pl-10 pr-10 py-2.5 bg-[#080808] border border-[#1a1a1f] text-zinc-200 text-sm font-mono
+                           placeholder:text-zinc-600 focus:border-[#00d4ff] focus:outline-none
+                           focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1)] transition-all"
+                placeholder={`${modules.length} Module durchsuchen... (Name, Pfad, Verzeichnis)`}
+              />
+              {moduleSearch && (
+                <button
+                  onClick={() => setModuleSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
           
           {/* Table Header */}
           <div className="grid grid-cols-[auto_1fr_120px_100px_80px] gap-4 px-4 py-2 
-                          border-b border-terminal-700 text-xs text-terminal-500 font-mono uppercase">
+                          border-b border-[#1a1a1f] text-xs text-zinc-600 font-mono uppercase">
             <div className="w-8">#</div>
             <div>Artifact</div>
             <div>Group</div>
@@ -162,41 +224,45 @@ export function ProjectDetailView() {
           
           {loading ? (
             <div className="p-8 text-center">
-              <div className="text-neon-cyan animate-pulse font-mono text-xl mb-2">◐</div>
-              <p className="text-terminal-500 text-sm font-mono">SCANNING_MODULES...</p>
+              <div className="text-[#00d4ff] animate-pulse font-mono text-xl mb-2">◐</div>
+              <p className="text-zinc-500 text-sm font-mono">SCANNING_MODULES...</p>
             </div>
-          ) : modules.length === 0 ? (
+          ) : filteredModules.length === 0 ? (
             <div className="p-8 text-center">
-              <div className="text-4xl text-terminal-700 mb-4 font-mono">[ ]</div>
-              <p className="text-terminal-500 font-mono text-sm">NO_MODULES_FOUND</p>
-              <p className="text-terminal-600 text-xs mt-2 font-mono">
-                This may be a single-module project
+              <div className="text-4xl text-zinc-700 mb-4 font-mono">[ ]</div>
+              <p className="text-zinc-500 font-mono text-sm">
+                {moduleSearch ? 'KEINE_TREFFER' : 'NO_MODULES_FOUND'}
+              </p>
+              <p className="text-zinc-600 text-xs mt-2 font-mono">
+                {moduleSearch 
+                  ? `Keine Module für "${moduleSearch}" gefunden` 
+                  : 'This may be a single-module project'
+                }
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-terminal-800">
-              {modules.map((module, index) => (
+            <div className="divide-y divide-[#1a1a1f]/50 max-h-[500px] overflow-auto">
+              {filteredModules.map((module, index) => (
                 <div
                   key={module.pomPath}
                   className="grid grid-cols-[auto_1fr_120px_100px_80px] gap-4 px-4 py-3
-                             hover:bg-terminal-800/50 transition-colors group animate-slide-up"
-                  style={{ animationDelay: `${index * 50}ms` }}
+                             hover:bg-[#151518] transition-colors group"
                 >
                   {/* Index */}
-                  <div className="w-8 text-terminal-600 font-mono text-sm">
+                  <div className="w-8 text-zinc-600 font-mono text-sm">
                     {String(index + 1).padStart(2, '0')}
                   </div>
 
                   {/* Artifact Info */}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-neon-orange">⬡</span>
-                      <span className="text-terminal-200 font-mono text-sm truncate group-hover:text-neon-green transition-colors">
+                      <Package size={14} className="text-[#ffaa00] flex-shrink-0" />
+                      <span className="text-zinc-200 font-mono text-sm truncate group-hover:text-[#22ffaa] transition-colors">
                         {module.artifactId}
                       </span>
                     </div>
                     {module.relativePath && module.relativePath !== '.' && (
-                      <p className="text-terminal-600 text-xs font-mono mt-0.5 truncate">
+                      <p className="text-zinc-600 text-xs font-mono mt-0.5 truncate pl-6">
                         ./{module.relativePath}
                       </p>
                     )}
@@ -204,7 +270,7 @@ export function ProjectDetailView() {
 
                   {/* Group ID */}
                   <div className="flex items-center">
-                    <span className="text-terminal-500 text-xs font-mono truncate">
+                    <span className="text-zinc-500 text-xs font-mono truncate">
                       {module.groupId.split('.').pop()}
                     </span>
                   </div>
@@ -213,10 +279,12 @@ export function ProjectDetailView() {
                   <div className="flex items-center">
                     <span className={`px-1.5 py-0.5 text-[10px] font-mono border ${
                       module.packaging === 'jar' 
-                        ? 'border-neon-green/30 text-neon-green bg-neon-green/10'
+                        ? 'border-[#22ffaa]/30 text-[#22ffaa] bg-[#22ffaa]/10'
                         : module.packaging === 'war'
-                        ? 'border-neon-cyan/30 text-neon-cyan bg-neon-cyan/10'
-                        : 'border-terminal-600 text-terminal-400 bg-terminal-800'
+                        ? 'border-[#00d4ff]/30 text-[#00d4ff] bg-[#00d4ff]/10'
+                        : module.packaging === 'ear'
+                        ? 'border-[#b066ff]/30 text-[#b066ff] bg-[#b066ff]/10'
+                        : 'border-zinc-700 text-zinc-400 bg-zinc-800/50'
                     }`}>
                       {module.packaging.toUpperCase()}
                     </span>
@@ -226,7 +294,7 @@ export function ProjectDetailView() {
                   <div className="flex items-center justify-end">
                     <button
                       onClick={() => handleBuildModule(module)}
-                      className="text-terminal-500 hover:text-neon-green transition-colors font-mono text-xs"
+                      className="text-zinc-500 hover:text-[#22ffaa] transition-colors font-mono text-xs"
                     >
                       [BUILD]
                     </button>
@@ -237,9 +305,15 @@ export function ProjectDetailView() {
           )}
           
           {/* Footer */}
-          <div className="px-4 py-2 border-t border-terminal-700 text-xs font-mono text-terminal-600">
+          <div className="px-4 py-2 border-t border-[#1a1a1f] text-xs font-mono text-zinc-600">
             {modules.length > 0 ? (
-              <span>Total: {modules.length} modules • Click BUILD to start individual module builds</span>
+              <span>
+                {filteredModules.length === modules.length 
+                  ? `Total: ${modules.length} modules` 
+                  : `Zeige ${filteredModules.length} von ${modules.length} modules`
+                }
+                {' '} • Click BUILD to start individual module builds
+              </span>
             ) : (
               <span>Use [REFRESH] to rescan project structure</span>
             )}
@@ -258,11 +332,11 @@ interface InfoCardProps {
 
 function InfoCard({ label, value, accent }: InfoCardProps) {
   return (
-    <div className="terminal-window p-3">
-      <div className="text-terminal-600 text-[10px] font-mono uppercase mb-1">
+    <div className="bg-[#0c0c0e] border border-[#1a1a1f] p-3">
+      <div className="text-zinc-600 text-[10px] font-mono uppercase mb-1">
         {label}
       </div>
-      <p className={`font-mono text-sm ${accent ? 'text-neon-green' : 'text-terminal-200'}`}>
+      <p className={`font-mono text-sm ${accent ? 'text-[#22ffaa]' : 'text-zinc-200'}`}>
         {value}
       </p>
     </div>

@@ -31,10 +31,16 @@ export function ProjectsView() {
     return projects.filter((project) => {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        if (!project.name.toLowerCase().includes(query) && 
-            !project.path.toLowerCase().includes(query)) {
-          return false;
-        }
+        // Search in name
+        if (project.name.toLowerCase().includes(query)) return true;
+        // Search in full path
+        if (project.path.toLowerCase().includes(query)) return true;
+        // Search in relative path (for better disambiguation)
+        if (project.relativePath?.toLowerCase().includes(query)) return true;
+        // Search in individual path segments
+        const pathParts = project.path.split(/[\\\/]/);
+        if (pathParts.some(part => part.toLowerCase().includes(query))) return true;
+        return false;
       }
       
       if (filter === 'maven' && !project.hasPom) return false;

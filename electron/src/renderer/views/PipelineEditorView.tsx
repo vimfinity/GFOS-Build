@@ -51,6 +51,16 @@ export function PipelineEditorView() {
   const [moduleSearch, setModuleSearch] = useState('');
   const [showModuleDropdown, setShowModuleDropdown] = useState(false);
 
+  // Sync state when editing an existing pipeline
+  useEffect(() => {
+    if (existingPipeline) {
+      setName(existingPipeline.name);
+      setProjectPath(existingPipeline.projectPath);
+      setSteps(existingPipeline.steps);
+      setActiveStepIndex(0);
+    }
+  }, [selectedPipelineId]);
+
   const activeStep = steps[activeStepIndex];
   const currentProject = projects.find(p => p.path === projectPath);
   const modules = projectPath ? modulesByProject[projectPath] || [] : [];
