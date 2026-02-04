@@ -7,7 +7,7 @@
 import React from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { 
-  FolderCode, 
+  FolderGit2, 
   Coffee, 
   Activity, 
   CheckCircle2, 
@@ -67,7 +67,7 @@ export function HomeView() {
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
-          icon={<FolderCode size={20} strokeWidth={1.5} />}
+          icon={<FolderGit2 size={20} strokeWidth={1.5} />}
           label="Projekte"
           value={stats.projects}
           sublabel={`${stats.mavenProjects} maven`}
@@ -155,7 +155,7 @@ export function HomeView() {
                 <span className="text-[10px] text-zinc-700 font-mono w-5">
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                <FolderCode size={16} className="text-zinc-600 group-hover:text-neon-green transition-colors" />
+                <FolderGit2 size={16} className="text-zinc-600 group-hover:text-neon-green transition-colors" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-zinc-300 group-hover:text-neon-green truncate transition-colors">
                     {project.name}

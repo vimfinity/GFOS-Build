@@ -8,7 +8,7 @@ import React from 'react';
 import { useAppStore, type AppScreen } from '../store/useAppStore';
 import { 
   Terminal, 
-  FolderCode, 
+  FolderGit2, 
   Activity, 
   Sliders,
   ChevronRight,
@@ -24,7 +24,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'HOME', label: 'Terminal', shortcut: '01', icon: <Terminal size={18} strokeWidth={1.5} /> },
-  { id: 'PROJECTS', label: 'Projekte', shortcut: '02', icon: <FolderCode size={18} strokeWidth={1.5} /> },
+  { id: 'PROJECTS', label: 'Projekte', shortcut: '02', icon: <FolderGit2 size={18} strokeWidth={1.5} /> },
   { id: 'JOBS', label: 'Prozesse', shortcut: '03', icon: <Activity size={18} strokeWidth={1.5} /> },
   { id: 'SETTINGS', label: 'System', shortcut: '04', icon: <Sliders size={18} strokeWidth={1.5} /> },
 ];

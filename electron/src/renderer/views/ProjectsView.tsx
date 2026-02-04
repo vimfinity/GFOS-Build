@@ -8,7 +8,7 @@ import React, { useState, useMemo } from 'react';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import { 
-  FolderCode, 
+  FolderGit2, 
   Search, 
   GitBranch,
   ChevronRight,
@@ -113,7 +113,7 @@ export function ProjectsView() {
       <div className="card">
         {filteredProjects.length === 0 ? (
           <div className="p-12 text-center">
-            <FolderCode size={32} className="mx-auto text-zinc-700 mb-4" />
+            <FolderGit2 size={32} className="mx-auto text-zinc-700 mb-4" />
             <p className="text-zinc-500 text-sm">
               {searchQuery ? '> Keine Ergebnisse für Query' : '> Keine Projekte indiziert'}
             </p>
@@ -151,7 +151,7 @@ export function ProjectsView() {
                   
                   {/* Project Info */}
                   <div className="flex-1 min-w-0 flex items-center gap-3">
-                    <FolderCode 
+                    <FolderGit2 
                       size={18} 
                       className="text-zinc-600 group-hover:text-neon-green transition-colors flex-shrink-0" 
                     />
