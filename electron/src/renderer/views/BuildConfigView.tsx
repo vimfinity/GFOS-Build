@@ -294,7 +294,9 @@ export function BuildConfigView() {
                 value={threads}
                 onChange={(e) => setThreads(e.target.value)}
                 placeholder="1C"
-                className="w-16 terminal-input text-center"
+                className="w-20 px-3 py-1.5 bg-terminal-900 border border-terminal-600 text-terminal-200 
+                           font-mono text-sm text-center focus:border-neon-green focus:outline-none
+                           transition-colors"
               />
             )}
           </div>
@@ -345,7 +347,7 @@ export function BuildConfigView() {
             {mavenGoals}{' '}
             {skipTests && <span className="text-terminal-500">-DskipTests </span>}
             {offline && <span className="text-terminal-500">--offline </span>}
-            {enableThreads && <span className="text-terminal-500">-T{threads} </span>}
+            {enableThreads && <span className="text-terminal-500">-T {threads} </span>}
             {selectedProfiles.map(p => <span key={p} className="text-neon-cyan">-P{p} </span>)}
           </code>
         </div>

@@ -381,13 +381,18 @@ body {
 }
 
 .btn-neon:hover {
-  color: var(--terminal-black);
+  color: #080808;
   border-color: var(--neon-green-bright);
   box-shadow: var(--shadow-neon);
+  text-shadow: none;
 }
 
 .btn-neon:hover::before {
   transform: translateY(0);
+}
+
+.btn-neon:hover > * {
+  color: #080808;
 }
 
 .btn-neon:active {

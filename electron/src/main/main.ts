@@ -51,6 +51,9 @@ interface PipelineStep {
   goals: string[];
   jdkPath?: string;
   skipTests?: boolean;
+  offline?: boolean;
+  enableThreads?: boolean;
+  threads?: string;
   profiles?: string[];
   modulePath?: string;
 }

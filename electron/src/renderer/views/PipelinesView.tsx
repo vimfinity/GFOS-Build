@@ -4,17 +4,26 @@
  * Shows all pipelines and allows creating/running them.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { GitBranch, Plus, Play, Trash2, Edit, Clock, ChevronRight, Workflow } from 'lucide-react';
-import type { Pipeline } from '../types';
+import { api } from '../api';
+import { savePipelinesDebounced } from '../App';
+import { GitBranch, Plus, Play, Trash2, Edit, Clock, ChevronRight, Workflow, Loader2 } from 'lucide-react';
+import type { Pipeline, BuildJob } from '../types';
 
 export function PipelinesView() {
   const pipelines = useAppStore((state) => state.pipelines);
   const projects = useAppStore((state) => state.projects);
+  const jdks = useAppStore((state) => state.jdks);
+  const settings = useAppStore((state) => state.settings);
   const setScreen = useAppStore((state) => state.setScreen);
   const selectPipeline = useAppStore((state) => state.selectPipeline);
   const removePipeline = useAppStore((state) => state.removePipeline);
+  const updatePipeline = useAppStore((state) => state.updatePipeline);
+  const addJob = useAppStore((state) => state.addJob);
+  const updateJob = useAppStore((state) => state.updateJob);
+
+  const [runningPipelineId, setRunningPipelineId] = useState<string | null>(null);
 
   const handleCreate = () => {
     selectPipeline(null);
@@ -29,7 +38,87 @@ export function PipelinesView() {
   const handleDelete = (id: string) => {
     if (confirm('Pipeline wirklich löschen?')) {
       removePipeline(id);
+      savePipelinesDebounced();
     }
+  };
+
+  const handleRunPipeline = async (pipeline: Pipeline) => {
+    if (runningPipelineId) return; // Already running a pipeline
+    
+    setRunningPipelineId(pipeline.id);
+    
+    const project = projects.find(p => p.path === pipeline.projectPath);
+    if (!project) {
+      alert('Projekt nicht gefunden!');
+      setRunningPipelineId(null);
+      return;
+    }
+
+    // Update lastRun timestamp
+    updatePipeline(pipeline.id, { lastRun: new Date() });
+    savePipelinesDebounced();
+
+    // Execute each step sequentially
+    for (let i = 0; i < pipeline.steps.length; i++) {
+      const step = pipeline.steps[i];
+      const jdkPath = step.jdkPath || jdks[0]?.jdkHome || '';
+      
+      if (!jdkPath) {
+        alert(`Kein JDK für Schritt "${step.name}" verfügbar!`);
+        setRunningPipelineId(null);
+        return;
+      }
+
+      const jobName = step.modulePath 
+        ? `${pipeline.name} > ${step.name} (${step.modulePath})`
+        : `${pipeline.name} > ${step.name}`;
+
+      const jobId = addJob({
+        projectPath: project.path,
+        modulePath: step.modulePath || undefined,
+        name: jobName,
+        jdkPath,
+        mavenGoals: step.goals,
+        skipTests: step.skipTests,
+        offline: step.offline,
+        enableThreads: step.enableThreads,
+        threads: step.threads || settings.threadCount,
+        profiles: step.profiles,
+        pipelineId: pipeline.id,
+        pipelineStep: i,
+      });
+
+      updateJob(jobId, { status: 'running', startedAt: new Date() });
+
+      const job: BuildJob = {
+        id: jobId,
+        projectPath: project.path,
+        modulePath: step.modulePath || undefined,
+        name: jobName,
+        jdkPath,
+        mavenGoals: step.goals,
+        status: 'running',
+        progress: 0,
+        createdAt: new Date(),
+        skipTests: step.skipTests,
+        offline: step.offline,
+        enableThreads: step.enableThreads,
+        threads: step.threads || settings.threadCount,
+        profiles: step.profiles,
+        pipelineId: pipeline.id,
+        pipelineStep: i,
+      };
+
+      try {
+        await api.startBuild(job);
+      } catch (error) {
+        console.error(`Pipeline step ${i + 1} failed:`, error);
+        updateJob(jobId, { status: 'failed' });
+      }
+    }
+
+    setRunningPipelineId(null);
+    setScreen('JOBS');
   };
 
   const formatDate = (date: Date | undefined) => {
@@ -168,10 +257,20 @@ export function PipelinesView() {
                     <Trash2 size={14} />
                   </button>
                   <button 
-                    className="p-2 border border-neon-green text-neon-green hover:bg-neon-green/10 transition-colors"
+                    onClick={() => handleRunPipeline(pipeline)}
+                    disabled={runningPipelineId !== null}
+                    className={`p-2 border transition-colors ${
+                      runningPipelineId === pipeline.id 
+                        ? 'border-neon-orange text-neon-orange'
+                        : 'border-neon-green text-neon-green hover:bg-neon-green/10'
+                    } ${runningPipelineId && runningPipelineId !== pipeline.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                     title="Pipeline ausführen"
                   >
-                    <Play size={14} />
+                    {runningPipelineId === pipeline.id ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Play size={14} />
+                    )}
                   </button>
                 </div>
               </div>

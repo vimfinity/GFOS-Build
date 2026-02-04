@@ -1,15 +1,16 @@
 /**
  * PipelineEditorView - Create and edit pipelines
  * 
- * Allows configuring pipeline steps with goals, JDKs, etc.
+ * Allows configuring pipeline steps with goals, JDKs, modules, etc.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { savePipelinesDebounced } from '../App';
+import { api } from '../api';
 import { 
   ArrowLeft, Plus, Trash2, ChevronUp, ChevronDown, 
-  Save, Workflow, Settings 
+  Save, Workflow, Settings, Package
 } from 'lucide-react';
 import type { PipelineStep } from '../types';
 
@@ -25,6 +26,11 @@ export function PipelineEditorView() {
   const pipelines = useAppStore((state) => state.pipelines);
   const projects = useAppStore((state) => state.projects);
   const jdks = useAppStore((state) => state.jdks);
+  const settings = useAppStore((state) => state.settings);
+  const modulesByProject = useAppStore((state) => state.modulesByProject);
+  const profilesByProject = useAppStore((state) => state.profilesByProject);
+  const setModules = useAppStore((state) => state.setModules);
+  const setProfiles = useAppStore((state) => state.setProfiles);
   const addPipeline = useAppStore((state) => state.addPipeline);
   const updatePipeline = useAppStore((state) => state.updatePipeline);
   const goBack = useAppStore((state) => state.goBack);
@@ -37,8 +43,45 @@ export function PipelineEditorView() {
   const [projectPath, setProjectPath] = useState(existingPipeline?.projectPath || projects[0]?.path || '');
   const [steps, setSteps] = useState<PipelineStep[]>(existingPipeline?.steps || [{ ...DEFAULT_STEP }]);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [loadingModules, setLoadingModules] = useState(false);
 
   const activeStep = steps[activeStepIndex];
+  const currentProject = projects.find(p => p.path === projectPath);
+  const modules = projectPath ? modulesByProject[projectPath] || [] : [];
+  const profiles = projectPath ? profilesByProject[projectPath] || [] : [];
+
+  // Load modules when project changes
+  useEffect(() => {
+    if (currentProject?.pomPath && !modulesByProject[projectPath]) {
+      loadProjectModules();
+    }
+    if (currentProject?.pomPath && !profilesByProject[projectPath]) {
+      loadProjectProfiles();
+    }
+  }, [projectPath, currentProject]);
+
+  const loadProjectModules = async () => {
+    if (!currentProject?.pomPath) return;
+    setLoadingModules(true);
+    try {
+      const mods = await api.scanModules(currentProject.pomPath);
+      setModules(projectPath, mods);
+    } catch (err) {
+      console.error('Failed to load modules:', err);
+    } finally {
+      setLoadingModules(false);
+    }
+  };
+
+  const loadProjectProfiles = async () => {
+    if (!currentProject?.pomPath) return;
+    try {
+      const profs = await api.scanProfiles(currentProject.pomPath);
+      setProfiles(projectPath, profs);
+    } catch (err) {
+      console.error('Failed to load profiles:', err);
+    }
+  };
 
   const handleSave = () => {
     if (!name.trim() || !projectPath || steps.length === 0) {
@@ -317,29 +360,121 @@ export function PipelineEditorView() {
                   ))}
                 </select>
               </div>
+
+              {/* Module Selection */}
+              <div>
+                <label className="label flex items-center gap-2">
+                  <Package size={12} />
+                  Modul (optional)
+                </label>
+                <select 
+                  value={activeStep.modulePath || ''}
+                  onChange={(e) => updateStep({ modulePath: e.target.value || undefined })}
+                  className="input"
+                  disabled={loadingModules}
+                >
+                  <option value="">Gesamtes Projekt bauen</option>
+                  {modules.map((mod) => (
+                    <option key={mod.pomPath} value={mod.relativePath}>
+                      {mod.displayName || mod.artifactId} ({mod.relativePath})
+                    </option>
+                  ))}
+                </select>
+                {loadingModules && (
+                  <p className="text-[10px] text-zinc-500 mt-1">Module werden geladen...</p>
+                )}
+              </div>
               
               <div>
                 <label className="label">Maven Profile (optional)</label>
-                <input 
-                  type="text"
-                  value={activeStep.profiles?.join(', ') || ''}
-                  onChange={(e) => handleProfilesChange(e.target.value)}
-                  className="input"
-                  placeholder="z.B. development, docker"
-                />
+                {profiles.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {profiles.map((profile) => (
+                      <button
+                        key={profile}
+                        onClick={() => {
+                          const currentProfiles = activeStep.profiles || [];
+                          const newProfiles = currentProfiles.includes(profile)
+                            ? currentProfiles.filter(p => p !== profile)
+                            : [...currentProfiles, profile];
+                          updateStep({ profiles: newProfiles });
+                        }}
+                        className={`
+                          px-2 py-1 text-[10px] border transition-colors
+                          ${(activeStep.profiles || []).includes(profile)
+                            ? 'border-neon-cyan text-neon-cyan bg-neon-cyan/10'
+                            : 'border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                          }
+                        `}
+                      >
+                        {(activeStep.profiles || []).includes(profile) && '✓ '}
+                        {profile}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <input 
+                    type="text"
+                    value={activeStep.profiles?.join(', ') || ''}
+                    onChange={(e) => handleProfilesChange(e.target.value)}
+                    className="input"
+                    placeholder="z.B. development, docker"
+                  />
+                )}
               </div>
-              
-              <div className="flex items-center gap-3 p-3 border border-terminal-border bg-terminal-dark/50">
-                <input 
-                  type="checkbox"
-                  id="skipTests"
-                  checked={activeStep.skipTests || false}
-                  onChange={(e) => updateStep({ skipTests: e.target.checked })}
-                  className="checkbox"
-                />
-                <label htmlFor="skipTests" className="text-sm text-zinc-300 cursor-pointer">
-                  Tests überspringen (-DskipTests)
-                </label>
+
+              {/* Build Flags */}
+              <div className="space-y-3 p-3 border border-terminal-border bg-terminal-dark/50">
+                <h4 className="text-[10px] text-zinc-500 uppercase tracking-wider">Build-Optionen</h4>
+                
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="checkbox"
+                    id="skipTests"
+                    checked={activeStep.skipTests || false}
+                    onChange={(e) => updateStep({ skipTests: e.target.checked })}
+                    className="checkbox"
+                  />
+                  <label htmlFor="skipTests" className="text-sm text-zinc-300 cursor-pointer">
+                    Tests überspringen (-DskipTests)
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="checkbox"
+                    id="offline"
+                    checked={activeStep.offline || false}
+                    onChange={(e) => updateStep({ offline: e.target.checked })}
+                    className="checkbox"
+                  />
+                  <label htmlFor="offline" className="text-sm text-zinc-300 cursor-pointer">
+                    Offline-Modus (--offline)
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="checkbox"
+                    id="enableThreads"
+                    checked={activeStep.enableThreads || false}
+                    onChange={(e) => updateStep({ enableThreads: e.target.checked })}
+                    className="checkbox"
+                  />
+                  <label htmlFor="enableThreads" className="text-sm text-zinc-300 cursor-pointer flex-1">
+                    Paralleler Build (-T)
+                  </label>
+                  {activeStep.enableThreads && (
+                    <input 
+                      type="text"
+                      value={activeStep.threads || settings.threadCount || '1C'}
+                      onChange={(e) => updateStep({ threads: e.target.value })}
+                      className="w-16 px-2 py-1 bg-terminal-900 border border-terminal-600 text-terminal-200 
+                                 font-mono text-xs text-center focus:border-neon-green focus:outline-none"
+                      placeholder="1C"
+                    />
+                  )}
+                </div>
               </div>
             </div>
           )}

@@ -149,15 +149,14 @@ export function SettingsView() {
                 value={localSettings.threadCount}
                 onChange={(e) => handleChange('threadCount', e.target.value)}
                 placeholder="1C"
-                disabled={!localSettings.enableThreads}
-                className={`
+                className="
                   w-full py-2.5 px-4 bg-[#0a0a0c] border border-[#1a1a1f] text-sm text-zinc-200 font-mono
                   focus:border-[#22ffaa] focus:bg-[#0c0c0e]
                   focus:shadow-[0_0_0_3px_rgba(34,255,170,0.1)]
                   transition-all outline-none
-                  ${!localSettings.enableThreads ? 'opacity-40 cursor-not-allowed' : ''}
-                `}
+                "
               />
+              <p className="text-[9px] text-zinc-600 mt-1 font-mono">// z.B. 1C, 2C, 4 (Cores oder Threads)</p>
             </div>
           </div>
 
