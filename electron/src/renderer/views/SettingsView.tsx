@@ -1,12 +1,31 @@
 /**
- * Settings View - Terminal-Neon Design
+ * Settings View - Premium Terminal Edition
  * 
- * System configuration interface.
+ * System configuration interface with advanced animations.
  */
 
 import React, { useState } from 'react';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
+import { Settings, Folder, Save, RotateCcw, Check } from 'lucide-react';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1, delayChildren: 0.05 },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
+  },
+};
 
 export function SettingsView() {
   const settings = useAppStore((state) => state.settings);
@@ -53,16 +72,30 @@ export function SettingsView() {
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(localSettings);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
+    <motion.div 
+      className="max-w-3xl mx-auto space-y-4"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header */}
-      <div className="terminal-window">
-        <div className="terminal-header">
-          <span className="text-neon-cyan">⚙</span>
+      <motion.div 
+        className="terminal-window overflow-hidden"
+        variants={itemVariants}
+      >
+        <div className="terminal-header flex items-center gap-2">
+          <motion.span 
+            className="text-neon-cyan"
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+          >
+            <Settings size={14} />
+          </motion.span>
           <span>SYSTEM_CONFIG</span>
-          <span className="text-terminal-500">//</span>
-          <span className="text-terminal-400">v1.0.0</span>
+          <span className="text-zinc-700">//</span>
+          <span className="text-zinc-500">v1.0.0</span>
         </div>
-      </div>
+      </motion.div>
 
       {/* Paths Section */}
       <ConfigSection 
@@ -114,35 +147,37 @@ export function SettingsView() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-mono text-terminal-500 uppercase mb-1">
+              <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">
                 MAX_PARALLEL
               </label>
-              <input
+              <motion.input
                 type="number"
                 min={1}
                 max={8}
                 value={localSettings.maxParallelBuilds}
                 onChange={(e) => handleChange('maxParallelBuilds', parseInt(e.target.value) || 1)}
                 className="terminal-input w-full"
+                whileFocus={{ scale: 1.01, borderColor: "rgba(0, 255, 136, 0.5)" }}
               />
             </div>
             
             <div>
-              <label className="block text-[10px] font-mono text-terminal-500 uppercase mb-1">
+              <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">
                 THREAD_COUNT
               </label>
-              <input
+              <motion.input
                 type="text"
                 value={localSettings.threadCount}
                 onChange={(e) => handleChange('threadCount', e.target.value)}
                 placeholder="1C"
                 disabled={!localSettings.enableThreads}
                 className={`terminal-input w-full ${!localSettings.enableThreads ? 'opacity-50' : ''}`}
+                whileFocus={{ scale: 1.01 }}
               />
             </div>
           </div>
 
-          <div className="border-t border-terminal-700 pt-4 space-y-3">
+          <div className="border-t border-terminal-border pt-4 space-y-3">
             <ConfigToggle
               label="SKIP_TESTS"
               description="-DskipTests on all builds"
@@ -168,56 +203,95 @@ export function SettingsView() {
       </ConfigSection>
 
       {/* Actions */}
-      <div className="terminal-window">
+      <motion.div 
+        className="terminal-window overflow-hidden"
+        variants={itemVariants}
+      >
         <div className="p-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {hasChanges && (
-              <span className="text-neon-orange text-xs font-mono animate-pulse">
-                ● UNSAVED_CHANGES
-              </span>
-            )}
-            {saved && (
-              <span className="text-neon-green text-xs font-mono">
-                ✓ CONFIG_SAVED
-              </span>
-            )}
+            <AnimatePresence mode="wait">
+              {hasChanges && (
+                <motion.span 
+                  className="text-neon-orange text-xs font-mono flex items-center gap-2"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                >
+                  <motion.span 
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                  >
+                    ●
+                  </motion.span>
+                  UNSAVED_CHANGES
+                </motion.span>
+              )}
+              {saved && !hasChanges && (
+                <motion.span 
+                  className="text-neon-green text-xs font-mono flex items-center gap-2"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <Check size={12} /> CONFIG_SAVED
+                </motion.span>
+              )}
+            </AnimatePresence>
           </div>
           
           <div className="flex items-center gap-2">
-            <button
+            <motion.button
               onClick={() => setLocalSettings(settings)}
               disabled={!hasChanges}
-              className="btn-ghost text-xs disabled:opacity-30"
+              className="btn-ghost text-xs disabled:opacity-30 flex items-center gap-2"
+              whileHover={hasChanges ? { scale: 1.02 } : {}}
+              whileTap={hasChanges ? { scale: 0.98 } : {}}
             >
-              [RESET]
-            </button>
-            <button
+              <RotateCcw size={12} />
+              RESET
+            </motion.button>
+            <motion.button
               onClick={handleSave}
               disabled={!hasChanges || saving}
-              className={`text-xs font-mono px-4 py-2 border transition-all ${
+              className={`text-xs font-mono px-4 py-2 border transition-all flex items-center gap-2 ${
                 hasChanges && !saving
-                  ? 'border-neon-green text-neon-green hover:bg-neon-green/10'
-                  : 'border-terminal-700 text-terminal-600 cursor-not-allowed'
+                  ? 'border-neon-green text-terminal-black bg-neon-green hover:shadow-[0_0_20px_rgba(0,255,136,0.3)]'
+                  : 'border-zinc-700 text-zinc-600 cursor-not-allowed'
               }`}
+              whileHover={hasChanges && !saving ? { scale: 1.02, y: -1 } : {}}
+              whileTap={hasChanges && !saving ? { scale: 0.98 } : {}}
             >
               {saving ? (
-                <span className="flex items-center gap-2">
-                  <span className="animate-spin">◐</span>
+                <>
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  >
+                    ◐
+                  </motion.span>
                   SAVING...
-                </span>
+                </>
               ) : (
-                '[SAVE_CONFIG]'
+                <>
+                  <Save size={12} />
+                  SAVE_CONFIG
+                </>
               )}
-            </button>
+            </motion.button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Debug Info */}
-      <div className="text-[10px] font-mono text-terminal-700 text-right px-2">
+      <motion.div 
+        className="text-[10px] font-mono text-zinc-700 text-right px-2"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+      >
         CONFIG_PATH: ~/.gfos-build/config.json
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -230,21 +304,27 @@ interface ConfigSectionProps {
 
 function ConfigSection({ title, description, children, index }: ConfigSectionProps) {
   return (
-    <div 
-      className="terminal-window animate-slide-up"
-      style={{ animationDelay: `${index * 100}ms` }}
+    <motion.div 
+      className="terminal-window overflow-hidden"
+      variants={itemVariants}
     >
-      <div className="terminal-header">
-        <span className="text-neon-green">▸</span>
+      <div className="terminal-header flex items-center gap-2">
+        <motion.span 
+          className="text-neon-green"
+          animate={{ opacity: [0.5, 1, 0.5] }}
+          transition={{ duration: 2, repeat: Infinity, delay: index * 0.2 }}
+        >
+          ▸
+        </motion.span>
         <span>{title}</span>
       </div>
-      <div className="px-4 py-1 border-b border-terminal-800">
-        <p className="text-xs text-terminal-500 font-mono"># {description}</p>
+      <div className="px-4 py-1 border-b border-terminal-border bg-terminal-mid/30">
+        <p className="text-xs text-zinc-500 font-mono"># {description}</p>
       </div>
       <div className="p-4">
         {children}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -258,40 +338,60 @@ interface ConfigInputProps {
 }
 
 function ConfigInput({ label, value, onChange, placeholder, hint, onBrowse }: ConfigInputProps) {
+  const [focused, setFocused] = useState(false);
+  
   return (
-    <div>
-      <label className="block text-[10px] font-mono text-terminal-500 uppercase mb-1">
+    <motion.div
+      animate={focused ? { x: 2 } : { x: 0 }}
+      transition={{ type: "spring", stiffness: 300 }}
+    >
+      <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">
         {label}
       </label>
       <div className="flex gap-2">
         <div className="flex-1 relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-terminal-600 font-mono text-sm">
+          <motion.span 
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 font-mono text-sm"
+            animate={{ color: focused ? "#00ff88" : "#52525b" }}
+          >
             $
-          </span>
+          </motion.span>
           <input
             type="text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             placeholder={placeholder}
-            className="terminal-input w-full pl-7"
+            className={`terminal-input w-full pl-7 transition-all duration-200 ${
+              focused ? 'border-neon-green/50 shadow-[0_0_10px_rgba(0,255,136,0.1)]' : ''
+            }`}
           />
         </div>
         {onBrowse && (
-          <button
+          <motion.button
             onClick={onBrowse}
-            className="px-3 py-2 bg-terminal-800 border border-terminal-700 text-terminal-400 
-                       hover:text-neon-cyan hover:border-neon-cyan/50 transition-colors font-mono text-xs"
+            className="px-3 py-2 bg-terminal-mid border border-terminal-border text-zinc-400 
+                       hover:text-neon-cyan hover:border-neon-cyan/50 transition-colors font-mono text-xs
+                       flex items-center gap-1"
+            whileHover={{ scale: 1.02, y: -1 }}
+            whileTap={{ scale: 0.98 }}
           >
-            [...]
-          </button>
+            <Folder size={12} />
+          </motion.button>
         )}
       </div>
       {hint && (
-        <p className="text-[10px] text-terminal-600 font-mono mt-1">
+        <motion.p 
+          className="text-[10px] text-zinc-600 font-mono mt-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+        >
           // {hint}
-        </p>
+        </motion.p>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -304,34 +404,45 @@ interface ConfigToggleProps {
 
 function ConfigToggle({ label, description, checked, onChange }: ConfigToggleProps) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer group">
-      <div 
+    <motion.label 
+      className="flex items-center gap-3 cursor-pointer group"
+      whileHover={{ x: 2 }}
+      whileTap={{ scale: 0.995 }}
+    >
+      <motion.div 
         className={`w-10 h-5 border relative transition-colors ${
           checked 
             ? 'border-neon-green bg-neon-green/20' 
-            : 'border-terminal-600 bg-terminal-900'
+            : 'border-zinc-600 bg-zinc-900 hover:border-zinc-500'
         }`}
         onClick={() => onChange(!checked)}
+        whileHover={{ scale: 1.05 }}
       >
-        <div 
-          className={`absolute top-0.5 w-4 h-4 transition-all ${
-            checked 
-              ? 'right-0.5 bg-neon-green' 
-              : 'left-0.5 bg-terminal-600'
-          }`}
+        <motion.div 
+          className="absolute top-0.5 w-4 h-4"
+          animate={{
+            x: checked ? 20 : 2,
+            backgroundColor: checked ? "#00ff88" : "#52525b",
+          }}
+          transition={{ type: "spring", stiffness: 400, damping: 20 }}
         />
-      </div>
+      </motion.div>
       <div className="flex-1">
         <p className={`text-sm font-mono transition-colors ${
-          checked ? 'text-neon-green' : 'text-terminal-300 group-hover:text-terminal-100'
+          checked ? 'text-neon-green' : 'text-zinc-300 group-hover:text-zinc-100'
         }`}>
           {label}
         </p>
-        <p className="text-xs text-terminal-600 font-mono">{description}</p>
+        <p className="text-xs text-zinc-600 font-mono">{description}</p>
       </div>
-      <span className="text-xs font-mono text-terminal-600">
+      <motion.span 
+        className="text-xs font-mono"
+        animate={{ 
+          color: checked ? "#00ff88" : "#52525b",
+        }}
+      >
         {checked ? '[ON]' : '[OFF]'}
-      </span>
-    </label>
+      </motion.span>
+    </motion.label>
   );
 }
