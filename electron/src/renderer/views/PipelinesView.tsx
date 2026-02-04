@@ -42,6 +42,18 @@ export function PipelinesView() {
     }
   };
 
+  // Helper function to wait for a build to complete
+  const waitForBuildComplete = (jobId: string): Promise<{ status: string; exitCode: number | null }> => {
+    return new Promise((resolve) => {
+      const unsubscribe = api.onBuildComplete((completedJobId, status, exitCode) => {
+        if (completedJobId === jobId) {
+          unsubscribe();
+          resolve({ status, exitCode });
+        }
+      });
+    });
+  };
+
   const handleRunPipeline = async (pipeline: Pipeline) => {
     if (runningPipelineId) return; // Already running a pipeline
     
@@ -58,7 +70,7 @@ export function PipelinesView() {
     updatePipeline(pipeline.id, { lastRun: new Date() });
     savePipelinesDebounced();
 
-    // Execute each step sequentially
+    // Execute each step SEQUENTIALLY - wait for each to complete
     for (let i = 0; i < pipeline.steps.length; i++) {
       const step = pipeline.steps[i];
       const jdkPath = step.jdkPath || jdks[0]?.jdkHome || '';
@@ -110,10 +122,33 @@ export function PipelinesView() {
       };
 
       try {
+        // Start the build
         await api.startBuild(job);
+        
+        // WAIT for the build to complete before starting next step
+        const result = await waitForBuildComplete(jobId);
+        
+        // If build failed, stop the pipeline
+        if (result.status === 'failed') {
+          console.error(`Pipeline stopped: Step "${step.name}" failed`);
+          setRunningPipelineId(null);
+          setScreen('JOBS');
+          return; // Stop pipeline on failure
+        }
+        
+        if (result.status === 'cancelled') {
+          console.log('Pipeline cancelled by user');
+          setRunningPipelineId(null);
+          setScreen('JOBS');
+          return;
+        }
+        
       } catch (error) {
         console.error(`Pipeline step ${i + 1} failed:`, error);
         updateJob(jobId, { status: 'failed' });
+        setRunningPipelineId(null);
+        setScreen('JOBS');
+        return; // Stop on error
       }
     }
 

@@ -407,20 +407,41 @@ async function scanMavenModules(pomPath: string): Promise<MavenModule[]> {
 }
 
 async function scanMavenProfiles(pomPath: string): Promise<string[]> {
-  const profiles: string[] = [];
+  const profiles = new Set<string>();
+  const projectDir = path.dirname(pomPath);
   
-  try {
-    const pomContent = await fs.readFile(pomPath, 'utf-8');
-    const profileMatches = pomContent.matchAll(/<profile>\s*<id>([^<]+)<\/id>/g);
-    
-    for (const match of profileMatches) {
-      profiles.push(match[1]);
+  // Recursive function to scan profiles from all pom.xml files
+  async function scanProfilesRecursive(currentPomPath: string): Promise<void> {
+    try {
+      const pomContent = await fs.readFile(currentPomPath, 'utf-8');
+      const currentDir = path.dirname(currentPomPath);
+      
+      // Extract profiles from this pom.xml
+      const profileMatches = pomContent.matchAll(/<profile>\s*<id>([^<]+)<\/id>/g);
+      for (const match of profileMatches) {
+        profiles.add(match[1]);
+      }
+      
+      // Find and process submodules recursively
+      const modulesMatch = pomContent.match(/<modules>([\s\S]*?)<\/modules>/);
+      if (modulesMatch) {
+        const moduleMatches = modulesMatch[1].matchAll(/<module>([^<]+)<\/module>/g);
+        for (const match of moduleMatches) {
+          const moduleName = match[1].trim();
+          const modulePomPath = path.join(currentDir, moduleName, 'pom.xml');
+          
+          if (await fs.pathExists(modulePomPath)) {
+            await scanProfilesRecursive(modulePomPath);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error scanning profiles at ${currentPomPath}:`, error);
     }
-  } catch (error) {
-    console.error('Error scanning profiles:', error);
   }
-
-  return profiles;
+  
+  await scanProfilesRecursive(pomPath);
+  return Array.from(profiles).sort();
 }
 
 // ============================================================================
