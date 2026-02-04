@@ -1,20 +1,22 @@
 /**
- * Home View / Dashboard
+ * Home View / Terminal Dashboard
  * 
- * Shows overview with stats and quick actions.
+ * Neon-terminal inspired dashboard with system overview.
  */
 
 import React from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { 
-  FolderGit2, 
+  FolderCode, 
   Coffee, 
-  Play, 
+  Activity, 
   CheckCircle2, 
   XCircle, 
   Clock,
-  ArrowRight,
-  Zap
+  ChevronRight,
+  Zap,
+  Terminal,
+  GitBranch
 } from 'lucide-react';
 
 export function HomeView() {
@@ -44,132 +46,183 @@ export function HomeView() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
+      {/* Header Section */}
+      <div className="flex items-end justify-between mb-6">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Terminal size={14} className="text-neon-green" />
+            <span className="text-[10px] text-zinc-600 uppercase tracking-[0.2em] font-display">System Overview</span>
+          </div>
+          <h1 className="font-display text-2xl font-bold text-zinc-100 uppercase tracking-wide">
+            Dashboard
+          </h1>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Session Active</p>
+          <p className="text-xs text-neon-green font-mono">{new Date().toLocaleDateString('de-DE')}</p>
+        </div>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
-          icon={<FolderGit2 size={24} />}
+          icon={<FolderCode size={20} strokeWidth={1.5} />}
           label="Projekte"
           value={stats.projects}
-          sublabel={`${stats.mavenProjects} mit Maven`}
-          color="blue"
+          sublabel={`${stats.mavenProjects} maven`}
+          accent="green"
         />
         <StatCard
-          icon={<Coffee size={24} />}
+          icon={<Coffee size={20} strokeWidth={1.5} />}
           label="JDKs"
           value={stats.jdks}
           sublabel="verfügbar"
-          color="orange"
+          accent="cyan"
         />
         <StatCard
-          icon={<Play size={24} />}
-          label="Aktive Builds"
+          icon={<Activity size={20} strokeWidth={1.5} />}
+          label="Aktiv"
           value={stats.runningJobs}
-          sublabel={`${stats.pendingJobs} wartend`}
-          color="yellow"
+          sublabel={`${stats.pendingJobs} queue`}
+          accent="orange"
         />
         <StatCard
-          icon={<CheckCircle2 size={24} />}
-          label="Erfolgreich"
+          icon={<CheckCircle2 size={20} strokeWidth={1.5} />}
+          label="Builds"
           value={stats.completedJobs}
-          sublabel={`${stats.failedJobs} fehlgeschlagen`}
-          color="green"
+          sublabel={`${stats.failedJobs} failed`}
+          accent={stats.failedJobs > 0 ? 'red' : 'green'}
         />
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Zap size={20} className="text-yellow-400" />
-          Schnellaktionen
-        </h3>
-        <div className="grid grid-cols-3 gap-4">
-          <QuickAction
-            label="Projekt auswählen"
-            description="Maven-Projekt für Build wählen"
-            onClick={() => setScreen('PROJECTS')}
-          />
-          <QuickAction
-            label="Jobs anzeigen"
-            description="Laufende und vergangene Builds"
-            onClick={() => setScreen('JOBS')}
-          />
-          <QuickAction
-            label="Einstellungen"
-            description="Pfade und Optionen konfigurieren"
-            onClick={() => setScreen('SETTINGS')}
-          />
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title flex items-center gap-2">
+            <Zap size={14} />
+            Quick Actions
+          </span>
+        </div>
+        <div className="card-body">
+          <div className="grid grid-cols-3 gap-3">
+            <QuickAction
+              label="Neuer Build"
+              shortcut="01"
+              onClick={() => setScreen('PROJECTS')}
+            />
+            <QuickAction
+              label="Prozesse"
+              shortcut="02"
+              onClick={() => setScreen('JOBS')}
+            />
+            <QuickAction
+              label="Konfiguration"
+              shortcut="03"
+              onClick={() => setScreen('SETTINGS')}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-4">
         {/* Recent Projects */}
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Maven-Projekte</h3>
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title flex items-center gap-2">
+              <GitBranch size={14} />
+              Maven Projekte
+            </span>
             <button
               onClick={() => setScreen('PROJECTS')}
-              className="text-sm text-gfos-400 hover:text-gfos-300 flex items-center gap-1"
+              className="text-[10px] text-zinc-500 hover:text-neon-green flex items-center gap-1 uppercase tracking-wider transition-colors"
             >
-              Alle anzeigen <ArrowRight size={14} />
+              Alle <ChevronRight size={12} />
             </button>
           </div>
-          <div className="space-y-2">
-            {projects.filter((p) => p.hasPom).slice(0, 5).map((project) => (
+          <div className="card-body p-0">
+            {projects.filter((p) => p.hasPom).slice(0, 5).map((project, i) => (
               <button
                 key={project.path}
                 onClick={() => handleProjectClick(project.path)}
-                className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors text-left"
+                className={`
+                  w-full flex items-center gap-3 px-4 py-3 
+                  hover:bg-terminal-mid transition-colors text-left group
+                  border-b border-terminal-border last:border-b-0
+                  animate-slide-up stagger-${i + 1}
+                `}
               >
-                <FolderGit2 size={18} className="text-gfos-400" />
+                <span className="text-[10px] text-zinc-700 font-mono w-5">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <FolderCode size={16} className="text-zinc-600 group-hover:text-neon-green transition-colors" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{project.name}</p>
-                  <p className="text-xs text-slate-400 truncate">{project.path}</p>
+                  <p className="text-sm text-zinc-300 group-hover:text-neon-green truncate transition-colors">
+                    {project.name}
+                  </p>
+                  <p className="text-[10px] text-zinc-600 truncate font-mono">
+                    {project.path}
+                  </p>
                 </div>
-                <ArrowRight size={16} className="text-slate-500" />
+                <ChevronRight size={14} className="text-zinc-700 group-hover:text-neon-green transition-colors" />
               </button>
             ))}
             {projects.filter((p) => p.hasPom).length === 0 && (
-              <p className="text-sm text-slate-400 text-center py-4">
-                Keine Maven-Projekte gefunden
-              </p>
+              <div className="px-4 py-8 text-center">
+                <p className="text-xs text-zinc-600">Keine Maven-Projekte gefunden</p>
+              </div>
             )}
           </div>
         </div>
 
         {/* Recent Jobs */}
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Letzte Builds</h3>
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title flex items-center gap-2">
+              <Activity size={14} />
+              Letzte Prozesse
+            </span>
             <button
               onClick={() => setScreen('JOBS')}
-              className="text-sm text-gfos-400 hover:text-gfos-300 flex items-center gap-1"
+              className="text-[10px] text-zinc-500 hover:text-neon-green flex items-center gap-1 uppercase tracking-wider transition-colors"
             >
-              Alle anzeigen <ArrowRight size={14} />
+              Alle <ChevronRight size={12} />
             </button>
           </div>
-          <div className="space-y-2">
-            {recentJobs.map((job) => (
+          <div className="card-body p-0">
+            {recentJobs.map((job, i) => (
               <div
                 key={job.id}
-                className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/50"
+                className={`
+                  flex items-center gap-3 px-4 py-3 
+                  border-b border-terminal-border last:border-b-0
+                  animate-slide-up stagger-${i + 1}
+                `}
               >
-                <JobStatusIcon status={job.status} />
+                <JobStatusIndicator status={job.status} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{job.name}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-sm text-zinc-300 truncate">{job.name}</p>
+                  <p className="text-[10px] text-zinc-600 font-mono">
                     {job.mavenGoals.join(' ')}
                   </p>
                 </div>
                 {job.status === 'running' && (
-                  <div className="text-xs text-yellow-400">{job.progress}%</div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-1 bg-terminal-mid overflow-hidden">
+                      <div 
+                        className="h-full bg-neon-green transition-all"
+                        style={{ width: `${job.progress}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-neon-green font-mono w-8">{job.progress}%</span>
+                  </div>
                 )}
               </div>
             ))}
             {recentJobs.length === 0 && (
-              <p className="text-sm text-slate-400 text-center py-4">
-                Noch keine Builds ausgeführt
-              </p>
+              <div className="px-4 py-8 text-center">
+                <p className="text-xs text-zinc-600">Noch keine Builds ausgeführt</p>
+              </div>
             )}
           </div>
         </div>
@@ -184,27 +237,31 @@ interface StatCardProps {
   label: string;
   value: number;
   sublabel: string;
-  color: 'blue' | 'orange' | 'yellow' | 'green';
+  accent: 'green' | 'cyan' | 'orange' | 'red';
 }
 
-function StatCard({ icon, label, value, sublabel, color }: StatCardProps) {
-  const colorClasses = {
-    blue: 'from-blue-500 to-blue-700',
-    orange: 'from-orange-500 to-orange-700',
-    yellow: 'from-yellow-500 to-yellow-700',
-    green: 'from-green-500 to-green-700',
+function StatCard({ icon, label, value, sublabel, accent }: StatCardProps) {
+  const accentColors = {
+    green: 'text-neon-green border-neon-green/30 bg-neon-green/5',
+    cyan: 'text-neon-cyan border-neon-cyan/30 bg-neon-cyan/5',
+    orange: 'text-neon-orange border-neon-orange/30 bg-neon-orange/5',
+    red: 'text-neon-red border-neon-red/30 bg-neon-red/5',
   };
 
   return (
-    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-slate-400">{label}</p>
-          <p className="text-3xl font-bold text-white mt-1">{value}</p>
-          <p className="text-xs text-slate-500 mt-1">{sublabel}</p>
+    <div className="card group hover:border-neon-green/50 transition-colors">
+      <div className="p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div className={`p-2 border ${accentColors[accent]}`}>
+            {icon}
+          </div>
+          <span className="text-[9px] text-zinc-600 uppercase tracking-wider font-display">
+            {label}
+          </span>
         </div>
-        <div className={`p-3 rounded-lg bg-gradient-to-br ${colorClasses[color]} text-white`}>
-          {icon}
+        <div className="flex items-end justify-between">
+          <p className="text-3xl font-display font-bold text-zinc-100">{value}</p>
+          <p className="text-[10px] text-zinc-600 uppercase tracking-wider">{sublabel}</p>
         </div>
       </div>
     </div>
@@ -213,35 +270,40 @@ function StatCard({ icon, label, value, sublabel, color }: StatCardProps) {
 
 interface QuickActionProps {
   label: string;
-  description: string;
+  shortcut: string;
   onClick: () => void;
 }
 
-function QuickAction({ label, description, onClick }: QuickActionProps) {
+function QuickAction({ label, shortcut, onClick }: QuickActionProps) {
   return (
     <button
       onClick={onClick}
-      className="p-4 rounded-lg bg-slate-700/50 hover:bg-slate-700 border border-slate-600 hover:border-gfos-500 transition-all text-left group"
+      className="
+        p-4 border border-terminal-border bg-terminal-mid
+        hover:border-neon-green hover:bg-neon-green/5
+        transition-all text-left group relative
+      "
     >
-      <p className="font-medium text-white group-hover:text-gfos-400 transition-colors">
+      <span className="absolute top-2 right-2 text-[9px] text-zinc-700 font-mono">
+        {shortcut}
+      </span>
+      <p className="text-xs text-zinc-400 group-hover:text-neon-green transition-colors uppercase tracking-wider">
         {label}
       </p>
-      <p className="text-sm text-slate-400 mt-1">{description}</p>
     </button>
   );
 }
 
-function JobStatusIcon({ status }: { status: string }) {
-  switch (status) {
-    case 'running':
-      return <Clock size={18} className="text-yellow-400 animate-pulse" />;
-    case 'success':
-      return <CheckCircle2 size={18} className="text-green-400" />;
-    case 'failed':
-      return <XCircle size={18} className="text-red-400" />;
-    case 'pending':
-      return <Clock size={18} className="text-slate-400" />;
-    default:
-      return <Clock size={18} className="text-slate-400" />;
-  }
+function JobStatusIndicator({ status }: { status: string }) {
+  const config = {
+    running: { color: 'bg-neon-green', pulse: true },
+    success: { color: 'bg-neon-green', pulse: false },
+    failed: { color: 'bg-neon-red', pulse: false },
+    pending: { color: 'bg-neon-orange', pulse: false },
+    cancelled: { color: 'bg-zinc-600', pulse: false },
+  }[status] || { color: 'bg-zinc-600', pulse: false };
+
+  return (
+    <div className={`w-2 h-2 ${config.color} ${config.pulse ? 'animate-pulse-neon' : ''}`} />
+  );
 }

@@ -1,19 +1,20 @@
 /**
  * Projects View
  * 
- * Lists all discovered projects with filtering.
+ * Terminal-style project listing with search and filters.
  */
 
 import React, { useState, useMemo } from 'react';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import { 
-  FolderGit2, 
+  FolderCode, 
   Search, 
-  FileCode2,
   GitBranch,
-  ArrowRight,
-  FolderOpen
+  ChevronRight,
+  ExternalLink,
+  Database,
+  Filter
 } from 'lucide-react';
 
 export function ProjectsView() {
@@ -26,7 +27,6 @@ export function ProjectsView() {
 
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
-      // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         if (!project.name.toLowerCase().includes(query) && 
@@ -35,7 +35,6 @@ export function ProjectsView() {
         }
       }
       
-      // Type filter
       if (filter === 'maven' && !project.hasPom) return false;
       if (filter === 'git' && !project.isGitRepo) return false;
       
@@ -55,96 +54,148 @@ export function ProjectsView() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Database size={14} className="text-neon-green" />
+            <span className="text-[10px] text-zinc-600 uppercase tracking-[0.2em] font-display">Repository Index</span>
+          </div>
+          <h1 className="font-display text-xl font-bold text-zinc-100 uppercase tracking-wide">
+            Projekte
+          </h1>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Total</p>
+          <p className="text-lg text-neon-green font-mono">{projects.length}</p>
+        </div>
+      </div>
+
       {/* Search and Filter Bar */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <div className="flex-1 relative">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
           <input
             type="text"
-            placeholder="Projekt suchen..."
+            placeholder="search://projekt..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:border-gfos-500 focus:ring-1 focus:ring-gfos-500 transition-colors"
+            className="input pl-9 text-sm"
           />
         </div>
         
-        <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1 border border-slate-700">
+        <div className="flex items-center border border-terminal-border">
+          <div className="px-3 py-2 border-r border-terminal-border">
+            <Filter size={12} className="text-zinc-600" />
+          </div>
           <FilterButton 
             active={filter === 'all'} 
             onClick={() => setFilter('all')}
           >
-            Alle ({projects.length})
+            ALL [{projects.length}]
           </FilterButton>
           <FilterButton 
             active={filter === 'maven'} 
             onClick={() => setFilter('maven')}
           >
-            Maven ({projects.filter(p => p.hasPom).length})
+            MVN [{projects.filter(p => p.hasPom).length}]
           </FilterButton>
           <FilterButton 
             active={filter === 'git'} 
             onClick={() => setFilter('git')}
           >
-            Git ({projects.filter(p => p.isGitRepo).length})
+            GIT [{projects.filter(p => p.isGitRepo).length}]
           </FilterButton>
         </div>
       </div>
 
       {/* Project List */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="card">
         {filteredProjects.length === 0 ? (
           <div className="p-12 text-center">
-            <FolderGit2 size={48} className="mx-auto text-slate-600 mb-4" />
-            <p className="text-slate-400">
-              {searchQuery ? 'Keine Projekte gefunden' : 'Keine Projekte vorhanden'}
+            <FolderCode size={32} className="mx-auto text-zinc-700 mb-4" />
+            <p className="text-zinc-500 text-sm">
+              {searchQuery ? '> Keine Ergebnisse für Query' : '> Keine Projekte indiziert'}
             </p>
-            <p className="text-sm text-slate-500 mt-1">
-              Überprüfe den Scan-Pfad in den Einstellungen
+            <p className="text-[10px] text-zinc-600 mt-2 font-mono">
+              Überprüfe scan_root_path in /config
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-700">
-            {filteredProjects.map((project) => (
-              <button
-                key={project.path}
-                onClick={() => handleProjectClick(project.path)}
-                className="w-full flex items-center gap-4 p-4 hover:bg-slate-700/50 transition-colors text-left group"
-              >
-                <div className="w-12 h-12 rounded-lg bg-slate-700 flex items-center justify-center group-hover:bg-gfos-600 transition-colors">
-                  <FolderGit2 size={24} className="text-slate-400 group-hover:text-white" />
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-medium text-white truncate">
-                      {project.name}
-                    </h3>
+          <div>
+            {/* Table Header */}
+            <div className="flex items-center gap-4 px-4 py-2 border-b border-terminal-border bg-terminal-mid text-[9px] text-zinc-600 uppercase tracking-[0.15em] font-display">
+              <span className="w-8">#</span>
+              <span className="flex-1">Projekt</span>
+              <span className="w-16 text-center">Type</span>
+              <span className="w-20 text-right">Actions</span>
+            </div>
+            
+            {/* Table Body */}
+            <div>
+              {filteredProjects.map((project, i) => (
+                <button
+                  key={project.path}
+                  onClick={() => handleProjectClick(project.path)}
+                  className={`
+                    w-full flex items-center gap-4 px-4 py-3
+                    hover:bg-terminal-mid transition-colors text-left group
+                    border-b border-terminal-border/50 last:border-b-0
+                    animate-slide-up stagger-${Math.min(i + 1, 6)}
+                  `}
+                >
+                  {/* Index */}
+                  <span className="w-8 text-[10px] text-zinc-700 font-mono">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  
+                  {/* Project Info */}
+                  <div className="flex-1 min-w-0 flex items-center gap-3">
+                    <FolderCode 
+                      size={18} 
+                      className="text-zinc-600 group-hover:text-neon-green transition-colors flex-shrink-0" 
+                    />
+                    <div className="min-w-0">
+                      <h3 className="text-sm text-zinc-300 group-hover:text-neon-green truncate transition-colors">
+                        {project.name}
+                      </h3>
+                      <p className="text-[10px] text-zinc-600 truncate font-mono">
+                        {project.path}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Type Tags */}
+                  <div className="w-16 flex items-center justify-center gap-1">
                     {project.hasPom && (
-                      <span className="px-2 py-0.5 text-xs font-medium bg-orange-500/20 text-orange-400 rounded">
-                        Maven
+                      <span className="tag tag-orange text-[8px] px-1.5 py-0.5">
+                        MVN
                       </span>
                     )}
                     {project.isGitRepo && (
-                      <span className="px-2 py-0.5 text-xs font-medium bg-purple-500/20 text-purple-400 rounded">
-                        Git
+                      <span className="tag tag-cyan text-[8px] px-1.5 py-0.5">
+                        GIT
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-slate-400 truncate mt-0.5">{project.path}</p>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => handleOpenFolder(e, project.path)}
-                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-600 transition-colors"
-                    title="Im Explorer öffnen"
-                  >
-                    <FolderOpen size={18} />
-                  </button>
-                  <ArrowRight size={20} className="text-slate-500 group-hover:text-gfos-400 transition-colors" />
-                </div>
-              </button>
-            ))}
+                  {/* Actions */}
+                  <div className="w-20 flex items-center justify-end gap-1">
+                    <button
+                      onClick={(e) => handleOpenFolder(e, project.path)}
+                      className="p-1.5 text-zinc-600 hover:text-neon-cyan transition-colors"
+                      title="Im Explorer öffnen"
+                    >
+                      <ExternalLink size={14} />
+                    </button>
+                    <ChevronRight 
+                      size={14} 
+                      className="text-zinc-700 group-hover:text-neon-green transition-colors" 
+                    />
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -163,10 +214,10 @@ function FilterButton({ active, onClick, children }: FilterButtonProps) {
     <button
       onClick={onClick}
       className={`
-        px-3 py-1.5 text-sm font-medium rounded-md transition-colors
+        px-3 py-2 text-[10px] font-mono uppercase tracking-wider transition-colors
         ${active 
-          ? 'bg-gfos-600 text-white' 
-          : 'text-slate-400 hover:text-white hover:bg-slate-700'
+          ? 'bg-neon-green text-terminal-black' 
+          : 'text-zinc-500 hover:text-neon-green hover:bg-terminal-mid'
         }
       `}
     >

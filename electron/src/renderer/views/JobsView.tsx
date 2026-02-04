@@ -1,22 +1,12 @@
 /**
- * Jobs View
+ * Jobs View - Terminal-Neon Design
  * 
- * Shows all build jobs with status.
+ * Process queue with real-time status monitoring.
  */
 
 import React, { useState } from 'react';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
-import { 
-  Play, 
-  CheckCircle2, 
-  XCircle, 
-  Clock,
-  Trash2,
-  StopCircle,
-  Eye,
-  Filter
-} from 'lucide-react';
 
 type JobFilter = 'all' | 'running' | 'completed' | 'failed';
 
@@ -58,181 +48,301 @@ export function JobsView() {
     removeJob(jobId);
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusConfig = (status: string) => {
     switch (status) {
       case 'running':
-        return <Play size={18} className="text-yellow-400 animate-pulse" />;
+        return { 
+          symbol: '▶', 
+          text: 'RUNNING', 
+          class: 'text-neon-orange animate-pulse',
+          bg: 'bg-neon-orange/10 border-neon-orange/30'
+        };
       case 'pending':
-        return <Clock size={18} className="text-slate-400" />;
+        return { 
+          symbol: '◷', 
+          text: 'QUEUED', 
+          class: 'text-terminal-400',
+          bg: 'bg-terminal-800 border-terminal-600'
+        };
       case 'success':
-        return <CheckCircle2 size={18} className="text-green-400" />;
+        return { 
+          symbol: '✓', 
+          text: 'SUCCESS', 
+          class: 'text-neon-green',
+          bg: 'bg-neon-green/10 border-neon-green/30'
+        };
       case 'failed':
-        return <XCircle size={18} className="text-red-400" />;
+        return { 
+          symbol: '✗', 
+          text: 'FAILED', 
+          class: 'text-neon-red',
+          bg: 'bg-neon-red/10 border-neon-red/30'
+        };
       case 'cancelled':
-        return <StopCircle size={18} className="text-slate-400" />;
+        return { 
+          symbol: '○', 
+          text: 'CANCELLED', 
+          class: 'text-terminal-500',
+          bg: 'bg-terminal-800 border-terminal-600'
+        };
       default:
-        return <Clock size={18} className="text-slate-400" />;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'running': return 'Läuft';
-      case 'pending': return 'Wartend';
-      case 'success': return 'Erfolgreich';
-      case 'failed': return 'Fehlgeschlagen';
-      case 'cancelled': return 'Abgebrochen';
-      default: return status;
+        return { 
+          symbol: '?', 
+          text: status.toUpperCase(), 
+          class: 'text-terminal-400',
+          bg: 'bg-terminal-800 border-terminal-600'
+        };
     }
   };
 
   const formatDuration = (start?: Date, end?: Date) => {
-    if (!start) return '-';
+    if (!start) return '--:--';
     const endTime = end || new Date();
     const duration = Math.floor((endTime.getTime() - new Date(start).getTime()) / 1000);
     const minutes = Math.floor(duration / 60);
     const seconds = duration % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const counts = {
+    all: jobs.length,
+    running: jobs.filter(j => j.status === 'running' || j.status === 'pending').length,
+    completed: jobs.filter(j => j.status === 'success').length,
+    failed: jobs.filter(j => j.status === 'failed').length
   };
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Filter Bar */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1 border border-slate-700">
-          <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
-            Alle ({jobs.length})
-          </FilterButton>
-          <FilterButton active={filter === 'running'} onClick={() => setFilter('running')}>
-            Aktiv ({jobs.filter(j => j.status === 'running' || j.status === 'pending').length})
-          </FilterButton>
-          <FilterButton active={filter === 'completed'} onClick={() => setFilter('completed')}>
-            Erfolgreich ({jobs.filter(j => j.status === 'success').length})
-          </FilterButton>
-          <FilterButton active={filter === 'failed'} onClick={() => setFilter('failed')}>
-            Fehlgeschlagen ({jobs.filter(j => j.status === 'failed').length})
-          </FilterButton>
+      {/* Terminal Header */}
+      <div className="terminal-window">
+        <div className="terminal-header">
+          <span className="text-neon-green">▸</span>
+          <span>PROCESS_QUEUE</span>
+          <span className="text-terminal-500">//</span>
+          <span className="text-terminal-400">{jobs.length} total</span>
+        </div>
+        
+        {/* Filter Tabs */}
+        <div className="flex border-b border-terminal-700">
+          <FilterTab 
+            active={filter === 'all'} 
+            onClick={() => setFilter('all')}
+            count={counts.all}
+          >
+            ALL
+          </FilterTab>
+          <FilterTab 
+            active={filter === 'running'} 
+            onClick={() => setFilter('running')}
+            count={counts.running}
+            accent="orange"
+          >
+            ACTIVE
+          </FilterTab>
+          <FilterTab 
+            active={filter === 'completed'} 
+            onClick={() => setFilter('completed')}
+            count={counts.completed}
+            accent="green"
+          >
+            PASSED
+          </FilterTab>
+          <FilterTab 
+            active={filter === 'failed'} 
+            onClick={() => setFilter('failed')}
+            count={counts.failed}
+            accent="red"
+          >
+            FAILED
+          </FilterTab>
         </div>
       </div>
 
-      {/* Jobs List */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      {/* Jobs Table */}
+      <div className="terminal-window">
+        {/* Table Header */}
+        <div className="grid grid-cols-[auto_1fr_120px_100px_80px_100px] gap-4 px-4 py-2 
+                        border-b border-terminal-700 text-xs text-terminal-500 font-mono uppercase">
+          <div className="w-8">ST</div>
+          <div>Process</div>
+          <div>Goals</div>
+          <div className="text-right">Duration</div>
+          <div className="text-right">PID</div>
+          <div className="text-right">Actions</div>
+        </div>
+
+        {/* Jobs List */}
         {filteredJobs.length === 0 ? (
           <div className="p-12 text-center">
-            <Clock size={48} className="mx-auto text-slate-600 mb-4" />
-            <p className="text-slate-400">
-              {filter === 'all' ? 'Keine Jobs vorhanden' : 'Keine Jobs in dieser Kategorie'}
+            <div className="text-4xl text-terminal-700 mb-4 font-mono">[ ]</div>
+            <p className="text-terminal-500 text-sm font-mono">
+              {filter === 'all' ? 'NO_PROCESSES_IN_QUEUE' : `NO_${filter.toUpperCase()}_PROCESSES`}
+            </p>
+            <p className="text-terminal-600 text-xs mt-2 font-mono">
+              Start a build from a project to see it here
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-700">
-            {filteredJobs.map((job) => (
-              <div
-                key={job.id}
-                className="p-4 flex items-center gap-4 hover:bg-slate-700/50 transition-colors"
-              >
-                {/* Status Icon */}
-                <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center">
-                  {getStatusIcon(job.status)}
-                </div>
-
-                {/* Job Info */}
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-medium text-white truncate">{job.name}</h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-400">
-                      {job.mavenGoals.join(' ')}
-                    </span>
-                    <span className="text-xs text-slate-500">•</span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(job.createdAt).toLocaleTimeString('de-DE')}
+          <div className="divide-y divide-terminal-800">
+            {filteredJobs.map((job, index) => {
+              const status = getStatusConfig(job.status);
+              return (
+                <div
+                  key={job.id}
+                  className="grid grid-cols-[auto_1fr_120px_100px_80px_100px] gap-4 px-4 py-3
+                             hover:bg-terminal-800/50 transition-colors group cursor-pointer"
+                  onClick={() => handleViewJob(job.id)}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  {/* Status Indicator */}
+                  <div className="w-8 flex items-center justify-center">
+                    <span className={`text-lg font-mono ${status.class}`}>
+                      {status.symbol}
                     </span>
                   </div>
-                  
-                  {/* Progress Bar */}
-                  {job.status === 'running' && (
-                    <div className="mt-2 w-full h-1.5 bg-slate-600 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gfos-500 transition-all duration-300"
-                        style={{ width: `${job.progress}%` }}
-                      />
+
+                  {/* Job Name & Info */}
+                  <div className="min-w-0 flex flex-col justify-center">
+                    <div className="flex items-center gap-2">
+                      <span className="text-terminal-200 font-mono text-sm truncate group-hover:text-neon-green transition-colors">
+                        {job.name}
+                      </span>
+                      <span className={`px-1.5 py-0.5 text-[10px] font-mono border ${status.bg}`}>
+                        {status.text}
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <span className="text-terminal-500 text-xs font-mono">
+                      {new Date(job.createdAt).toLocaleString('de-DE', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                    
+                    {/* Progress Bar for Running Jobs */}
+                    {job.status === 'running' && (
+                      <div className="mt-2 h-1 bg-terminal-800 overflow-hidden">
+                        <div 
+                          className="h-full bg-neon-orange transition-all duration-300"
+                          style={{ width: `${job.progress}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
 
-                {/* Duration */}
-                <div className="text-right">
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    job.status === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
-                    job.status === 'success' ? 'bg-green-500/20 text-green-400' :
-                    job.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                    'bg-slate-600 text-slate-300'
-                  }`}>
-                    {getStatusText(job.status)}
-                  </span>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {formatDuration(job.startedAt, job.completedAt)}
-                  </p>
-                </div>
+                  {/* Maven Goals */}
+                  <div className="flex items-center">
+                    <span className="text-terminal-400 text-xs font-mono truncate">
+                      {job.mavenGoals.join(' ')}
+                    </span>
+                  </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleViewJob(job.id)}
-                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-600 transition-colors"
-                    title="Details anzeigen"
-                  >
-                    <Eye size={18} />
-                  </button>
-                  
-                  {job.status === 'running' && (
+                  {/* Duration */}
+                  <div className="flex items-center justify-end">
+                    <span className={`text-xs font-mono tabular-nums ${
+                      job.status === 'running' ? 'text-neon-orange' : 'text-terminal-400'
+                    }`}>
+                      {formatDuration(job.startedAt, job.completedAt)}
+                    </span>
+                  </div>
+
+                  {/* PID */}
+                  <div className="flex items-center justify-end">
+                    <span className="text-terminal-600 text-xs font-mono">
+                      #{job.id.slice(-6)}
+                    </span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
                     <button
-                      onClick={() => handleCancelJob(job.id)}
-                      className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-600 transition-colors"
-                      title="Abbrechen"
+                      onClick={() => handleViewJob(job.id)}
+                      className="p-1.5 text-terminal-500 hover:text-neon-cyan hover:bg-terminal-800 
+                                 transition-colors font-mono text-xs"
+                      title="View logs"
                     >
-                      <StopCircle size={18} />
+                      [LOG]
                     </button>
-                  )}
-                  
-                  {(job.status === 'success' || job.status === 'failed' || job.status === 'cancelled') && (
-                    <button
-                      onClick={() => handleDeleteJob(job.id)}
-                      className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-600 transition-colors"
-                      title="Löschen"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  )}
+                    
+                    {job.status === 'running' && (
+                      <button
+                        onClick={() => handleCancelJob(job.id)}
+                        className="p-1.5 text-terminal-500 hover:text-neon-red hover:bg-terminal-800 
+                                   transition-colors font-mono text-xs"
+                        title="Cancel"
+                      >
+                        [×]
+                      </button>
+                    )}
+                    
+                    {(job.status === 'success' || job.status === 'failed' || job.status === 'cancelled') && (
+                      <button
+                        onClick={() => handleDeleteJob(job.id)}
+                        className="p-1.5 text-terminal-500 hover:text-neon-red hover:bg-terminal-800 
+                                   transition-colors font-mono text-xs"
+                        title="Remove"
+                      >
+                        [DEL]
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
+        
+        {/* Footer Stats */}
+        <div className="px-4 py-2 border-t border-terminal-700 flex items-center justify-between 
+                        text-xs font-mono text-terminal-500">
+          <span>
+            Showing {filteredJobs.length} of {jobs.length} processes
+          </span>
+          <span>
+            {counts.running > 0 && (
+              <span className="text-neon-orange mr-4">● {counts.running} active</span>
+            )}
+            {counts.failed > 0 && (
+              <span className="text-neon-red">● {counts.failed} failed</span>
+            )}
+          </span>
+        </div>
       </div>
     </div>
   );
 }
 
-interface FilterButtonProps {
+interface FilterTabProps {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  count: number;
+  accent?: 'green' | 'red' | 'orange';
 }
 
-function FilterButton({ active, onClick, children }: FilterButtonProps) {
+function FilterTab({ active, onClick, children, count, accent }: FilterTabProps) {
+  const accentColors = {
+    green: 'text-neon-green border-neon-green',
+    red: 'text-neon-red border-neon-red',
+    orange: 'text-neon-orange border-neon-orange'
+  };
+  
   return (
     <button
       onClick={onClick}
       className={`
-        px-3 py-1.5 text-sm font-medium rounded-md transition-colors
+        px-4 py-2 text-xs font-mono transition-all relative
         ${active 
-          ? 'bg-gfos-600 text-white' 
-          : 'text-slate-400 hover:text-white hover:bg-slate-700'
+          ? `${accent ? accentColors[accent] : 'text-neon-green border-neon-green'} border-b-2` 
+          : 'text-terminal-500 hover:text-terminal-300 border-b-2 border-transparent'
         }
       `}
     >
       {children}
+      <span className={`ml-2 ${active ? '' : 'text-terminal-600'}`}>
+        [{count}]
+      </span>
     </button>
   );
 }

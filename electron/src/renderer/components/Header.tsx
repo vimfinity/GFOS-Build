@@ -1,13 +1,13 @@
 /**
  * Header Component
  * 
- * Top navigation bar with breadcrumb and actions.
+ * Terminal-style header with path breadcrumb and system actions.
  */
 
 import React from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { api } from '../api';
-import { ChevronLeft, RefreshCw, FolderOpen } from 'lucide-react';
+import { ChevronLeft, RotateCw, ExternalLink, Clock } from 'lucide-react';
 
 export function Header() {
   const navigation = useAppStore((state) => state.navigation);
@@ -23,19 +23,20 @@ export function Header() {
 
   const canGoBack = navigation.history.length > 0;
   
-  const getTitle = (): string => {
+  const getPath = (): string[] => {
+    const base = ['GFOS'];
     switch (navigation.currentScreen) {
-      case 'HOME': return 'Dashboard';
-      case 'PROJECTS': return 'Projekte';
+      case 'HOME': return [...base, 'terminal'];
+      case 'PROJECTS': return [...base, 'projekte'];
       case 'PROJECT_DETAIL': {
         const project = projects.find(p => p.path === selectedProjectPath);
-        return project?.name || 'Projekt Details';
+        return [...base, 'projekte', project?.name || 'detail'];
       }
-      case 'BUILD_CONFIG': return 'Build konfigurieren';
-      case 'JOBS': return 'Build Jobs';
-      case 'JOB_DETAIL': return 'Job Details';
-      case 'SETTINGS': return 'Einstellungen';
-      default: return 'GFOS Build';
+      case 'BUILD_CONFIG': return [...base, 'projekte', 'build-config'];
+      case 'JOBS': return [...base, 'prozesse'];
+      case 'JOB_DETAIL': return [...base, 'prozesse', 'detail'];
+      case 'SETTINGS': return [...base, 'system'];
+      default: return base;
     }
   };
 
@@ -58,52 +59,80 @@ export function Header() {
     api.openPath(settings.scanRootPath);
   };
 
+  const path = getPath();
+  const currentTime = new Date().toLocaleTimeString('de-DE', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+
   return (
-    <header className="h-14 bg-slate-800/50 border-b border-slate-700 flex items-center px-4 gap-4">
+    <header className="h-12 bg-terminal-dark border-b border-terminal-border flex items-center px-4 gap-4">
       {/* Back Button */}
       {canGoBack && (
         <button
           onClick={goBack}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+          className="p-1.5 text-zinc-600 hover:text-neon-green transition-colors"
           title="Zurück"
         >
-          <ChevronLeft size={20} />
+          <ChevronLeft size={18} strokeWidth={1.5} />
         </button>
       )}
 
-      {/* Title */}
-      <h2 className="text-lg font-semibold text-white flex-1">{getTitle()}</h2>
+      {/* Path Breadcrumb - Terminal Style */}
+      <div className="flex items-center gap-1 flex-1 font-mono text-xs">
+        <span className="text-neon-green">›</span>
+        {path.map((segment, i) => (
+          <React.Fragment key={i}>
+            <span className={i === path.length - 1 ? 'text-zinc-300' : 'text-zinc-600'}>
+              {segment.toLowerCase()}
+            </span>
+            {i < path.length - 1 && <span className="text-zinc-700">/</span>}
+          </React.Fragment>
+        ))}
+        {!isScanning && <span className="text-neon-green animate-blink ml-0.5">_</span>}
+      </div>
 
       {/* Scan Status */}
       {(isScanning || scanStatus) && (
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <RefreshCw size={14} className="animate-spin" />
-          <span>{scanStatus || 'Scanne...'}</span>
+        <div className="flex items-center gap-2 px-3 py-1 border border-neon-green/30 bg-neon-green/5">
+          <RotateCw size={12} className="text-neon-green animate-spin" />
+          <span className="text-[10px] text-neon-green uppercase tracking-wider font-mono">
+            {scanStatus || 'Scanning'}
+          </span>
         </div>
       )}
 
+      {/* Time */}
+      <div className="flex items-center gap-2 text-zinc-600">
+        <Clock size={12} strokeWidth={1.5} />
+        <span className="text-[10px] font-mono tracking-wider">{currentTime}</span>
+      </div>
+
+      {/* Separator */}
+      <div className="w-px h-4 bg-terminal-border" />
+
       {/* Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <button
           onClick={handleOpenFolder}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+          className="p-1.5 text-zinc-600 hover:text-neon-green transition-colors"
           title="Projektordner öffnen"
         >
-          <FolderOpen size={18} />
+          <ExternalLink size={14} strokeWidth={1.5} />
         </button>
         <button
           onClick={handleRefresh}
           disabled={isScanning}
           className={`
-            p-2 rounded-lg transition-colors
+            p-1.5 transition-colors
             ${isScanning 
-              ? 'text-slate-500 cursor-not-allowed' 
-              : 'text-slate-400 hover:text-white hover:bg-slate-700'
+              ? 'text-zinc-700 cursor-not-allowed' 
+              : 'text-zinc-600 hover:text-neon-green'
             }
           `}
           title="Neu scannen"
         >
-          <RefreshCw size={18} className={isScanning ? 'animate-spin' : ''} />
+          <RotateCw size={14} strokeWidth={1.5} className={isScanning ? 'animate-spin' : ''} />
         </button>
       </div>
     </header>

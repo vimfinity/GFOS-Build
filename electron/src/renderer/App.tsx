@@ -1,7 +1,7 @@
 /**
  * Main App Component
  * 
- * Root component handling navigation and layout.
+ * Root component with terminal-inspired layout.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -16,6 +16,7 @@ import { BuildConfigView } from './views/BuildConfigView';
 import { JobsView } from './views/JobsView';
 import { JobDetailView } from './views/JobDetailView';
 import { SettingsView } from './views/SettingsView';
+import { Cpu, AlertTriangle } from 'lucide-react';
 
 // Initialize app
 const initApp = async () => {
@@ -108,48 +109,90 @@ export default function App() {
     }
   };
 
+  // Error State - Terminal Style
   if (initError) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-900">
-        <div className="text-center p-8 bg-slate-800 rounded-xl border border-red-500/30 max-w-md">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
-            <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+      <div className="flex items-center justify-center h-screen bg-terminal-black data-grid-bg">
+        <div className="text-center p-8 border border-neon-red bg-terminal-dark max-w-md relative">
+          {/* Corner decorations */}
+          <div className="absolute -top-px -left-px w-3 h-3 border-l border-t border-neon-red" />
+          <div className="absolute -bottom-px -right-px w-3 h-3 border-r border-b border-neon-red" />
+          
+          <div className="w-14 h-14 mx-auto mb-5 border border-neon-red flex items-center justify-center">
+            <AlertTriangle size={28} className="text-neon-red" />
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Fehler beim Starten</h2>
-          <p className="text-sm text-slate-400">{initError}</p>
+          
+          <div className="text-[10px] text-neon-red uppercase tracking-[0.2em] mb-2 font-display">
+            System Error
+          </div>
+          
+          <h2 className="text-lg font-display font-bold text-zinc-200 mb-3 uppercase tracking-wider">
+            Initialisierung fehlgeschlagen
+          </h2>
+          
+          <div className="p-3 bg-terminal-black border border-terminal-border text-left mb-4">
+            <p className="text-xs text-neon-red font-mono">&gt; {initError}</p>
+          </div>
+          
+          <button 
+            onClick={() => window.location.reload()} 
+            className="btn-danger text-xs"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
   }
 
+  // Loading State - Terminal Boot
   if (!settingsLoaded) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800">
-        <div className="text-center">
-          <div className="relative w-20 h-20 mx-auto mb-6">
-            <div className="absolute inset-0 rounded-full border-4 border-slate-700"></div>
-            <div className="absolute inset-0 rounded-full border-4 border-t-gfos-500 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
-            <div className="absolute inset-3 rounded-full bg-gradient-to-br from-gfos-500 to-gfos-700 flex items-center justify-center">
-              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-            </div>
+      <div className="flex items-center justify-center h-screen bg-terminal-black data-grid-bg relative overflow-hidden">
+        {/* Scanline overlay */}
+        <div className="scanline-overlay" />
+        
+        <div className="text-center animate-terminal-boot">
+          {/* Logo */}
+          <div className="w-16 h-16 mx-auto mb-6 border border-neon-green relative flex items-center justify-center">
+            <Cpu size={32} className="text-neon-green" />
+            <div className="absolute -top-px -left-px w-2 h-2 bg-neon-green" />
+            <div className="absolute -bottom-px -right-px w-2 h-2 bg-neon-green" />
+            {/* Rotating border effect */}
+            <div className="absolute inset-0 border border-neon-green/30 animate-spin" style={{ animationDuration: '3s' }} />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">GFOS Build</h1>
-          <p className="text-slate-400">Lade Anwendung...</p>
+          
+          <h1 className="font-display text-xl font-bold text-neon-green tracking-[0.3em] uppercase mb-2 neon-glow-subtle">
+            GFOS BUILD
+          </h1>
+          
+          <p className="text-[10px] text-zinc-600 tracking-[0.2em] uppercase mb-6">
+            Maven Build System v1.0
+          </p>
+          
+          {/* Boot sequence text */}
+          <div className="font-mono text-[10px] text-zinc-600 space-y-1">
+            <p className="animate-fade-in stagger-1">&gt; Initializing system...</p>
+            <p className="animate-fade-in stagger-2">&gt; Loading configuration...</p>
+            <p className="animate-fade-in stagger-3">&gt; Scanning workspace<span className="animate-blink">_</span></p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white overflow-hidden">
+    <div className="flex h-screen bg-terminal-black text-zinc-300 overflow-hidden relative">
+      {/* Subtle scanline effect */}
+      <div className="scanline-overlay" />
+      
+      {/* Grid background */}
+      <div className="absolute inset-0 data-grid-bg pointer-events-none" />
+      
       <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
         <Header />
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-5">
           {renderScreen()}
         </main>
       </div>

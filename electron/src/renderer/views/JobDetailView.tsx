@@ -1,23 +1,12 @@
 /**
- * Job Detail View
+ * Job Detail View - Terminal-Neon Design
  * 
- * Shows detailed job information with live logs.
+ * Process monitor with live log streaming.
  */
 
 import React, { useEffect, useRef } from 'react';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
-import { 
-  CheckCircle2, 
-  XCircle, 
-  Clock,
-  Play,
-  StopCircle,
-  Coffee,
-  Terminal,
-  FolderOpen,
-  RotateCcw
-} from 'lucide-react';
 
 export function JobDetailView() {
   const selectedJobId = useAppStore((state) => state.selectedJobId);
@@ -85,176 +74,249 @@ export function JobDetailView() {
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusConfig = (status: string) => {
     switch (status) {
       case 'running':
-        return <Play size={20} className="text-yellow-400 animate-pulse" />;
+        return { symbol: '▶', text: 'RUNNING', class: 'text-neon-orange animate-pulse', border: 'border-neon-orange' };
       case 'pending':
-        return <Clock size={20} className="text-slate-400" />;
+        return { symbol: '◷', text: 'QUEUED', class: 'text-terminal-400', border: 'border-terminal-600' };
       case 'success':
-        return <CheckCircle2 size={20} className="text-green-400" />;
+        return { symbol: '✓', text: 'SUCCESS', class: 'text-neon-green', border: 'border-neon-green' };
       case 'failed':
-        return <XCircle size={20} className="text-red-400" />;
+        return { symbol: '✗', text: 'FAILED', class: 'text-neon-red', border: 'border-neon-red' };
       case 'cancelled':
-        return <StopCircle size={20} className="text-slate-400" />;
+        return { symbol: '○', text: 'CANCELLED', class: 'text-terminal-500', border: 'border-terminal-600' };
       default:
-        return <Clock size={20} className="text-slate-400" />;
+        return { symbol: '?', text: status.toUpperCase(), class: 'text-terminal-400', border: 'border-terminal-600' };
     }
   };
 
   const getLogLineClass = (line: string): string => {
-    if (line.includes('[ERROR]') || line.includes('FAILURE')) return 'log-line error';
-    if (line.includes('[WARNING]')) return 'log-line warning';
-    if (line.includes('SUCCESS') || line.includes('BUILD SUCCESS')) return 'log-line success';
-    return 'log-line info';
+    if (line.includes('[ERROR]') || line.includes('FAILURE') || line.includes('Exception')) {
+      return 'text-neon-red';
+    }
+    if (line.includes('[WARNING]')) {
+      return 'text-neon-orange';
+    }
+    if (line.includes('SUCCESS') || line.includes('BUILD SUCCESS')) {
+      return 'text-neon-green font-bold';
+    }
+    if (line.includes('[INFO]')) {
+      return 'text-terminal-400';
+    }
+    if (line.startsWith('---') || line.startsWith('===')) {
+      return 'text-neon-cyan';
+    }
+    return 'text-terminal-300';
   };
 
   const formatDate = (date?: Date) => {
-    if (!date) return '-';
-    return new Date(date).toLocaleString('de-DE');
+    if (!date) return '--:--:--';
+    return new Date(date).toLocaleString('de-DE', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   };
 
   const formatDuration = (start?: Date, end?: Date) => {
-    if (!start) return '-';
+    if (!start) return '--:--';
     const endTime = end || new Date();
     const duration = Math.floor((endTime.getTime() - new Date(start).getTime()) / 1000);
     const minutes = Math.floor(duration / 60);
     const seconds = duration % 60;
-    return `${minutes}m ${seconds}s`;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
   if (!job) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-slate-400">Job nicht gefunden</p>
+      <div className="flex items-center justify-center h-64 terminal-window">
+        <div className="text-center">
+          <div className="text-4xl text-terminal-700 mb-2 font-mono">404</div>
+          <p className="text-terminal-500 font-mono text-sm">PROCESS_NOT_FOUND</p>
+        </div>
       </div>
     );
   }
 
+  const status = getStatusConfig(job.status);
+
   return (
-    <div className="space-y-6 animate-fade-in h-full flex flex-col">
-      {/* Job Header */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-4">
-            <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${
-              job.status === 'running' ? 'bg-yellow-500/20' :
-              job.status === 'success' ? 'bg-green-500/20' :
-              job.status === 'failed' ? 'bg-red-500/20' :
-              'bg-slate-700'
-            }`}>
-              {getStatusIcon(job.status)}
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">{job.name}</h2>
-              <p className="text-slate-400 mt-1">{job.mavenGoals.join(' ')}</p>
-              <div className="flex items-center gap-3 mt-2">
-                <span className={`px-2 py-1 text-xs font-medium rounded ${
-                  job.status === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
-                  job.status === 'success' ? 'bg-green-500/20 text-green-400' :
-                  job.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                  'bg-slate-600 text-slate-300'
-                }`}>
-                  {job.status === 'running' ? 'Läuft' :
-                   job.status === 'success' ? 'Erfolgreich' :
-                   job.status === 'failed' ? 'Fehlgeschlagen' :
-                   job.status === 'cancelled' ? 'Abgebrochen' : 'Wartend'}
+    <div className="space-y-4 animate-fade-in h-full flex flex-col">
+      {/* Process Header */}
+      <div className="terminal-window">
+        <div className="terminal-header">
+          <span className={status.class}>{status.symbol}</span>
+          <span>{job.name}</span>
+          <span className="text-terminal-500">//</span>
+          <span className="text-terminal-400">PID #{job.id.slice(-6)}</span>
+        </div>
+        
+        <div className="p-4">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              {/* Status Symbol */}
+              <div className={`w-16 h-16 border-2 ${status.border} flex items-center justify-center bg-terminal-900`}>
+                <span className={`text-3xl font-mono ${status.class}`}>
+                  {status.symbol}
                 </span>
-                {job.status === 'running' && (
-                  <span className="text-sm text-slate-400">{job.progress}%</span>
-                )}
+              </div>
+              
+              <div>
+                <h2 className="text-lg font-mono text-terminal-100">{job.name}</h2>
+                <p className="text-terminal-500 font-mono text-sm mt-1">
+                  $ mvn {job.mavenGoals.join(' ')}
+                </p>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className={`px-2 py-0.5 text-xs font-mono border ${status.border} ${status.class}`}>
+                    {status.text}
+                  </span>
+                  {job.status === 'running' && (
+                    <span className="text-sm text-neon-orange font-mono tabular-nums">
+                      {job.progress}%
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleOpenFolder}
-              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white transition-colors flex items-center gap-2"
-            >
-              <FolderOpen size={18} />
-              Öffnen
-            </button>
             
-            {job.status === 'running' ? (
+            {/* Actions */}
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleCancel}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center gap-2"
+                onClick={handleOpenFolder}
+                className="btn-ghost text-xs"
               >
-                <StopCircle size={18} />
-                Abbrechen
+                [OPEN_DIR]
               </button>
-            ) : (
-              <button
-                onClick={handleRerun}
-                className="px-4 py-2 rounded-lg bg-gfos-600 text-white hover:bg-gfos-500 transition-colors flex items-center gap-2"
-              >
-                <RotateCcw size={18} />
-                Erneut starten
-              </button>
-            )}
+              
+              {job.status === 'running' ? (
+                <button
+                  onClick={handleCancel}
+                  className="btn-danger text-xs"
+                >
+                  [KILL]
+                </button>
+              ) : (
+                <button
+                  onClick={handleRerun}
+                  className="btn-neon text-xs"
+                >
+                  [RERUN]
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Progress Bar */}
-        {job.status === 'running' && (
-          <div className="mt-4 w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-gfos-500 to-gfos-400 transition-all duration-300"
-              style={{ width: `${job.progress}%` }}
-            />
-          </div>
-        )}
+          {/* Progress Bar */}
+          {job.status === 'running' && (
+            <div className="mt-4 h-1 bg-terminal-800 overflow-hidden">
+              <div
+                className="h-full bg-neon-orange transition-all duration-300 relative"
+                style={{ width: `${job.progress}%` }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-data-stream" />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Details Grid */}
-      <div className="grid grid-cols-4 gap-4">
-        <DetailCard label="JDK" value={job.jdkPath.split(/[/\\]/).pop() || '-'} icon={<Coffee size={16} />} />
-        <DetailCard label="Gestartet" value={formatDate(job.startedAt)} />
-        <DetailCard label="Beendet" value={formatDate(job.completedAt)} />
-        <DetailCard label="Dauer" value={formatDuration(job.startedAt, job.completedAt)} />
+      <div className="grid grid-cols-4 gap-2">
+        <DetailCard 
+          label="JDK" 
+          value={job.jdkPath.split(/[/\\]/).pop() || '-'} 
+        />
+        <DetailCard 
+          label="START" 
+          value={formatDate(job.startedAt)} 
+        />
+        <DetailCard 
+          label="END" 
+          value={formatDate(job.completedAt)} 
+        />
+        <DetailCard 
+          label="DURATION" 
+          value={formatDuration(job.startedAt, job.completedAt)}
+          highlight={job.status === 'running'}
+        />
       </div>
 
-      {/* Options */}
+      {/* Options/Flags */}
       {(job.skipTests || job.offline || job.enableThreads || (job.profiles && job.profiles.length > 0)) && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 px-1">
           {job.skipTests && (
-            <span className="px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded">-DskipTests</span>
+            <span className="px-2 py-0.5 text-xs font-mono bg-terminal-800 text-terminal-400 border border-terminal-700">
+              -DskipTests
+            </span>
           )}
           {job.offline && (
-            <span className="px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded">Offline</span>
+            <span className="px-2 py-0.5 text-xs font-mono bg-terminal-800 text-terminal-400 border border-terminal-700">
+              --offline
+            </span>
           )}
           {job.enableThreads && (
-            <span className="px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded">-T {job.threads}</span>
+            <span className="px-2 py-0.5 text-xs font-mono bg-terminal-800 text-terminal-400 border border-terminal-700">
+              -T{job.threads}
+            </span>
           )}
           {job.profiles?.map((profile) => (
-            <span key={profile} className="px-2 py-1 text-xs bg-purple-500/20 text-purple-400 rounded">
-              {profile}
+            <span 
+              key={profile} 
+              className="px-2 py-0.5 text-xs font-mono bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
+            >
+              -P{profile}
             </span>
           ))}
         </div>
       )}
 
       {/* Log Output */}
-      <div className="flex-1 bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col min-h-0">
-        <div className="p-3 border-b border-slate-700 flex items-center gap-2">
-          <Terminal size={18} className="text-gfos-400" />
-          <h3 className="text-sm font-medium text-white">Build Log</h3>
-          <span className="text-xs text-slate-400">({logs.length} Zeilen)</span>
+      <div className="flex-1 terminal-window flex flex-col min-h-0 overflow-hidden">
+        <div className="terminal-header justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-neon-green">▸</span>
+            <span>STDOUT</span>
+            <span className="text-terminal-600">|</span>
+            <span className="text-terminal-400">{logs.length} lines</span>
+          </div>
+          {job.status === 'running' && (
+            <span className="text-neon-green text-xs animate-pulse">● LIVE</span>
+          )}
         </div>
         
         <div
           ref={logContainerRef}
-          className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-900"
+          className="flex-1 overflow-auto p-4 font-mono text-xs bg-terminal-950 leading-relaxed"
         >
           {logs.length === 0 ? (
-            <p className="text-slate-500">Warte auf Log-Ausgabe...</p>
+            <div className="text-terminal-600">
+              <span className="animate-pulse">█</span> Waiting for output...
+            </div>
           ) : (
             logs.map((line, index) => (
-              <div key={index} className={getLogLineClass(line)}>
+              <div 
+                key={index} 
+                className={`${getLogLineClass(line)} whitespace-pre-wrap break-all`}
+              >
+                <span className="text-terminal-700 select-none mr-3">
+                  {String(index + 1).padStart(4, '0')}
+                </span>
                 {line}
               </div>
             ))
+          )}
+        </div>
+        
+        {/* Log Footer */}
+        <div className="px-4 py-2 border-t border-terminal-700 flex items-center justify-between text-xs font-mono">
+          <span className="text-terminal-600">
+            {job.projectPath}
+          </span>
+          {job.status === 'running' && (
+            <span className="text-terminal-500">
+              Press Ctrl+C to cancel
+            </span>
           )}
         </div>
       </div>
@@ -265,17 +327,16 @@ export function JobDetailView() {
 interface DetailCardProps {
   label: string;
   value: string;
-  icon?: React.ReactNode;
+  highlight?: boolean;
 }
 
-function DetailCard({ label, value, icon }: DetailCardProps) {
+function DetailCard({ label, value, highlight }: DetailCardProps) {
   return (
-    <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
-      <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
-        {icon}
+    <div className="terminal-window p-3">
+      <div className="text-terminal-600 text-[10px] font-mono uppercase mb-1">
         {label}
       </div>
-      <p className="text-white text-sm font-medium truncate" title={value}>
+      <p className={`font-mono text-sm truncate ${highlight ? 'text-neon-orange' : 'text-terminal-200'}`} title={value}>
         {value}
       </p>
     </div>

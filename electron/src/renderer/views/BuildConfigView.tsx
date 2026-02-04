@@ -1,21 +1,13 @@
 /**
- * Build Config View
+ * Build Config View - Terminal-Neon Design
  * 
- * Configure and start a build.
+ * Build parameter configuration interface.
  */
 
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
 import type { BuildJob } from '../types';
-import { 
-  Play, 
-  Coffee, 
-  Settings2,
-  ChevronDown,
-  Check,
-  X
-} from 'lucide-react';
 
 export function BuildConfigView() {
   const navigation = useAppStore((state) => state.navigation);
@@ -123,153 +115,178 @@ export function BuildConfigView() {
 
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-slate-400">Projekt nicht gefunden</p>
+      <div className="flex items-center justify-center h-64 terminal-window">
+        <div className="text-center">
+          <div className="text-4xl text-terminal-700 mb-2 font-mono">404</div>
+          <p className="text-terminal-500 font-mono text-sm">PROJECT_NOT_FOUND</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+    <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
+      {/* Header */}
+      <div className="terminal-window">
+        <div className="terminal-header">
+          <span className="text-neon-orange">▶</span>
+          <span>BUILD_CONFIG</span>
+          <span className="text-terminal-500">//</span>
+          <span className="text-terminal-400">{project.name}</span>
+        </div>
+      </div>
+
       {/* Build Target */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-white mb-4">Build-Ziel</h3>
-        <div className="bg-slate-700/50 rounded-lg p-4">
-          <p className="text-white font-medium">{project.name}</p>
-          {modulePath && (
-            <p className="text-sm text-gfos-400 mt-1">Modul: {modulePath}</p>
-          )}
-          <p className="text-sm text-slate-400 mt-1">{project.path}</p>
+      <div className="terminal-window animate-slide-up" style={{ animationDelay: '0ms' }}>
+        <div className="terminal-header">
+          <span className="text-neon-green">▸</span>
+          <span>TARGET</span>
+        </div>
+        <div className="p-4">
+          <div className="flex items-center gap-3">
+            <span className="text-neon-green text-lg">⎇</span>
+            <div>
+              <p className="text-terminal-100 font-mono">{project.name}</p>
+              {modulePath && (
+                <p className="text-neon-cyan text-sm font-mono mt-0.5">
+                  └─ module: {modulePath}
+                </p>
+              )}
+              <p className="text-terminal-600 text-xs font-mono mt-1">{project.path}</p>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* JDK Selection */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Coffee size={20} className="text-orange-400" />
-          JDK auswählen
-        </h3>
-        
-        <div className="relative">
-          <button
-            onClick={() => setJdkDropdownOpen(!jdkDropdownOpen)}
-            className="w-full flex items-center justify-between p-4 bg-slate-700/50 rounded-lg border border-slate-600 hover:border-gfos-500 transition-colors"
-          >
-            <div>
-              {selectedJdkInfo ? (
-                <>
-                  <p className="text-white font-medium">{selectedJdkInfo.version}</p>
-                  <p className="text-sm text-slate-400">{selectedJdkInfo.jdkHome}</p>
-                </>
-              ) : (
-                <p className="text-slate-400">JDK auswählen...</p>
-              )}
-            </div>
-            <ChevronDown size={20} className={`text-slate-400 transition-transform ${jdkDropdownOpen ? 'rotate-180' : ''}`} />
-          </button>
-          
-          {jdkDropdownOpen && (
-            <div className="absolute z-10 w-full mt-2 bg-slate-700 rounded-lg border border-slate-600 shadow-xl overflow-hidden">
-              {jdks.map((jdk) => (
-                <button
-                  key={jdk.jdkHome}
-                  onClick={() => {
-                    setSelectedJdk(jdk.jdkHome);
-                    setJdkDropdownOpen(false);
-                  }}
-                  className={`w-full p-3 flex items-center gap-3 hover:bg-slate-600 transition-colors text-left ${
-                    selectedJdk === jdk.jdkHome ? 'bg-gfos-600/20' : ''
-                  }`}
-                >
-                  <Coffee size={18} className="text-orange-400" />
-                  <div className="flex-1">
-                    <p className="text-white text-sm font-medium">{jdk.version}</p>
-                    <p className="text-xs text-slate-400">{jdk.vendor}</p>
-                  </div>
-                  {selectedJdk === jdk.jdkHome && (
-                    <Check size={18} className="text-gfos-400" />
-                  )}
-                </button>
-              ))}
-              {jdks.length === 0 && (
-                <p className="p-4 text-sm text-slate-400 text-center">
-                  Keine JDKs gefunden
-                </p>
-              )}
-            </div>
-          )}
+      <div className="terminal-window animate-slide-up" style={{ animationDelay: '50ms' }}>
+        <div className="terminal-header">
+          <span className="text-neon-orange">☕</span>
+          <span>JAVA_HOME</span>
+        </div>
+        <div className="p-4">
+          <div className="relative">
+            <button
+              onClick={() => setJdkDropdownOpen(!jdkDropdownOpen)}
+              className="w-full flex items-center justify-between p-3 bg-terminal-900 border border-terminal-700 
+                         hover:border-neon-cyan/50 transition-colors font-mono text-sm"
+            >
+              <div className="text-left">
+                {selectedJdkInfo ? (
+                  <>
+                    <p className="text-terminal-200">{selectedJdkInfo.version}</p>
+                    <p className="text-terminal-600 text-xs">{selectedJdkInfo.jdkHome}</p>
+                  </>
+                ) : (
+                  <p className="text-terminal-500">SELECT_JDK...</p>
+                )}
+              </div>
+              <span className="text-terminal-500">{jdkDropdownOpen ? '▲' : '▼'}</span>
+            </button>
+            
+            {jdkDropdownOpen && (
+              <div className="absolute z-10 w-full mt-1 bg-terminal-900 border border-terminal-700 overflow-hidden">
+                {jdks.map((jdk, index) => (
+                  <button
+                    key={jdk.jdkHome}
+                    onClick={() => {
+                      setSelectedJdk(jdk.jdkHome);
+                      setJdkDropdownOpen(false);
+                    }}
+                    className={`w-full p-3 flex items-center gap-3 hover:bg-terminal-800 transition-colors text-left ${
+                      selectedJdk === jdk.jdkHome ? 'bg-neon-green/10 border-l-2 border-neon-green' : ''
+                    }`}
+                  >
+                    <span className="text-neon-orange">☕</span>
+                    <div className="flex-1 font-mono">
+                      <p className="text-terminal-200 text-sm">{jdk.version}</p>
+                      <p className="text-xs text-terminal-600">{jdk.vendor}</p>
+                    </div>
+                    {selectedJdk === jdk.jdkHome && (
+                      <span className="text-neon-green">✓</span>
+                    )}
+                  </button>
+                ))}
+                {jdks.length === 0 && (
+                  <p className="p-4 text-sm text-terminal-500 text-center font-mono">
+                    NO_JDK_FOUND
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Maven Goals */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Settings2 size={20} className="text-gfos-400" />
-          Maven Goals
-        </h3>
-        
-        <input
-          type="text"
-          value={mavenGoals}
-          onChange={(e) => setMavenGoals(e.target.value)}
-          placeholder="z.B. clean install"
-          className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-gfos-500 focus:ring-1 focus:ring-gfos-500 transition-colors"
-        />
-        
-        <div className="flex flex-wrap gap-2 mt-3">
-          {['clean', 'install', 'package', 'test', 'verify', 'deploy'].map((goal) => (
-            <button
-              key={goal}
-              onClick={() => setMavenGoals((prev) => prev.includes(goal) ? prev : `${prev} ${goal}`.trim())}
-              className="px-3 py-1 text-sm bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
-            >
-              {goal}
-            </button>
-          ))}
+      <div className="terminal-window animate-slide-up" style={{ animationDelay: '100ms' }}>
+        <div className="terminal-header">
+          <span className="text-neon-cyan">$</span>
+          <span>MVN_GOALS</span>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-neon-cyan font-mono">$</span>
+            <span className="text-terminal-500 font-mono text-sm">mvn</span>
+            <input
+              type="text"
+              value={mavenGoals}
+              onChange={(e) => setMavenGoals(e.target.value)}
+              placeholder="clean install"
+              className="flex-1 terminal-input"
+            />
+          </div>
+          
+          <div className="flex flex-wrap gap-1">
+            {['clean', 'install', 'package', 'test', 'verify', 'deploy'].map((goal) => (
+              <button
+                key={goal}
+                onClick={() => setMavenGoals((prev) => prev.includes(goal) ? prev : `${prev} ${goal}`.trim())}
+                className="px-2 py-1 text-xs font-mono bg-terminal-800 text-terminal-400 
+                           border border-terminal-700 hover:border-neon-cyan/50 hover:text-neon-cyan transition-colors"
+              >
+                {goal}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Options */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-white mb-4">Optionen</h3>
-        
-        <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={skipTests}
-              onChange={(e) => setSkipTests(e.target.checked)}
-              className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-gfos-500 focus:ring-gfos-500 focus:ring-offset-slate-800"
-            />
-            <div>
-              <p className="text-white group-hover:text-gfos-400 transition-colors">Tests überspringen</p>
-              <p className="text-sm text-slate-400">-DskipTests</p>
-            </div>
-          </label>
+      <div className="terminal-window animate-slide-up" style={{ animationDelay: '150ms' }}>
+        <div className="terminal-header">
+          <span className="text-terminal-400">⚙</span>
+          <span>BUILD_FLAGS</span>
+        </div>
+        <div className="p-4 space-y-3">
+          <ToggleOption
+            label="SKIP_TESTS"
+            flag="-DskipTests"
+            checked={skipTests}
+            onChange={setSkipTests}
+          />
           
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={offline}
-              onChange={(e) => setOffline(e.target.checked)}
-              className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-gfos-500 focus:ring-gfos-500 focus:ring-offset-slate-800"
-            />
-            <div>
-              <p className="text-white group-hover:text-gfos-400 transition-colors">Offline-Modus</p>
-              <p className="text-sm text-slate-400">-o (keine Netzwerkzugriffe)</p>
-            </div>
-          </label>
+          <ToggleOption
+            label="OFFLINE_MODE"
+            flag="--offline"
+            checked={offline}
+            onChange={setOffline}
+          />
           
           <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={enableThreads}
-              onChange={(e) => setEnableThreads(e.target.checked)}
-              className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-gfos-500 focus:ring-gfos-500 focus:ring-offset-slate-800"
-            />
+            <button
+              onClick={() => setEnableThreads(!enableThreads)}
+              className={`w-6 h-6 border flex items-center justify-center font-mono text-xs transition-colors ${
+                enableThreads
+                  ? 'border-neon-green bg-neon-green/20 text-neon-green'
+                  : 'border-terminal-600 text-terminal-600'
+              }`}
+            >
+              {enableThreads ? '✓' : ''}
+            </button>
             <div className="flex-1">
-              <p className="text-white">Parallele Builds</p>
-              <p className="text-sm text-slate-400">-T (Multi-Threading)</p>
+              <span className="text-terminal-300 font-mono text-sm">PARALLEL_BUILD</span>
+              <span className="text-terminal-600 font-mono text-xs ml-2">-T</span>
             </div>
             {enableThreads && (
               <input
@@ -277,7 +294,7 @@ export function BuildConfigView() {
                 value={threads}
                 onChange={(e) => setThreads(e.target.value)}
                 placeholder="1C"
-                className="w-20 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:border-gfos-500"
+                className="w-16 terminal-input text-center"
               />
             )}
           </div>
@@ -286,40 +303,102 @@ export function BuildConfigView() {
 
       {/* Profiles */}
       {profiles.length > 0 && (
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-          <h3 className="text-lg font-semibold text-white mb-4">Profile</h3>
-          <div className="flex flex-wrap gap-2">
-            {profiles.map((profile) => (
-              <button
-                key={profile}
-                onClick={() => toggleProfile(profile)}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1 ${
-                  selectedProfiles.includes(profile)
-                    ? 'bg-gfos-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                {selectedProfiles.includes(profile) && <Check size={14} />}
-                {profile}
-              </button>
-            ))}
+        <div className="terminal-window animate-slide-up" style={{ animationDelay: '200ms' }}>
+          <div className="terminal-header">
+            <span className="text-neon-cyan">-P</span>
+            <span>PROFILES</span>
+            <span className="text-terminal-600">[{selectedProfiles.length}/{profiles.length}]</span>
+          </div>
+          <div className="p-4">
+            <div className="flex flex-wrap gap-2">
+              {profiles.map((profile) => (
+                <button
+                  key={profile}
+                  onClick={() => toggleProfile(profile)}
+                  className={`px-3 py-1.5 text-xs font-mono border transition-all ${
+                    selectedProfiles.includes(profile)
+                      ? 'border-neon-cyan bg-neon-cyan/20 text-neon-cyan'
+                      : 'border-terminal-700 text-terminal-400 hover:border-terminal-500'
+                  }`}
+                >
+                  {selectedProfiles.includes(profile) && '✓ '}
+                  {profile}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Command Preview */}
+      <div className="terminal-window animate-slide-up" style={{ animationDelay: '250ms' }}>
+        <div className="terminal-header">
+          <span className="text-terminal-500">#</span>
+          <span className="text-terminal-500">PREVIEW</span>
+        </div>
+        <div className="p-3 bg-terminal-950">
+          <code className="text-xs font-mono text-terminal-400 break-all">
+            <span className="text-neon-green">$</span>{' '}
+            <span className="text-terminal-300">JAVA_HOME</span>=
+            <span className="text-neon-orange">{selectedJdkInfo?.jdkHome || '...'}</span>{' '}
+            <span className="text-neon-cyan">mvn</span>{' '}
+            {mavenGoals}{' '}
+            {skipTests && <span className="text-terminal-500">-DskipTests </span>}
+            {offline && <span className="text-terminal-500">--offline </span>}
+            {enableThreads && <span className="text-terminal-500">-T{threads} </span>}
+            {selectedProfiles.map(p => <span key={p} className="text-neon-cyan">-P{p} </span>)}
+          </code>
+        </div>
+      </div>
 
       {/* Start Button */}
       <button
         onClick={handleStartBuild}
         disabled={!selectedJdk || !mavenGoals.trim()}
-        className={`w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-2 transition-all ${
+        className={`w-full py-4 font-mono text-sm flex items-center justify-center gap-3 
+                    border-2 transition-all ${
           selectedJdk && mavenGoals.trim()
-            ? 'bg-gradient-to-r from-gfos-500 to-gfos-600 text-white hover:from-gfos-400 hover:to-gfos-500 shadow-lg shadow-gfos-500/25'
-            : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+            ? 'border-neon-green text-neon-green hover:bg-neon-green/10 active:bg-neon-green/20'
+            : 'border-terminal-700 text-terminal-600 cursor-not-allowed'
         }`}
       >
-        <Play size={24} />
-        Build starten
+        <span className="text-xl">▶</span>
+        <span>EXECUTE_BUILD</span>
+        <span className="text-xs">[ENTER]</span>
       </button>
     </div>
+  );
+}
+
+interface ToggleOptionProps {
+  label: string;
+  flag: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function ToggleOption({ label, flag, checked, onChange }: ToggleOptionProps) {
+  return (
+    <label className="flex items-center gap-3 cursor-pointer group">
+      <button
+        onClick={() => onChange(!checked)}
+        className={`w-6 h-6 border flex items-center justify-center font-mono text-xs transition-colors ${
+          checked
+            ? 'border-neon-green bg-neon-green/20 text-neon-green'
+            : 'border-terminal-600 text-terminal-600 group-hover:border-terminal-500'
+        }`}
+      >
+        {checked ? '✓' : ''}
+      </button>
+      <div className="flex-1">
+        <span className="text-terminal-300 font-mono text-sm group-hover:text-terminal-100 transition-colors">
+          {label}
+        </span>
+        <span className="text-terminal-600 font-mono text-xs ml-2">{flag}</span>
+      </div>
+      <span className="text-xs font-mono text-terminal-700">
+        {checked ? '[ON]' : '[OFF]'}
+      </span>
+    </label>
   );
 }

@@ -1,18 +1,12 @@
 /**
- * Settings View
+ * Settings View - Terminal-Neon Design
  * 
- * Configure application settings.
+ * System configuration interface.
  */
 
 import React, { useState } from 'react';
 import { api } from '../api';
 import { useAppStore } from '../store/useAppStore';
-import { 
-  Save, 
-  FolderOpen, 
-  RefreshCw,
-  Info
-} from 'lucide-react';
 
 export function SettingsView() {
   const settings = useAppStore((state) => state.settings);
@@ -59,204 +53,285 @@ export function SettingsView() {
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(localSettings);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
-      {/* Paths Section */}
-      <SettingsSection title="Pfade" description="Konfiguriere die Scan-Pfade für Projekte und JDKs">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Projekt-Verzeichnis
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={localSettings.scanRootPath}
-                onChange={(e) => handleChange('scanRootPath', e.target.value)}
-                className="flex-1 px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-gfos-500 focus:ring-1 focus:ring-gfos-500"
-                placeholder="C:\dev\quellen"
-              />
-              <button
-                onClick={() => handleSelectFolder('scanRootPath')}
-                className="px-4 py-2.5 bg-slate-700 rounded-lg text-slate-300 hover:bg-slate-600 hover:text-white transition-colors"
-              >
-                <FolderOpen size={18} />
-              </button>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Wurzelverzeichnis für die Projektsuche
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              JDK-Verzeichnisse
-            </label>
-            <input
-              type="text"
-              value={localSettings.jdkScanPaths}
-              onChange={(e) => handleChange('jdkScanPaths', e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-gfos-500 focus:ring-1 focus:ring-gfos-500"
-              placeholder="C:\dev\java"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Mehrere Pfade mit Semikolon trennen (z.B. C:\Java;D:\JDKs)
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Maven Home
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={localSettings.defaultMavenHome}
-                onChange={(e) => handleChange('defaultMavenHome', e.target.value)}
-                className="flex-1 px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-gfos-500 focus:ring-1 focus:ring-gfos-500"
-                placeholder="C:\dev\maven\mvn3"
-              />
-              <button
-                onClick={() => handleSelectFolder('defaultMavenHome')}
-                className="px-4 py-2.5 bg-slate-700 rounded-lg text-slate-300 hover:bg-slate-600 hover:text-white transition-colors"
-              >
-                <FolderOpen size={18} />
-              </button>
-            </div>
-          </div>
+    <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
+      {/* Header */}
+      <div className="terminal-window">
+        <div className="terminal-header">
+          <span className="text-neon-cyan">⚙</span>
+          <span>SYSTEM_CONFIG</span>
+          <span className="text-terminal-500">//</span>
+          <span className="text-terminal-400">v1.0.0</span>
         </div>
-      </SettingsSection>
+      </div>
+
+      {/* Paths Section */}
+      <ConfigSection 
+        title="PATH_CONFIG" 
+        description="Configure scan paths for projects and JDKs"
+        index={0}
+      >
+        <div className="space-y-4">
+          <ConfigInput
+            label="SCAN_ROOT"
+            value={localSettings.scanRootPath}
+            onChange={(v) => handleChange('scanRootPath', v)}
+            placeholder="C:\dev\quellen"
+            hint="Root directory for project discovery"
+            onBrowse={() => handleSelectFolder('scanRootPath')}
+          />
+
+          <ConfigInput
+            label="JDK_PATHS"
+            value={localSettings.jdkScanPaths}
+            onChange={(v) => handleChange('jdkScanPaths', v)}
+            placeholder="C:\dev\java"
+            hint="Multiple paths separated by semicolon"
+          />
+
+          <ConfigInput
+            label="MAVEN_HOME"
+            value={localSettings.defaultMavenHome}
+            onChange={(v) => handleChange('defaultMavenHome', v)}
+            placeholder="C:\dev\maven\mvn3"
+            onBrowse={() => handleSelectFolder('defaultMavenHome')}
+          />
+        </div>
+      </ConfigSection>
 
       {/* Build Defaults Section */}
-      <SettingsSection title="Build-Einstellungen" description="Standard-Einstellungen für neue Builds">
+      <ConfigSection 
+        title="BUILD_DEFAULTS" 
+        description="Default settings for new build jobs"
+        index={1}
+      >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Standard Maven Goals
-            </label>
-            <input
-              type="text"
-              value={localSettings.defaultMavenGoal}
-              onChange={(e) => handleChange('defaultMavenGoal', e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-gfos-500 focus:ring-1 focus:ring-gfos-500"
-              placeholder="clean install"
-            />
-          </div>
+          <ConfigInput
+            label="DEFAULT_GOALS"
+            value={localSettings.defaultMavenGoal}
+            onChange={(v) => handleChange('defaultMavenGoal', v)}
+            placeholder="clean install"
+          />
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Max. parallele Builds
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={8}
-              value={localSettings.maxParallelBuilds}
-              onChange={(e) => handleChange('maxParallelBuilds', parseInt(e.target.value) || 1)}
-              className="w-24 px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:border-gfos-500 focus:ring-1 focus:ring-gfos-500"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <label className="flex items-center gap-3 cursor-pointer group">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-mono text-terminal-500 uppercase mb-1">
+                MAX_PARALLEL
+              </label>
               <input
-                type="checkbox"
-                checked={localSettings.skipTestsByDefault}
-                onChange={(e) => handleChange('skipTestsByDefault', e.target.checked)}
-                className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-gfos-500 focus:ring-gfos-500 focus:ring-offset-slate-800"
+                type="number"
+                min={1}
+                max={8}
+                value={localSettings.maxParallelBuilds}
+                onChange={(e) => handleChange('maxParallelBuilds', parseInt(e.target.value) || 1)}
+                className="terminal-input w-full"
               />
-              <div>
-                <p className="text-white group-hover:text-gfos-400 transition-colors">
-                  Tests standardmäßig überspringen
-                </p>
-                <p className="text-sm text-slate-400">-DskipTests bei allen Builds</p>
-              </div>
-            </label>
-
-            <label className="flex items-center gap-3 cursor-pointer group">
+            </div>
+            
+            <div>
+              <label className="block text-[10px] font-mono text-terminal-500 uppercase mb-1">
+                THREAD_COUNT
+              </label>
               <input
-                type="checkbox"
-                checked={localSettings.offlineMode}
-                onChange={(e) => handleChange('offlineMode', e.target.checked)}
-                className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-gfos-500 focus:ring-gfos-500 focus:ring-offset-slate-800"
+                type="text"
+                value={localSettings.threadCount}
+                onChange={(e) => handleChange('threadCount', e.target.value)}
+                placeholder="1C"
+                disabled={!localSettings.enableThreads}
+                className={`terminal-input w-full ${!localSettings.enableThreads ? 'opacity-50' : ''}`}
               />
-              <div>
-                <p className="text-white group-hover:text-gfos-400 transition-colors">
-                  Offline-Modus
-                </p>
-                <p className="text-sm text-slate-400">Keine Netzwerkzugriffe bei Builds</p>
-              </div>
-            </label>
-
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={localSettings.enableThreads}
-                onChange={(e) => handleChange('enableThreads', e.target.checked)}
-                className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-gfos-500 focus:ring-gfos-500 focus:ring-offset-slate-800"
-              />
-              <div className="flex-1">
-                <p className="text-white">Parallele Builds (-T)</p>
-                <p className="text-sm text-slate-400">Maven Multi-Threading aktivieren</p>
-              </div>
-              {localSettings.enableThreads && (
-                <input
-                  type="text"
-                  value={localSettings.threadCount}
-                  onChange={(e) => handleChange('threadCount', e.target.value)}
-                  placeholder="1C"
-                  className="w-20 px-3 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:border-gfos-500"
-                />
-              )}
             </div>
           </div>
-        </div>
-      </SettingsSection>
 
-      {/* Save Button */}
-      <div className="flex items-center justify-end gap-4">
-        {saved && (
-          <span className="text-sm text-green-400 flex items-center gap-1">
-            <Info size={14} />
-            Einstellungen gespeichert
-          </span>
-        )}
-        <button
-          onClick={handleSave}
-          disabled={!hasChanges || saving}
-          className={`
-            px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all
-            ${hasChanges && !saving
-              ? 'bg-gfos-600 text-white hover:bg-gfos-500 shadow-lg shadow-gfos-500/25'
-              : 'bg-slate-700 text-slate-400 cursor-not-allowed'
-            }
-          `}
-        >
-          {saving ? (
-            <RefreshCw size={18} className="animate-spin" />
-          ) : (
-            <Save size={18} />
-          )}
-          {saving ? 'Speichere...' : 'Speichern'}
-        </button>
+          <div className="border-t border-terminal-700 pt-4 space-y-3">
+            <ConfigToggle
+              label="SKIP_TESTS"
+              description="-DskipTests on all builds"
+              checked={localSettings.skipTestsByDefault}
+              onChange={(v) => handleChange('skipTestsByDefault', v)}
+            />
+
+            <ConfigToggle
+              label="OFFLINE_MODE"
+              description="No network access during builds"
+              checked={localSettings.offlineMode}
+              onChange={(v) => handleChange('offlineMode', v)}
+            />
+
+            <ConfigToggle
+              label="ENABLE_THREADS"
+              description="Maven multi-threading (-T)"
+              checked={localSettings.enableThreads}
+              onChange={(v) => handleChange('enableThreads', v)}
+            />
+          </div>
+        </div>
+      </ConfigSection>
+
+      {/* Actions */}
+      <div className="terminal-window">
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {hasChanges && (
+              <span className="text-neon-orange text-xs font-mono animate-pulse">
+                ● UNSAVED_CHANGES
+              </span>
+            )}
+            {saved && (
+              <span className="text-neon-green text-xs font-mono">
+                ✓ CONFIG_SAVED
+              </span>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setLocalSettings(settings)}
+              disabled={!hasChanges}
+              className="btn-ghost text-xs disabled:opacity-30"
+            >
+              [RESET]
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges || saving}
+              className={`text-xs font-mono px-4 py-2 border transition-all ${
+                hasChanges && !saving
+                  ? 'border-neon-green text-neon-green hover:bg-neon-green/10'
+                  : 'border-terminal-700 text-terminal-600 cursor-not-allowed'
+              }`}
+            >
+              {saving ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin">◐</span>
+                  SAVING...
+                </span>
+              ) : (
+                '[SAVE_CONFIG]'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Debug Info */}
+      <div className="text-[10px] font-mono text-terminal-700 text-right px-2">
+        CONFIG_PATH: ~/.gfos-build/config.json
       </div>
     </div>
   );
 }
 
-interface SettingsSectionProps {
+interface ConfigSectionProps {
   title: string;
   description: string;
   children: React.ReactNode;
+  index: number;
 }
 
-function SettingsSection({ title, description, children }: SettingsSectionProps) {
+function ConfigSection({ title, description, children, index }: ConfigSectionProps) {
   return (
-    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
-        <p className="text-sm text-slate-400 mt-1">{description}</p>
+    <div 
+      className="terminal-window animate-slide-up"
+      style={{ animationDelay: `${index * 100}ms` }}
+    >
+      <div className="terminal-header">
+        <span className="text-neon-green">▸</span>
+        <span>{title}</span>
       </div>
-      {children}
+      <div className="px-4 py-1 border-b border-terminal-800">
+        <p className="text-xs text-terminal-500 font-mono"># {description}</p>
+      </div>
+      <div className="p-4">
+        {children}
+      </div>
     </div>
+  );
+}
+
+interface ConfigInputProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  hint?: string;
+  onBrowse?: () => void;
+}
+
+function ConfigInput({ label, value, onChange, placeholder, hint, onBrowse }: ConfigInputProps) {
+  return (
+    <div>
+      <label className="block text-[10px] font-mono text-terminal-500 uppercase mb-1">
+        {label}
+      </label>
+      <div className="flex gap-2">
+        <div className="flex-1 relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-terminal-600 font-mono text-sm">
+            $
+          </span>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            className="terminal-input w-full pl-7"
+          />
+        </div>
+        {onBrowse && (
+          <button
+            onClick={onBrowse}
+            className="px-3 py-2 bg-terminal-800 border border-terminal-700 text-terminal-400 
+                       hover:text-neon-cyan hover:border-neon-cyan/50 transition-colors font-mono text-xs"
+          >
+            [...]
+          </button>
+        )}
+      </div>
+      {hint && (
+        <p className="text-[10px] text-terminal-600 font-mono mt-1">
+          // {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface ConfigToggleProps {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function ConfigToggle({ label, description, checked, onChange }: ConfigToggleProps) {
+  return (
+    <label className="flex items-center gap-3 cursor-pointer group">
+      <div 
+        className={`w-10 h-5 border relative transition-colors ${
+          checked 
+            ? 'border-neon-green bg-neon-green/20' 
+            : 'border-terminal-600 bg-terminal-900'
+        }`}
+        onClick={() => onChange(!checked)}
+      >
+        <div 
+          className={`absolute top-0.5 w-4 h-4 transition-all ${
+            checked 
+              ? 'right-0.5 bg-neon-green' 
+              : 'left-0.5 bg-terminal-600'
+          }`}
+        />
+      </div>
+      <div className="flex-1">
+        <p className={`text-sm font-mono transition-colors ${
+          checked ? 'text-neon-green' : 'text-terminal-300 group-hover:text-terminal-100'
+        }`}>
+          {label}
+        </p>
+        <p className="text-xs text-terminal-600 font-mono">{description}</p>
+      </div>
+      <span className="text-xs font-mono text-terminal-600">
+        {checked ? '[ON]' : '[OFF]'}
+      </span>
+    </label>
   );
 }
