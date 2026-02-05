@@ -3,7 +3,7 @@
  * Ctrl+K to open, search across projects, builds, pipelines
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, FolderGit2, Play, Workflow, Coffee,
@@ -44,6 +44,29 @@ export default function SearchModal() {
     setSelectedIndex(0);
   }, [query, performSearch]);
 
+  const handleSelect = useCallback((result: SearchResult) => {
+    switch (result.type) {
+      case 'project': {
+        const project = projects.find(p => p.id === result.id);
+        if (project) setSelectedProject(project);
+        setActiveView('projects');
+        break;
+      }
+      case 'build':
+        setSelectedJobId(result.id);
+        setActiveView('job-log');
+        break;
+      case 'pipeline':
+        setSelectedPipelineId(result.id);
+        setActiveView('pipelines');
+        break;
+      case 'jdk':
+        setActiveView('jdks');
+        break;
+    }
+    setIsSearchOpen(false);
+  }, [projects, setSelectedProject, setActiveView, setSelectedJobId, setSelectedPipelineId, setIsSearchOpen]);
+
   // Keyboard navigation
   useEffect(() => {
     if (!isSearchOpen) return;
@@ -73,29 +96,7 @@ export default function SearchModal() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSearchOpen, searchResults, selectedIndex, setIsSearchOpen]);
-
-  const handleSelect = (result: SearchResult) => {
-    switch (result.type) {
-      case 'project':
-        const project = projects.find(p => p.id === result.id);
-        if (project) setSelectedProject(project);
-        setActiveView('projects');
-        break;
-      case 'build':
-        setSelectedJobId(result.id);
-        setActiveView('job-log');
-        break;
-      case 'pipeline':
-        setSelectedPipelineId(result.id);
-        setActiveView('pipelines');
-        break;
-      case 'jdk':
-        setActiveView('jdks');
-        break;
-    }
-    setIsSearchOpen(false);
-  };
+  }, [isSearchOpen, searchResults, selectedIndex, setIsSearchOpen, handleSelect]);
 
   const getIcon = (type: SearchResult['type']) => {
     switch (type) {

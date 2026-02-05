@@ -19,14 +19,12 @@ export default function Layout({ children }: LayoutProps) {
   const { 
     activeView, 
     setActiveView, 
-    searchQuery, 
-    setSearchQuery,
     setIsSearchOpen,
     notifications,
     removeNotification
   } = useAppStore();
   const stats = useStats();
-  const { theme, cycleTheme, isDark } = useTheme();
+  const { theme, cycleTheme } = useTheme();
 
   const getThemeIconComponent = () => {
     const iconType = getThemeIcon(theme);

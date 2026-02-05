@@ -10,6 +10,82 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
 /* ============================================
+   GFOS Official Color System
+   ============================================ */
+
+:root {
+  /* GFOS Brand Colors */
+  --gfos-petrol-50: #e6f2f4;
+  --gfos-petrol-100: #b0d7dc;
+  --gfos-petrol-200: #8ac3cb;
+  --gfos-petrol-300: #54a8b4;
+  --gfos-petrol-400: #3397a5;
+  --gfos-petrol-500: #007d8f;
+  --gfos-petrol-600: #007282;
+  --gfos-petrol-700: #005966;
+  --gfos-petrol-800: #00454f;
+  --gfos-petrol-900: #00353c;
+  
+  /* Gray Scale */
+  --gfos-gray-50: #ededed;
+  --gfos-gray-100: #c7c7c6;
+  --gfos-gray-200: #ababab;
+  --gfos-gray-300: #858584;
+  --gfos-gray-400: #6d6d6d;
+  --gfos-gray-500: #494948;
+  --gfos-gray-600: #424242;
+  --gfos-gray-700: #343433;
+  --gfos-gray-800: #282828;
+  --gfos-gray-900: #1f1f1e;
+  
+  /* Dark Scale */
+  --gfos-dark-50: #ececed;
+  --gfos-dark-100: #c3c3c6;
+  --gfos-dark-200: #a6a7aa;
+  --gfos-dark-300: #7d7e84;
+  --gfos-dark-400: #64656c;
+  --gfos-dark-500: #3d3f47;
+  --gfos-dark-600: #383941;
+  --gfos-dark-700: #2b2d32;
+  --gfos-dark-800: #222327;
+  --gfos-dark-900: #1a1a1e;
+  
+  /* Semantic Colors */
+  --gfos-success: #51c380;
+  --gfos-error: #c35151;
+  --gfos-warning: #ed8e00;
+  --gfos-info: #2980b9;
+  
+  /* Light Theme Defaults */
+  --gfos-bg-app: #ffffff;
+  --gfos-bg-surface: #f7f7f7;
+  --gfos-bg-panel: rgba(255, 255, 255, 0.7);
+  --gfos-bg-elevated: rgba(255, 255, 255, 0.9);
+  --gfos-text-primary: #3d3f47;
+  --gfos-text-secondary: #7d7e84;
+  --gfos-text-muted: #a6a7aa;
+  --gfos-border: rgba(0, 125, 143, 0.15);
+  --gfos-border-subtle: rgba(255, 255, 255, 0.8);
+  --gfos-accent: #007d8f;
+  --gfos-accent-light: rgba(0, 125, 143, 0.1);
+}
+
+/* Dark Theme Overrides */
+.gfos-dark {
+  --gfos-bg-app: #1a1a1e;
+  --gfos-bg-surface: #222327;
+  --gfos-bg-panel: rgba(34, 35, 39, 0.9);
+  --gfos-bg-elevated: rgba(43, 45, 50, 0.95);
+  --gfos-text-primary: #ffffff;
+  --gfos-text-secondary: #a6a7aa;
+  --gfos-text-muted: #7d7e84;
+  --gfos-border: rgba(255, 255, 255, 0.1);
+  --gfos-border-subtle: rgba(255, 255, 255, 0.05);
+  --gfos-accent: #007d8f;
+  --gfos-accent-light: rgba(0, 125, 143, 0.2);
+}
+
+/* ============================================
    Base Styles
    ============================================ */
 
@@ -2092,174 +2168,470 @@
 }
 
 /* ============================================
-   Dark Mode
+   Dark Mode - Using Official GFOS Colors
    ============================================ */
 
 .gfos-dark .gfos-page {
-  background: linear-gradient(135deg, #0f1419 0%, #1a2027 50%, #0d1117 100%);
+  background: linear-gradient(135deg, #1a1a1e 0%, #222327 50%, #1a1a1e 100%);
 }
 
 .gfos-dark .gfos-bg-base {
   background: 
-    radial-gradient(ellipse 100% 100% at 0% 0%, rgba(0, 125, 143, 0.15), transparent 50%),
-    radial-gradient(ellipse 80% 80% at 100% 100%, rgba(0, 163, 184, 0.1), transparent 40%);
+    radial-gradient(ellipse 100% 100% at 0% 0%, rgba(0, 125, 143, 0.12), transparent 50%),
+    radial-gradient(ellipse 80% 80% at 100% 100%, rgba(0, 125, 143, 0.08), transparent 40%);
 }
 
 .gfos-dark .gfos-liquid-1 {
-  background: radial-gradient(circle, rgba(0, 125, 143, 0.25), transparent 60%);
+  background: radial-gradient(circle, rgba(0, 125, 143, 0.15), transparent 60%);
 }
 
 .gfos-dark .gfos-liquid-2 {
-  background: radial-gradient(circle, rgba(0, 163, 184, 0.2), transparent 60%);
+  background: radial-gradient(circle, rgba(0, 125, 143, 0.12), transparent 60%);
 }
 
 .gfos-dark .gfos-liquid-3 {
-  background: radial-gradient(circle, rgba(0, 140, 158, 0.18), transparent 60%);
+  background: radial-gradient(circle, rgba(0, 125, 143, 0.1), transparent 60%);
 }
 
 .gfos-dark .gfos-header {
-  background: rgba(15, 20, 25, 0.8);
-  border-bottom-color: rgba(255, 255, 255, 0.1);
+  background: rgba(26, 26, 30, 0.95);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
 }
 
 .gfos-dark .gfos-logo-primary {
-  color: #00d4e8;
+  color: #007d8f;
 }
 
 .gfos-dark .gfos-logo-secondary {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .gfos-dark .gfos-nav {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .gfos-dark .gfos-nav-tab {
-  color: #9ca3af;
+  color: #a6a7aa;
 }
 
 .gfos-dark .gfos-nav-tab:hover {
-  color: #00d4e8;
-  background: rgba(0, 212, 232, 0.1);
+  color: #54a8b4;
+  background: rgba(0, 125, 143, 0.08);
 }
 
 .gfos-dark .gfos-nav-active {
-  background: rgba(0, 125, 143, 0.3);
-  color: #00d4e8;
-  box-shadow: 0 4px 16px rgba(0, 125, 143, 0.3);
+  background: rgba(0, 125, 143, 0.2);
+  color: #54a8b4;
+  box-shadow: 0 4px 12px rgba(0, 125, 143, 0.2);
 }
 
 .gfos-dark .gfos-search {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(43, 45, 50, 0.8);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .gfos-dark .gfos-search:focus-within {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(0, 212, 232, 0.4);
+  background: rgba(56, 57, 65, 0.9);
+  border-color: rgba(0, 125, 143, 0.4);
 }
 
 .gfos-dark .gfos-search input {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .gfos-dark .gfos-search input::placeholder {
-  color: #6b7280;
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-search-kbd {
+  background: rgba(255, 255, 255, 0.08);
+  color: #a6a7aa;
 }
 
 .gfos-dark .gfos-icon-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #9ca3af;
+  background: rgba(43, 45, 50, 0.8);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #a6a7aa;
 }
 
 .gfos-dark .gfos-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #00d4e8;
+  background: rgba(56, 57, 65, 0.9);
+  color: #54a8b4;
+  border-color: rgba(0, 125, 143, 0.3);
 }
 
 .gfos-dark .gfos-glass-panel {
-  background: rgba(15, 20, 25, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  background: rgba(34, 35, 39, 0.9);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
 .gfos-dark .gfos-hero {
-  background: rgba(15, 20, 25, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(34, 35, 39, 0.9);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .gfos-dark .gfos-hero h1 {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .gfos-dark .gfos-hero p {
-  color: #9ca3af;
+  color: #a6a7aa;
 }
 
 .gfos-dark .gfos-hero p strong {
-  color: #00d4e8;
+  color: #54a8b4;
+}
+
+.gfos-dark .gfos-hero-badge {
+  background: rgba(0, 125, 143, 0.15);
+  border-color: rgba(0, 125, 143, 0.3);
 }
 
 .gfos-dark .gfos-stats-river {
-  background: rgba(15, 20, 25, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(34, 35, 39, 0.9);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .gfos-dark .gfos-stat-value {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .gfos-dark .gfos-stat-label {
-  color: #6b7280;
+  color: #7d7e84;
 }
 
 .gfos-dark .gfos-panel-header h2 {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .gfos-dark .gfos-project-card {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(43, 45, 50, 0.7);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .gfos-dark .gfos-project-card:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(56, 57, 65, 0.8);
+  border-color: rgba(0, 125, 143, 0.2);
 }
 
 .gfos-dark .gfos-project-info h3 {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .gfos-dark .gfos-project-meta span {
-  color: #6b7280;
+  color: #7d7e84;
 }
 
 .gfos-dark .gfos-build-item {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(43, 45, 50, 0.7);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.gfos-dark .gfos-build-item:hover {
+  background: rgba(56, 57, 65, 0.8);
 }
 
 .gfos-dark .gfos-build-info h4 {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .gfos-dark .gfos-page-title h1 {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .gfos-dark .gfos-page-title p {
-  color: #6b7280;
+  color: #7d7e84;
 }
 
 .gfos-dark .gfos-notification {
-  background: #1a2027;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: #2b2d32;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .gfos-dark .gfos-notification span {
-  color: #e5e7eb;
+  color: #ffffff;
+}
+
+/* Dark Mode - Buttons & Forms */
+.gfos-dark .gfos-primary-btn {
+  background: linear-gradient(135deg, #007d8f, #005966);
+}
+
+.gfos-dark .gfos-secondary-btn {
+  background: rgba(43, 45, 50, 0.8);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #54a8b4;
+}
+
+.gfos-dark .gfos-secondary-btn:hover {
+  background: rgba(56, 57, 65, 0.9);
+  border-color: rgba(0, 125, 143, 0.3);
+}
+
+.gfos-dark .gfos-danger-btn {
+  background: rgba(195, 81, 81, 0.15);
+  border-color: rgba(195, 81, 81, 0.3);
+}
+
+.gfos-dark .gfos-form-group input,
+.gfos-dark .gfos-form-group select,
+.gfos-dark .gfos-form-group textarea {
+  background: rgba(43, 45, 50, 0.8);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-form-group input:focus,
+.gfos-dark .gfos-form-group select:focus,
+.gfos-dark .gfos-form-group textarea:focus {
+  background: rgba(56, 57, 65, 0.9);
+  border-color: rgba(0, 125, 143, 0.4);
+}
+
+.gfos-dark .gfos-form-group input::placeholder {
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-form-group label {
+  color: #a6a7aa;
+}
+
+/* Dark Mode - Cards & Panels */
+.gfos-dark .gfos-project-card-full {
+  background: rgba(43, 45, 50, 0.8);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.gfos-dark .gfos-project-card-full:hover {
+  background: rgba(56, 57, 65, 0.9);
+}
+
+.gfos-dark .gfos-project-name-row h3 {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-project-path {
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-tag {
+  background: rgba(0, 125, 143, 0.15);
+  color: #54a8b4;
+}
+
+.gfos-dark .gfos-tag-muted {
+  background: rgba(255, 255, 255, 0.06);
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-project-expanded-content {
+  background: rgba(34, 35, 39, 0.5);
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+.gfos-dark .gfos-info-item label {
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-info-item code {
+  background: rgba(0, 125, 143, 0.15);
+  color: #54a8b4;
+}
+
+/* Dark Mode - Builds View */
+.gfos-dark .gfos-build-stat-card {
+  background: rgba(43, 45, 50, 0.7);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.gfos-dark .gfos-build-stat-card:hover {
+  background: rgba(56, 57, 65, 0.8);
+}
+
+.gfos-dark .gfos-stat-active {
+  background: rgba(0, 125, 143, 0.15);
+  border-color: rgba(0, 125, 143, 0.3);
+}
+
+.gfos-dark .gfos-stat-number {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-build-row {
+  background: rgba(43, 45, 50, 0.7);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.gfos-dark .gfos-build-row:hover {
+  background: rgba(56, 57, 65, 0.8);
+}
+
+.gfos-dark .gfos-build-selected {
+  background: rgba(0, 125, 143, 0.12);
+  border-color: rgba(0, 125, 143, 0.25);
+}
+
+.gfos-dark .gfos-build-main-info h4 {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-build-goals {
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-build-jdk {
+  background: rgba(0, 125, 143, 0.15);
+  color: #54a8b4;
+}
+
+.gfos-dark .gfos-build-time-info {
+  color: #a6a7aa;
+}
+
+.gfos-dark .gfos-build-details-panel {
+  background: rgba(34, 35, 39, 0.98);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.gfos-dark .gfos-details-header h3 {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-detail-row label {
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-detail-row code {
+  background: rgba(0, 125, 143, 0.15);
+  color: #54a8b4;
+}
+
+/* Dark Mode - JDKs View */
+.gfos-dark .gfos-default-jdk-banner {
+  background: linear-gradient(135deg, rgba(0, 125, 143, 0.15), rgba(0, 89, 102, 0.12));
+  border-color: rgba(0, 125, 143, 0.25);
+}
+
+.gfos-dark .gfos-banner-value {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-banner-path {
+  background: rgba(43, 45, 50, 0.8);
+  color: #a6a7aa;
+}
+
+.gfos-dark .gfos-jdk-card-full {
+  background: rgba(43, 45, 50, 0.8);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.gfos-dark .gfos-jdk-card-full:hover {
+  background: rgba(56, 57, 65, 0.9);
+}
+
+.gfos-dark .gfos-jdk-is-default {
+  border-color: rgba(0, 125, 143, 0.3);
+  background: rgba(0, 125, 143, 0.08);
+}
+
+.gfos-dark .gfos-jdk-version-lg {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-jdk-vendor-lg {
+  color: #a6a7aa;
+}
+
+.gfos-dark .gfos-jdk-path code {
+  background: rgba(43, 45, 50, 0.8);
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-jdk-new {
+  border-color: rgba(0, 125, 143, 0.3);
+  background: rgba(0, 125, 143, 0.05);
+}
+
+.gfos-dark .gfos-jdk-form h3 {
+  color: #ffffff;
+}
+
+/* Dark Mode - Settings View */
+.gfos-dark .gfos-settings-section {
+  background: rgba(43, 45, 50, 0.8);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.gfos-dark .gfos-section-header h2 {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-input-hint {
+  color: #7d7e84;
+}
+
+.gfos-dark .gfos-toggle {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.gfos-dark .gfos-toggle-on {
+  background: #007d8f;
+}
+
+.gfos-dark .gfos-scan-path-item {
+  background: rgba(43, 45, 50, 0.8);
+}
+
+.gfos-dark .gfos-scan-path-item code {
+  color: #a6a7aa;
+}
+
+.gfos-dark .gfos-about-info h3 {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-about-info p {
+  color: #a6a7aa;
+}
+
+.gfos-dark .gfos-meta-value {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-unsaved-banner {
+  background: rgba(237, 142, 0, 0.9);
+}
+
+/* Dark Mode - Empty States */
+.gfos-dark .gfos-empty-state h3 {
+  color: #a6a7aa;
+}
+
+.gfos-dark .gfos-empty-state p {
+  color: #7d7e84;
+}
+
+/* Dark Mode - Dialogs */
+.gfos-dark .gfos-dialog-overlay {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.gfos-dark .gfos-dialog {
+  background: #2b2d32;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gfos-dark .gfos-dialog h3 {
+  color: #ffffff;
+}
+
+.gfos-dark .gfos-dialog p {
+  color: #a6a7aa;
 }
 
 /* ============================================
@@ -2288,8 +2660,8 @@
 }
 
 .gfos-dark .gfos-search-modal {
-  background: #1a2027;
-  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
+  background: #222327;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
 }
 
 .gfos-search-input-container {
@@ -2375,7 +2747,7 @@
 
 .gfos-dark .gfos-search-result:hover,
 .gfos-dark .gfos-search-selected {
-  background: rgba(0, 212, 232, 0.1);
+  background: rgba(0, 125, 143, 0.15);
 }
 
 .gfos-search-result-icon {
@@ -2506,8 +2878,8 @@
 }
 
 .gfos-dark .gfos-search-kbd {
-  background: rgba(0, 212, 232, 0.15);
-  color: #00d4e8;
+  background: rgba(0, 125, 143, 0.2);
+  color: #54a8b4;
 }
 
 /* ============================================
@@ -2535,7 +2907,8 @@
 }
 
 .gfos-dark .gfos-shortcuts-modal {
-  background: #1a2027;
+  background: #222327;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
 }
 
 .gfos-shortcuts-header {
@@ -2621,6 +2994,15 @@
   color: #007d8f;
 }
 
+.gfos-dark .gfos-shortcut-item {
+  background: rgba(0, 125, 143, 0.08);
+}
+
+.gfos-dark .gfos-shortcut-keys {
+  background: rgba(0, 125, 143, 0.15);
+  color: #54a8b4;
+}
+
 .gfos-shortcuts-footer {
   padding: 12px 24px;
   background: rgba(0, 125, 143, 0.04);
@@ -2638,6 +3020,16 @@
   font-size: 0.75rem;
   color: #007d8f;
   margin: 0 4px;
+}
+
+.gfos-dark .gfos-shortcuts-footer {
+  background: rgba(0, 125, 143, 0.06);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.gfos-dark .gfos-shortcuts-footer kbd {
+  background: rgba(0, 125, 143, 0.15);
+  color: #54a8b4;
 }
 
 /* ============================================

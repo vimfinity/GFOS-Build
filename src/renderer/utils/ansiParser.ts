@@ -87,6 +87,7 @@ export const ANSI_COLOR_CSS_DARK: Record<AnsiColor, string> = {
 
 // ANSI escape sequence regex
 // Matches: ESC[...m where ... is one or more numbers separated by semicolons
+// eslint-disable-next-line no-control-regex
 const ANSI_REGEX = /\x1b\[([0-9;]*)m/g;
 
 /**

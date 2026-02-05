@@ -55,7 +55,7 @@ export default function PipelineEditorView() {
       setSteps(existingPipeline.steps);
       setActiveStepIndex(0);
     }
-  }, [selectedPipelineId]);
+  }, [selectedPipelineId, existingPipeline]);
 
   const activeStep = steps[activeStepIndex];
 
