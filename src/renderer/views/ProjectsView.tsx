@@ -1,12 +1,13 @@
 /**
- * Projects View - Project Management
+ * Projects View - Project Management with Fuzzy Search
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Fuse from 'fuse.js';
 import { 
   FolderGit2, Coffee, Play, GitBranch, Clock, 
-  ChevronDown, Search, Trash2, Edit2, FolderOpen
+  ChevronDown, Search, Trash2, Edit2, FolderOpen, X
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { StatusIndicator, ConfirmDialog } from '../components/shared';
@@ -17,12 +18,20 @@ import type { Project } from '../store/useAppStore';
 export default function ProjectsView() {
   const { 
     projects, 
-    searchQuery, 
     startBuild, 
     removeProject,
     setProjects
   } = useAppStore();
   const [isScanning, setIsScanning] = useState(false);
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  
+  // Fuse.js configuration for fuzzy search
+  const fuse = useMemo(() => new Fuse(projects, {
+    keys: ['name', 'path', 'branch', 'jdk'],
+    threshold: 0.4,
+    includeScore: true,
+    ignoreLocation: true,
+  }), [projects]);
   
   // Convert DiscoveredProject to Project format
   const convertToProject = (discovered: { path: string; name: string }): Project => ({
@@ -59,12 +68,14 @@ export default function ProjectsView() {
     project: null
   });
 
-  // Filter projects based on search
-  const filteredProjects = projects.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.path.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.branch.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Fuzzy search filtering
+  const filteredProjects = useMemo(() => {
+    if (!localSearchQuery.trim()) {
+      return projects;
+    }
+    const results = fuse.search(localSearchQuery);
+    return results.map(r => r.item);
+  }, [projects, localSearchQuery, fuse]);
 
   const handleDelete = () => {
     if (deleteDialog.projectId) {
@@ -94,10 +105,29 @@ export default function ProjectsView() {
           <FolderGit2 size={28} />
           <div>
             <h1 className="text-2xl font-bold text-dark-500 dark:text-light-100">Projekte</h1>
-            <p className="text-sm text-dark-300 dark:text-light-400">{filteredProjects.length} Maven-Projekte gefunden</p>
+            <p className="text-sm text-dark-300 dark:text-light-400">{filteredProjects.length} von {projects.length} Projekten</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Search Input */}
+          <div className="relative">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-300 dark:text-light-500" />
+            <input
+              type="text"
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              placeholder="Projekte durchsuchen..."
+              className="w-64 pl-10 pr-10 py-2.5 bg-white/60 dark:bg-dark-700 border border-gray-200/50 dark:border-dark-600 rounded-xl text-dark-500 dark:text-light-100 placeholder-dark-300 dark:placeholder-light-500 focus:outline-none focus:ring-2 focus:ring-petrol-500/30 focus:border-petrol-500 transition-all"
+            />
+            {localSearchQuery && (
+              <button
+                onClick={() => setLocalSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-300 dark:text-light-500 hover:text-dark-500 dark:hover:text-light-100"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
           <button 
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-light-200 dark:bg-dark-700 text-dark-500 dark:text-light-100 font-medium rounded-xl hover:bg-light-300 dark:hover:bg-dark-600 transition-colors disabled:opacity-50" 
             disabled={isScanning}
@@ -115,7 +145,7 @@ export default function ProjectsView() {
           {filteredProjects.map((project, i) => (
             <motion.div
               key={project.id}
-              className={`bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)] overflow-hidden ${expandedProject === project.id ? 'ring-2 ring-petrol-500/30' : ''}`}
+              className={`bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-white/10 shadow-sm overflow-hidden ${expandedProject === project.id ? 'ring-2 ring-petrol-500/30' : ''}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -254,8 +284,8 @@ export default function ProjectsView() {
             <Search size={48} className="mb-4 text-dark-200" />
             <h3 className="text-lg font-semibold text-dark-400 dark:text-light-200 mb-2">Keine Projekte gefunden</h3>
             <p className="text-dark-300 dark:text-light-400 mb-6">
-              {searchQuery 
-                ? `Keine Projekte für "${searchQuery}" gefunden.`
+              {localSearchQuery 
+                ? `Keine Projekte für "${localSearchQuery}" gefunden.`
                 : 'Scanne einen Ordner, um Maven-Projekte zu finden.'}
             </p>
             <button 

@@ -174,7 +174,7 @@ export default function JdksView() {
           {jdks.map((jdk, i) => (
             <motion.div
               key={jdk.id}
-              className={`bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border ${jdk.isDefault ? 'border-petrol-300 dark:border-petrol-700 ring-1 ring-petrol-200 dark:ring-petrol-800' : 'border-white/80 dark:border-white/10'} shadow-[0_8px_32px_rgba(0,125,143,0.08)] p-6`}
+              className={`bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border ${jdk.isDefault ? 'border-petrol-300 dark:border-petrol-700 ring-1 ring-petrol-200 dark:ring-petrol-800' : 'border-gray-200/50 dark:border-white/10'} shadow-sm p-6`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}

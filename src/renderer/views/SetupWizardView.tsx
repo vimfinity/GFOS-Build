@@ -1,9 +1,9 @@
 /**
  * SetupWizardView - Initial Configuration Wizard
- * Guides users through first-time setup
+ * Guides users through first-time setup with immediate scanning
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Cpu, FolderSearch, Coffee, Settings, 
@@ -39,6 +39,12 @@ export default function SetupWizardView() {
   // Local scan results to display
   const [scannedJdks, setScannedJdks] = useState<Array<{ id: string; version: string; path: string; vendor: string }>>([]);
   const [scannedProjects, setScannedProjects] = useState<Array<{ name: string; path: string; hasPom: boolean }>>([]);
+  
+  // Separate scanning states for immediate feedback
+  const [isJdkScanning, setIsJdkScanning] = useState(false);
+  const [isProjectScanning, setIsProjectScanning] = useState(false);
+  const jdkScanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const projectScanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentStepIndex = STEPS.findIndex(s => s.id === setupWizard.currentStep);
 
@@ -59,6 +65,110 @@ export default function SetupWizardView() {
       goToStep(STEPS[prevIndex].id);
     }
   };
+
+  // Auto-scan JDKs with debounce
+  const scanJdksDebounced = useCallback(async (path: string) => {
+    if (!path.trim()) {
+      setScannedJdks([]);
+      return;
+    }
+    
+    setIsJdkScanning(true);
+    try {
+      const jdks = await api.scanJDKs(path);
+      setScannedJdks(jdks.map((jdk: { id?: string; jdkHome: string; version: string; vendor?: string }) => ({
+        id: jdk.id || jdk.jdkHome,
+        version: jdk.version,
+        path: jdk.jdkHome,
+        vendor: jdk.vendor || 'Unknown'
+      })));
+      
+      if (jdks.length > 0) {
+        setJdks(jdks.map((jdk: { id?: string; jdkHome: string; version: string; vendor?: string }, i: number) => ({
+          id: jdk.id || `jdk-${i}`,
+          version: jdk.version,
+          path: jdk.jdkHome,
+          vendor: jdk.vendor || 'Unknown',
+          isDefault: i === 0
+        })));
+      }
+    } catch (err) {
+      console.error('JDK scan failed:', err);
+    } finally {
+      setIsJdkScanning(false);
+    }
+  }, [setJdks]);
+
+  // Auto-scan Projects with debounce
+  const scanProjectsDebounced = useCallback(async (path: string) => {
+    if (!path.trim()) {
+      setScannedProjects([]);
+      return;
+    }
+    
+    setIsProjectScanning(true);
+    try {
+      const projects = await api.scanProjects(path);
+      setScannedProjects(projects.map((p: { name: string; path: string; hasPom?: boolean }) => ({
+        name: p.name,
+        path: p.path,
+        hasPom: p.hasPom ?? true
+      })));
+      
+      if (projects.length > 0) {
+        setProjects(projects.map((p: { name: string; path: string }, i: number) => ({
+          id: `project-${i}`,
+          name: p.name,
+          path: p.path,
+          branch: 'main',
+          jdk: 'JDK 21',
+          mavenGoals: 'clean install'
+        })));
+      }
+    } catch (err) {
+      console.error('Project scan failed:', err);
+    } finally {
+      setIsProjectScanning(false);
+    }
+  }, [setProjects]);
+
+  // Effect for auto-scanning JDKs when path changes
+  useEffect(() => {
+    if (jdkScanTimerRef.current) {
+      clearTimeout(jdkScanTimerRef.current);
+    }
+    
+    if (localJdkPath.trim()) {
+      jdkScanTimerRef.current = setTimeout(() => {
+        scanJdksDebounced(localJdkPath);
+      }, 800); // Debounce 800ms
+    }
+    
+    return () => {
+      if (jdkScanTimerRef.current) {
+        clearTimeout(jdkScanTimerRef.current);
+      }
+    };
+  }, [localJdkPath, scanJdksDebounced]);
+
+  // Effect for auto-scanning Projects when path changes
+  useEffect(() => {
+    if (projectScanTimerRef.current) {
+      clearTimeout(projectScanTimerRef.current);
+    }
+    
+    if (localScanPath.trim()) {
+      projectScanTimerRef.current = setTimeout(() => {
+        scanProjectsDebounced(localScanPath);
+      }, 800); // Debounce 800ms
+    }
+    
+    return () => {
+      if (projectScanTimerRef.current) {
+        clearTimeout(projectScanTimerRef.current);
+      }
+    };
+  }, [localScanPath, scanProjectsDebounced]);
 
   // Folder selection dialogs
   const selectProjectFolder = async () => {
@@ -300,6 +410,27 @@ export default function SetupWizardView() {
                     <Folder size={18} />
                   </button>
                 </div>
+                {/* Immediate scan feedback for projects */}
+                {localScanPath.trim() && (
+                  <div className="flex items-center gap-2 mt-2 text-sm">
+                    {isProjectScanning ? (
+                      <>
+                        <Loader2 size={14} className="text-petrol-500 animate-spin" />
+                        <span className="text-dark-300 dark:text-light-400">Scannt Projekte...</span>
+                      </>
+                    ) : scannedProjects.length > 0 ? (
+                      <>
+                        <Check size={14} className="text-success-500" />
+                        <span className="text-success-600 dark:text-success-400">{scannedProjects.length} Projekte gefunden</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle size={14} className="text-warning-500" />
+                        <span className="text-warning-600 dark:text-warning-400">Keine Maven-Projekte gefunden</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -326,6 +457,30 @@ export default function SetupWizardView() {
                     <Folder size={18} />
                   </button>
                 </div>
+                {/* Immediate scan feedback for JDKs */}
+                {localJdkPath.trim() && (
+                  <div className="flex items-center gap-2 mt-2 text-sm">
+                    {isJdkScanning ? (
+                      <>
+                        <Loader2 size={14} className="text-petrol-500 animate-spin" />
+                        <span className="text-dark-300 dark:text-light-400">Scannt JDKs...</span>
+                      </>
+                    ) : scannedJdks.length > 0 ? (
+                      <>
+                        <Check size={14} className="text-success-500" />
+                        <span className="text-success-600 dark:text-success-400">{scannedJdks.length} JDKs gefunden</span>
+                        <span className="text-dark-300 dark:text-light-400">
+                          ({scannedJdks.map(j => j.version).slice(0, 3).join(', ')}{scannedJdks.length > 3 ? ', ...' : ''})
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle size={14} className="text-warning-500" />
+                        <span className="text-warning-600 dark:text-warning-400">Keine JDKs gefunden</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -673,7 +828,7 @@ export default function SetupWizardView() {
       </div>
 
       {/* Step Content */}
-      <div className="flex-1 bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)] p-8 max-w-3xl mx-auto w-full">
+      <div className="flex-1 bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-white/10 shadow-sm p-8 max-w-3xl mx-auto w-full">
         <AnimatePresence mode="wait">
           {renderStep()}
         </AnimatePresence>

@@ -39,10 +39,10 @@ export function useTheme() {
     const root = document.documentElement;
     
     if (resolvedTheme === 'dark') {
-      root.classList.add('gfos-dark');
+      root.classList.add('dark');
       root.style.colorScheme = 'dark';
     } else {
-      root.classList.remove('gfos-dark');
+      root.classList.remove('dark');
       root.style.colorScheme = 'light';
     }
   }, [resolvedTheme]);

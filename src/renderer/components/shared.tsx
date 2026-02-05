@@ -54,7 +54,7 @@ export function FlowingStat({
   
   return (
     <motion.div 
-      className={`flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/60 dark:bg-dark-800/60 backdrop-blur-lg border border-white/80 dark:border-white/10 ${onClick ? 'cursor-pointer hover:bg-white dark:hover:bg-dark-700' : ''} transition-all duration-200`}
+      className={`flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/60 dark:bg-dark-800/60 backdrop-blur-lg border border-gray-200/50 dark:border-white/10 ${onClick ? 'cursor-pointer hover:bg-white dark:hover:bg-dark-700' : ''} transition-all duration-200`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
@@ -78,7 +78,7 @@ export function GlassPanel({
   className?: string;
   animate?: boolean;
 }) {
-  const baseClasses = "bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)]";
+  const baseClasses = "bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm";
   
   if (!animate) {
     return <section className={`${baseClasses} ${className}`}>{children}</section>;

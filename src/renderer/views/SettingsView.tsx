@@ -82,7 +82,7 @@ export default function SettingsView() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         {/* Maven Configuration */}
         <motion.section 
-          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)] p-6"
+          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-white/10 shadow-sm p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -154,7 +154,7 @@ export default function SettingsView() {
 
         {/* JDK Configuration */}
         <motion.section 
-          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)] p-6"
+          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-white/10 shadow-sm p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
@@ -224,12 +224,99 @@ export default function SettingsView() {
           </div>
         </motion.section>
 
-        {/* Scan Configuration */}
+        {/* Build Defaults */}
         <motion.section 
-          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)] p-6"
+          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-white/10 shadow-sm p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
+        >
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-dark-500 dark:text-light-100">Build Voreinstellungen</h2>
+          </div>
+
+          <div className="space-y-5">
+            {/* Skip Tests by Default */}
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="block text-sm font-medium text-dark-500 dark:text-light-100">Tests überspringen</span>
+                <span className="text-xs text-dark-300 dark:text-light-400">
+                  Standardmäßig -DskipTests bei neuen Builds aktivieren
+                </span>
+              </div>
+              <button 
+                className={`relative w-12 h-6 rounded-full transition-colors ${localSettings.skipTestsByDefault ? 'bg-petrol-500' : 'bg-light-300 dark:bg-dark-600'}`}
+                onClick={() => handleChange('skipTestsByDefault', !localSettings.skipTestsByDefault)}
+              >
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${localSettings.skipTestsByDefault ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+
+            {/* Offline Mode */}
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="block text-sm font-medium text-dark-500 dark:text-light-100">Offline Modus</span>
+                <span className="text-xs text-dark-300 dark:text-light-400">
+                  Builds im Offline-Modus ausführen (-o)
+                </span>
+              </div>
+              <button 
+                className={`relative w-12 h-6 rounded-full transition-colors ${localSettings.offlineMode ? 'bg-petrol-500' : 'bg-light-300 dark:bg-dark-600'}`}
+                onClick={() => handleChange('offlineMode', !localSettings.offlineMode)}
+              >
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${localSettings.offlineMode ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+
+            {/* Threading */}
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="block text-sm font-medium text-dark-500 dark:text-light-100">Multithreading</span>
+                <span className="text-xs text-dark-300 dark:text-light-400">
+                  Maven mit mehreren Threads ausführen (-T)
+                </span>
+              </div>
+              <button 
+                className={`relative w-12 h-6 rounded-full transition-colors ${localSettings.enableThreads ? 'bg-petrol-500' : 'bg-light-300 dark:bg-dark-600'}`}
+                onClick={() => handleChange('enableThreads', !localSettings.enableThreads)}
+              >
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${localSettings.enableThreads ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+
+            {/* Thread Count */}
+            {localSettings.enableThreads && (
+              <div className="space-y-2 pl-4 border-l-2 border-petrol-200 dark:border-petrol-800">
+                <label className="text-sm font-medium text-dark-400 dark:text-light-300">Thread Anzahl</label>
+                <div className="flex gap-2">
+                  {['1C', '2C', '4', '8'].map(count => (
+                    <button
+                      key={count}
+                      onClick={() => handleChange('threadCount', count)}
+                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        localSettings.threadCount === count
+                          ? 'bg-petrol-500 text-white'
+                          : 'bg-light-200 dark:bg-dark-700 text-dark-500 dark:text-light-100 hover:bg-light-300 dark:hover:bg-dark-600'
+                      }`}
+                    >
+                      {count}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-dark-300 dark:text-light-400">
+                  C = pro CPU-Kern (z.B. 1C = 1 Thread pro Kern)
+                </span>
+              </div>
+            )}
+          </div>
+        </motion.section>
+
+        {/* Scan Configuration */}
+        <motion.section 
+          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-white/10 shadow-sm p-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
         >
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-dark-500 dark:text-light-100">Projekt-Scan</h2>
@@ -285,7 +372,7 @@ export default function SettingsView() {
 
         {/* About Section */}
         <motion.section 
-          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)] p-6"
+          className="bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-white/10 shadow-sm p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}

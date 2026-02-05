@@ -99,7 +99,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-3">
             {/* Search Button */}
             <button 
-              className="flex items-center gap-2.5 px-4 py-2.5 bg-white/60 dark:bg-dark-700 border border-white/80 dark:border-dark-600 rounded-xl w-56 text-left transition-all hover:bg-white dark:hover:bg-dark-600 hover:shadow-[0_4px_20px_rgba(0,125,143,0.1)]"
+              className="flex items-center gap-2.5 px-4 py-2.5 bg-white/60 dark:bg-dark-700 border border-gray-200/60 dark:border-dark-600 rounded-xl w-56 text-left transition-all hover:bg-white dark:hover:bg-dark-600 hover:shadow-md"
               onClick={() => setIsSearchOpen(true)}
             >
               <Search size={18} className="text-dark-300" />
@@ -170,7 +170,7 @@ function NavTab({
     <button 
       className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 ${
         active 
-          ? 'bg-white dark:bg-dark-600 text-petrol-500 shadow-[0_4px_16px_rgba(0,125,143,0.15)]' 
+          ? 'bg-white dark:bg-dark-600 text-petrol-500 shadow-sm' 
           : 'text-dark-400 dark:text-light-400 hover:text-petrol-500 hover:bg-petrol-50/50 dark:hover:bg-petrol-900/20'
       }`}
       onClick={onClick}

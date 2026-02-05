@@ -97,7 +97,7 @@ export default function PipelinesView() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
       >
-        <div className="flex-1 p-4 bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-xl border border-white/80 dark:border-white/10">
+        <div className="flex-1 p-4 bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-white/10">
           <span className="block text-2xl font-bold text-dark-500 dark:text-light-100">{pipelines.length}</span>
           <span className="text-sm text-dark-300 dark:text-light-400">Gesamt</span>
         </div>

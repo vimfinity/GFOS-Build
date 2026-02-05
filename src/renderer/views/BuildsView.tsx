@@ -141,7 +141,7 @@ export default function BuildsView() {
               key={stat.key}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${
                 filter === stat.key 
-                  ? 'bg-petrol-500 text-white shadow-[0_4px_12px_rgba(0,125,143,0.25)]' 
+                  ? 'bg-petrol-500 text-white shadow-sm' 
                   : 'bg-white/60 dark:bg-dark-700/60 text-dark-500 dark:text-light-100 hover:bg-white dark:hover:bg-dark-600'
               }`}
               onClick={() => setFilter(stat.key as FilterType)}
@@ -253,7 +253,7 @@ export default function BuildsView() {
       <AnimatePresence>
         {selectedJob && (
           <motion.div 
-            className="w-[480px] flex-shrink-0 flex flex-col bg-white/70 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)] overflow-hidden"
+            className="w-[480px] flex-shrink-0 flex flex-col bg-white/70 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm overflow-hidden"
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 100 }}

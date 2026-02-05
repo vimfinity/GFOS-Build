@@ -257,12 +257,18 @@ class WorkspaceService {
 
   private async scanProfilesRecursive(
     currentPomPath: string,
-    profiles: Set<string>
+    profiles: Set<string>,
+    scannedPaths: Set<string> = new Set()
   ): Promise<void> {
+    const normalizedPath = currentPomPath.toLowerCase();
+    if (scannedPaths.has(normalizedPath)) return;
+    scannedPaths.add(normalizedPath);
+
     try {
       const pomContent = await fs.readFile(currentPomPath, 'utf-8');
       const currentDir = path.dirname(currentPomPath);
 
+      // Extract profiles from this pom.xml
       const profileMatches = pomContent.matchAll(
         /<profile>\s*<id>([^<]+)<\/id>/g
       );
@@ -270,6 +276,7 @@ class WorkspaceService {
         profiles.add(match[1]);
       }
 
+      // Scan declared modules
       const modulesMatch = pomContent.match(
         /<modules>([\s\S]*?)<\/modules>/
       );
@@ -285,9 +292,34 @@ class WorkspaceService {
             'pom.xml'
           );
           if (await fs.pathExists(modulePomPath)) {
-            await this.scanProfilesRecursive(modulePomPath, profiles);
+            await this.scanProfilesRecursive(modulePomPath, profiles, scannedPaths);
           }
         }
+      }
+
+      // Also scan subdirectories for pom.xml not declared in <modules>
+      try {
+        const entries = await fs.readdir(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (
+            entry.isDirectory() &&
+            !entry.name.startsWith('.') &&
+            entry.name !== 'target' &&
+            entry.name !== 'src' &&
+            entry.name !== 'node_modules'
+          ) {
+            const subPomPath = path.join(
+              currentDir,
+              entry.name,
+              'pom.xml'
+            );
+            if (await fs.pathExists(subPomPath)) {
+              await this.scanProfilesRecursive(subPomPath, profiles, scannedPaths);
+            }
+          }
+        }
+      } catch {
+        // Ignore errors when scanning subdirectories
       }
     } catch (error) {
       console.error(

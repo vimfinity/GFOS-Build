@@ -9,7 +9,7 @@ import {
   ArrowLeft, Terminal, Search, 
   ArrowDown, ArrowUp, Pause, Play, X,
   RefreshCw, CheckCircle2, XCircle, Clock,
-  Copy
+  Copy, FolderOpen, Settings, Coffee
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { 
@@ -20,6 +20,7 @@ import {
 } from '../utils/ansiParser';
 import type { LogEntry } from '../types';
 import { GlassPanel } from '../components/shared';
+import { api } from '../api';
 
 export default function JobLogView() {
   const { 
@@ -28,25 +29,35 @@ export default function JobLogView() {
     goBack,
     cancelBuildJob,
     startBuild,
-    addNotification
+    addNotification,
+    projects,
+    jobLogs
   } = useAppStore();
 
   const [autoScroll, setAutoScroll] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [highlightedLine, setHighlightedLine] = useState<number | null>(null);
+  const [showBuildOptions, setShowBuildOptions] = useState(false);
   const logContainerRef = useRef<HTMLDivElement>(null);
   
   const job = buildJobs.find(j => j.id === selectedJobId);
+  const project = job ? projects.find(p => p.id === job.projectId) : null;
 
-  // Generate log entries from job logs
+  // Generate log entries from job logs (prefer store logs, fallback to sample)
   const logEntries: LogEntry[] = useMemo(() => {
+    // First check for live logs in the store
+    const storeLogs = selectedJobId ? jobLogs[selectedJobId] : undefined;
+    if (storeLogs && storeLogs.length > 0) {
+      return storeLogs;
+    }
+    
+    // Fallback to job.logs or sample output
     if (!job?.logs) {
-      // Use sample output for demo
       return SAMPLE_MAVEN_OUTPUT.map((line, i) => createLogEntry(line, `log-${i}`));
     }
     return job.logs.map((line, i) => createLogEntry(line, `log-${i}`));
-  }, [job?.logs]);
+  }, [job?.logs, selectedJobId, jobLogs]);
 
   // Filter logs by search
   const filteredLogs = useMemo(() => {
@@ -105,6 +116,12 @@ export default function JobLogView() {
     if (job) {
       cancelBuildJob(job.id);
       addNotification('warning', `Build "${job.projectName}" abgebrochen`);
+    }
+  };
+
+  const handleOpenProjectFolder = () => {
+    if (project) {
+      api.openPath(project.path);
     }
   };
 
@@ -173,6 +190,26 @@ export default function JobLogView() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Open Folder Button */}
+          {project && (
+            <button 
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-light-200 dark:bg-dark-700 text-dark-400 hover:bg-light-300 dark:hover:bg-dark-600 transition-colors"
+              onClick={handleOpenProjectFolder}
+              title="Projektordner öffnen"
+            >
+              <FolderOpen size={18} />
+            </button>
+          )}
+          
+          {/* Build Options Toggle */}
+          <button 
+            className={`flex items-center justify-center w-10 h-10 rounded-xl transition-colors ${showBuildOptions ? 'bg-petrol-100 dark:bg-petrol-900/30 text-petrol-500' : 'bg-light-200 dark:bg-dark-700 text-dark-400 hover:bg-light-300 dark:hover:bg-dark-600'}`}
+            onClick={() => setShowBuildOptions(!showBuildOptions)}
+            title="Build-Optionen anzeigen"
+          >
+            <Settings size={18} />
+          </button>
+          
           <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${status.class}`}>
             <StatusIcon size={16} className={job.status === 'running' ? 'animate-spin' : ''} />
             <span className="text-sm font-medium">{status.label}</span>
@@ -193,6 +230,53 @@ export default function JobLogView() {
           )}
         </div>
       </motion.div>
+
+      {/* Build Options Panel */}
+      {showBuildOptions && (
+        <motion.div 
+          className="mt-4 p-4 bg-white dark:bg-dark-800 rounded-xl border border-light-300 dark:border-dark-600"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+        >
+          <h3 className="text-sm font-semibold text-dark-500 dark:text-light-100 mb-3 flex items-center gap-2">
+            <Settings size={16} />
+            Build-Konfiguration
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase">Goals</label>
+              <code className="block px-2 py-1 bg-light-100 dark:bg-dark-700 rounded text-dark-500 dark:text-light-100">{job.goals}</code>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase">JDK</label>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-light-100 dark:bg-dark-700 rounded text-dark-500 dark:text-light-100">
+                <Coffee size={14} className="text-petrol-500" />
+                <span>{job.jdk}</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase">Startzeit</label>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-light-100 dark:bg-dark-700 rounded text-dark-500 dark:text-light-100">
+                <Clock size={14} />
+                <span>{job.startTime}</span>
+              </div>
+            </div>
+            {job.duration && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase">Dauer</label>
+                <code className="block px-2 py-1 bg-light-100 dark:bg-dark-700 rounded text-dark-500 dark:text-light-100">{job.duration}</code>
+              </div>
+            )}
+            {project && (
+              <div className="space-y-1 col-span-2">
+                <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase">Projekt-Pfad</label>
+                <code className="block px-2 py-1 bg-light-100 dark:bg-dark-700 rounded text-dark-500 dark:text-light-100 truncate" title={project.path}>{project.path}</code>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* Log Controls */}
       <motion.div 

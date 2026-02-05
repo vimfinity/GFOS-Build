@@ -1,17 +1,20 @@
 /**
  * PipelineEditorView - Create and Edit Pipelines
- * Configure pipeline steps with JDK and Maven goals
+ * Configure pipeline steps with JDK, Maven goals, and module selection
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
+import Fuse from 'fuse.js';
 import { 
   ArrowLeft, Plus, Trash2, ChevronUp, ChevronDown, 
   Save, Workflow, Settings, GripVertical,
-  Coffee, Zap, Package
+  Coffee, Zap, Package, Layers, Search, X
 } from 'lucide-react';
 import { useAppStore, type StorePipelineStep } from '../store/useAppStore';
 import { GlassPanel } from '../components/shared';
+import { api } from '../api';
+import type { MavenModule } from '../types';
 
 const COMMON_GOALS = ['clean', 'compile', 'test', 'package', 'install', 'deploy', 'verify'];
 
@@ -21,6 +24,7 @@ const DEFAULT_STEP: StorePipelineStep = {
   goals: ['clean', 'install'],
   skipTests: false,
   profiles: [],
+  modules: [],
 };
 
 export default function PipelineEditorView() {
@@ -46,6 +50,51 @@ export default function PipelineEditorView() {
     existingPipeline?.steps || [{ ...DEFAULT_STEP, id: Date.now().toString() }]
   );
   const [activeStepIndex, setActiveStepIndex] = useState(0);
+  
+  // Module management
+  const [availableModules, setAvailableModules] = useState<MavenModule[]>([]);
+  const [moduleSearch, setModuleSearch] = useState('');
+  const [isLoadingModules, setIsLoadingModules] = useState(false);
+  
+  // Load modules when project changes
+  useEffect(() => {
+    const loadModules = async () => {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) {
+        setAvailableModules([]);
+        return;
+      }
+      
+      setIsLoadingModules(true);
+      try {
+        const pomPath = `${project.path}/pom.xml`;
+        const modules = await api.scanModules(pomPath);
+        setAvailableModules(modules);
+      } catch (error) {
+        console.error('Failed to load modules:', error);
+        setAvailableModules([]);
+      } finally {
+        setIsLoadingModules(false);
+      }
+    };
+    
+    loadModules();
+  }, [projectId, projects]);
+  
+  // Fuse.js for module search
+  const moduleFuse = useMemo(() => new Fuse(availableModules, {
+    keys: ['artifactId', 'groupId', 'displayName', 'relativePath'],
+    threshold: 0.4,
+    includeScore: true,
+    ignoreLocation: true,
+  }), [availableModules]);
+  
+  const filteredModules = useMemo(() => {
+    if (!moduleSearch.trim()) {
+      return availableModules;
+    }
+    return moduleFuse.search(moduleSearch).map(r => r.item);
+  }, [availableModules, moduleSearch, moduleFuse]);
 
   // Sync when editing existing pipeline
   useEffect(() => {
@@ -132,6 +181,15 @@ export default function PipelineEditorView() {
       updateStep({ goals: currentGoals.filter(g => g !== goal) });
     } else {
       updateStep({ goals: [...currentGoals, goal] });
+    }
+  };
+
+  const toggleModule = (artifactId: string) => {
+    const currentModules = activeStep?.modules || [];
+    if (currentModules.includes(artifactId)) {
+      updateStep({ modules: currentModules.filter(m => m !== artifactId) });
+    } else {
+      updateStep({ modules: [...currentModules, artifactId] });
     }
   };
 
@@ -349,6 +407,109 @@ export default function PipelineEditorView() {
                     placeholder="z.B. production, release"
                     className="w-full px-4 py-2.5 bg-white dark:bg-dark-700 rounded-xl border border-light-400 dark:border-dark-600 text-dark-500 dark:text-light-100 focus:outline-none focus:ring-2 focus:ring-petrol-500/30 focus:border-petrol-500"
                   />
+                </div>
+
+                {/* Module Selection */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-dark-400 dark:text-light-300">
+                    <Layers size={14} />
+                    Module ({(activeStep.modules || []).length} ausgewählt)
+                  </label>
+                  
+                  {isLoadingModules ? (
+                    <div className="flex items-center gap-2 p-3 bg-light-100 dark:bg-dark-700/50 rounded-lg text-sm text-dark-400">
+                      <div className="w-4 h-4 border-2 border-petrol-500/30 border-t-petrol-500 rounded-full animate-spin" />
+                      Module werden geladen...
+                    </div>
+                  ) : availableModules.length === 0 ? (
+                    <div className="p-3 bg-light-100 dark:bg-dark-700/50 rounded-lg text-sm text-dark-400">
+                      Keine Module gefunden
+                    </div>
+                  ) : (
+                    <>
+                      {/* Module Search */}
+                      <div className="relative">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-300" />
+                        <input
+                          type="text"
+                          value={moduleSearch}
+                          onChange={(e) => setModuleSearch(e.target.value)}
+                          placeholder="Module durchsuchen..."
+                          className="w-full pl-9 pr-9 py-2 bg-white dark:bg-dark-700 rounded-lg border border-light-400 dark:border-dark-600 text-sm text-dark-500 dark:text-light-100 focus:outline-none focus:ring-2 focus:ring-petrol-500/30 focus:border-petrol-500"
+                        />
+                        {moduleSearch && (
+                          <button
+                            onClick={() => setModuleSearch('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-300 hover:text-dark-500"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Module List */}
+                      <div className="max-h-48 overflow-y-auto space-y-1 p-1 bg-light-50 dark:bg-dark-800/50 rounded-lg">
+                        {filteredModules.map(module => {
+                          const isSelected = (activeStep.modules || []).includes(module.artifactId);
+                          return (
+                            <button
+                              key={module.artifactId}
+                              onClick={() => toggleModule(module.artifactId)}
+                              className={`w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors ${
+                                isSelected 
+                                  ? 'bg-petrol-100 dark:bg-petrol-900/30 text-petrol-700 dark:text-petrol-300' 
+                                  : 'hover:bg-light-200 dark:hover:bg-dark-700 text-dark-500 dark:text-light-100'
+                              }`}
+                            >
+                              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                                isSelected 
+                                  ? 'bg-petrol-500 border-petrol-500 text-white' 
+                                  : 'border-light-400 dark:border-dark-500'
+                              }`}>
+                                {isSelected && (
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{module.artifactId}</div>
+                                <div className="text-xs text-dark-300 dark:text-light-400 truncate">{module.relativePath}</div>
+                              </div>
+                              <span className="text-xs px-2 py-0.5 rounded bg-light-200 dark:bg-dark-600 text-dark-400 dark:text-light-300">
+                                {module.packaging}
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {filteredModules.length === 0 && moduleSearch && (
+                          <div className="p-3 text-center text-sm text-dark-400">
+                            Keine Module für "{moduleSearch}" gefunden
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Selected modules summary */}
+                      {(activeStep.modules || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-2">
+                          {(activeStep.modules || []).map(artifactId => (
+                            <span 
+                              key={artifactId}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-petrol-100 dark:bg-petrol-900/30 text-petrol-700 dark:text-petrol-300"
+                            >
+                              {artifactId}
+                              <button
+                                onClick={() => toggleModule(artifactId)}
+                                className="hover:text-petrol-900 dark:hover:text-petrol-100"
+                              >
+                                <X size={12} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </>

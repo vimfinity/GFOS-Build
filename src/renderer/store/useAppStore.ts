@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { api } from '../api';
 import type { 
   AppView, 
   LogEntry,
@@ -63,6 +64,10 @@ export interface AppSettings {
   scanPaths: string[];
   jdkScanPath: string;
   setupComplete?: boolean;
+  skipTestsByDefault: boolean;
+  offlineMode: boolean;
+  enableThreads: boolean;
+  threadCount: string;
 }
 
 // ============================================
@@ -87,6 +92,7 @@ export interface StorePipelineStep {
   jdkId?: string;
   skipTests?: boolean;
   profiles?: string[];
+  modules?: string[];  // Selected Maven modules (artifactIds)
 }
 
 // ============================================
@@ -405,7 +411,7 @@ export const useAppStore = create<AppState>()(
         }));
       },
       
-      // Start Build
+      // Start Build - Calls real API and listens to events  
       startBuild: (projectId, goals) => {
         const state = get();
         const project = state.projects.find(p => p.id === projectId);
@@ -431,51 +437,145 @@ export const useAppStore = create<AppState>()(
           }]
         }));
         
-        // Simulate build progress
-        setTimeout(() => {
+        // Set up event listeners for this build
+        const cleanupFunctions: (() => void)[] = [];
+        
+        const cleanupListeners = () => {
+          cleanupFunctions.forEach(fn => fn());
+        };
+        
+        // Log listener
+        cleanupFunctions.push(
+          api.onBuildLog((jobId, line) => {
+            if (jobId !== newJob.id) return;
+            
+            // Determine log level from line content
+            let level: LogEntry['level'] = 'info';
+            if (line.includes('[ERROR]') || line.includes('FAILURE')) level = 'error';
+            else if (line.includes('[WARNING]')) level = 'warn';
+            else if (line.includes('BUILD SUCCESS') || line.includes('[SUCCESS]')) level = 'success';
+            else if (line.includes('[DEBUG]')) level = 'debug';
+            
+            const entry: LogEntry = {
+              id: `${jobId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: new Date(),
+              rawText: line,
+              segments: [{ text: line, style: {} }],
+              level,
+            };
+            
+            get().addLogEntry(jobId, entry);
+          })
+        );
+        
+        // Progress listener
+        cleanupFunctions.push(
+          api.onBuildProgress((jobId, progress) => {
+            if (jobId !== newJob.id) return;
+            
+            set((state) => ({
+              buildJobs: state.buildJobs.map(j => 
+                j.id === jobId ? { ...j, status: 'running' as const, progress } : j
+              )
+            }));
+          })
+        );
+        
+        // Complete listener
+        cleanupFunctions.push(
+          api.onBuildComplete((jobId, status, _exitCode) => {
+            if (jobId !== newJob.id) return;
+            
+            const finalStatus = status === 'success' ? 'success' as const : 
+                               status === 'cancelled' ? 'cancelled' as const : 'failed' as const;
+            
+            // Calculate duration
+            const job = get().buildJobs.find(j => j.id === jobId);
+            let duration = '';
+            if (job) {
+              const [hours, minutes] = job.startTime.split(':').map(Number);
+              const now = new Date();
+              const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+              const diff = Math.floor((now.getTime() - start.getTime()) / 1000);
+              if (diff >= 60) {
+                duration = `${Math.floor(diff / 60)}m ${diff % 60}s`;
+              } else {
+                duration = `${diff}s`;
+              }
+            }
+            
+            set((state) => ({
+              buildJobs: state.buildJobs.map(j => 
+                j.id === jobId ? { 
+                  ...j, 
+                  status: finalStatus, 
+                  progress: finalStatus === 'success' ? 100 : j.progress,
+                  duration,
+                  endTime: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                } : j
+              ),
+              projects: state.projects.map(p =>
+                p.id === projectId ? {
+                  ...p,
+                  lastBuild: {
+                    status: finalStatus as 'success' | 'failed' | 'running' | 'pending',
+                    duration,
+                    timestamp: 'gerade eben'
+                  }
+                } : p
+              ),
+              notifications: [...state.notifications, {
+                id: Date.now().toString(),
+                type: finalStatus === 'success' ? 'success' as const : 
+                      finalStatus === 'cancelled' ? 'warning' as const : 'error' as const,
+                message: finalStatus === 'success' ? `Build erfolgreich: ${project.name}` :
+                         finalStatus === 'cancelled' ? `Build abgebrochen: ${project.name}` :
+                         `Build fehlgeschlagen: ${project.name}`
+              }]
+            }));
+            
+            cleanupListeners();
+          })
+        );
+        
+        // Error listener
+        cleanupFunctions.push(
+          api.onBuildError((jobId, error) => {
+            if (jobId !== newJob.id) return;
+            
+            const entry: LogEntry = {
+              id: `${jobId}-error-${Date.now()}`,
+              timestamp: new Date(),
+              rawText: `[ERROR] ${error}`,
+              segments: [{ text: `[ERROR] ${error}`, style: { color: 'red' } }],
+              level: 'error',
+            };
+            get().addLogEntry(jobId, entry);
+          })
+        );
+        
+        // Mark as running and call the API
+        set((state) => ({
+          buildJobs: state.buildJobs.map(j => 
+            j.id === newJob.id ? { ...j, status: 'running' as const } : j
+          )
+        }));
+        
+        // Call the actual API
+        api.startBuild(newJob).catch((err) => {
+          console.error('Build start failed:', err);
           set((state) => ({
             buildJobs: state.buildJobs.map(j => 
-              j.id === newJob.id ? { ...j, status: 'running' as const, progress: 0 } : j
-            )
+              j.id === newJob.id ? { ...j, status: 'failed' as const } : j
+            ),
+            notifications: [...state.notifications, {
+              id: Date.now().toString(),
+              type: 'error' as const,
+              message: `Build konnte nicht gestartet werden: ${project.name}`
+            }]
           }));
-          
-          let progress = 0;
-          const interval = setInterval(() => {
-            progress += Math.random() * 15;
-            if (progress >= 100) {
-              progress = 100;
-              clearInterval(interval);
-              
-              const success = Math.random() > 0.2;
-              set((state) => ({
-                buildJobs: state.buildJobs.map(j => 
-                  j.id === newJob.id ? { 
-                    ...j, 
-                    status: success ? 'success' as const : 'failed' as const, 
-                    progress: 100,
-                    duration: `${Math.floor(Math.random() * 3) + 1}m ${Math.floor(Math.random() * 50) + 10}s`
-                  } : j
-                ),
-                projects: state.projects.map(p =>
-                  p.id === projectId ? {
-                    ...p,
-                    lastBuild: {
-                      status: success ? 'success' as const : 'failed' as const,
-                      duration: `${Math.floor(Math.random() * 3) + 1}m ${Math.floor(Math.random() * 50) + 10}s`,
-                      timestamp: 'just now'
-                    }
-                  } : p
-                )
-              }));
-            } else {
-              set((state) => ({
-                buildJobs: state.buildJobs.map(j => 
-                  j.id === newJob.id ? { ...j, progress: Math.floor(progress) } : j
-                )
-              }));
-            }
-          }, 500);
-        }, 1000);
+          cleanupListeners();
+        });
       },
       
       // Settings
@@ -487,6 +587,10 @@ export const useAppStore = create<AppState>()(
         scanPaths: [],
         jdkScanPath: '',
         setupComplete: false,
+        skipTestsByDefault: false,
+        offlineMode: false,
+        enableThreads: false,
+        threadCount: '1C',
       },
       updateSettings: (updates) => set((state) => ({
         settings: { ...state.settings, ...updates }
