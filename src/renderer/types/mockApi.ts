@@ -4,7 +4,15 @@
  * Provides fake data when running outside of Electron.
  */
 
-import type { ElectronAPI, AppSettings, DiscoveredProject, JDK, MavenModule, BuildJob, Pipeline } from './index';
+import type { 
+  ElectronAPI, 
+  AppSettings, 
+  DiscoveredProject, 
+  JDK, 
+  MavenModule, 
+  BuildJob, 
+  Pipeline 
+} from './index';
 
 // Mock Data
 const mockSettings: AppSettings = {
