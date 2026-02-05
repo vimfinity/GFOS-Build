@@ -1,0 +1,22 @@
+appId: com.gfos.build
+productName: GFOS Build
+icon: assets/icon.png
+directories:
+  output: release
+files:
+  - dist/**/*
+  - assets/**/*
+  - package.json
+win:
+  target:
+    - target: portable
+      arch: [x64]
+  artifactName: GFOS-Build-${version}-win.${ext}
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Development
+  artifactName: GFOS-Build-${version}-linux.${ext}
+portable:
+  artifactName: GFOS-Build-${version}.exe

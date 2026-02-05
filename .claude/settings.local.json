@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(du -sh:*)",
+      "Bash(dir:*)",
+      "Bash(bun install:*)",
+      "Bash(bun pm:*)"
+    ]
+  }
+}
