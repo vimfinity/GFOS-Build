@@ -18,9 +18,11 @@ import type {
 const mockSettings: AppSettings = {
   scanRootPath: 'C:\\dev\\quellen',
   jdkScanPaths: 'C:\\dev\\java',
-  defaultMavenHome: 'C:\\dev\\maven\\mvn3',
-  defaultMavenGoal: 'clean install',
-  maxParallelBuilds: 2,
+  mavenPath: 'C:\\dev\\maven\\mvn3',
+  defaultGoals: 'clean install',
+  parallelBuilds: 2,
+  autoScan: true,
+  scanPaths: ['C:\\dev\\quellen'],
   skipTestsByDefault: false,
   offlineMode: false,
   enableThreads: false,
@@ -46,10 +48,10 @@ const mockProjects: DiscoveredProject[] = [
 ];
 
 const mockJDKs: JDK[] = [
-  { jdkHome: 'J:\\dev\\java\\jdk21', version: 'jdk21', vendor: 'OpenJDK', majorVersion: 21 },
-  { jdkHome: 'J:\\dev\\java\\jdk17', version: 'jdk17', vendor: 'OpenJDK', majorVersion: 17 },
-  { jdkHome: 'J:\\dev\\java\\jdk11', version: 'jdk11', vendor: 'OpenJDK', majorVersion: 11 },
-  { jdkHome: 'J:\\dev\\java\\jdk8', version: 'jdk8', vendor: 'OpenJDK', majorVersion: 8 },
+  { id: 'jdk-21', jdkHome: 'J:\\dev\\java\\jdk21', version: 'jdk21', vendor: 'OpenJDK', majorVersion: 21 },
+  { id: 'jdk-17', jdkHome: 'J:\\dev\\java\\jdk17', version: 'jdk17', vendor: 'OpenJDK', majorVersion: 17 },
+  { id: 'jdk-11', jdkHome: 'J:\\dev\\java\\jdk11', version: 'jdk11', vendor: 'OpenJDK', majorVersion: 11 },
+  { id: 'jdk-8', jdkHome: 'J:\\dev\\java\\jdk8', version: 'jdk8', vendor: 'OpenJDK', majorVersion: 8 },
 ];
 
 // More realistic module structure
@@ -139,11 +141,12 @@ export const mockElectronAPI: ElectronAPI = {
   startBuild: async (job) => {
     // Simulate build progress
     let progress = 0;
+    const skipTests = job.goals?.includes('-DskipTests') ?? false;
     const logLines = [
       '[INFO] Scanning for projects...',
       '[INFO] ',
-      '[INFO] ----------------------< de.gfos:' + job.name + ' >----------------------',
-      '[INFO] Building ' + job.name + ' 1.0.0',
+      '[INFO] ----------------------< de.gfos:' + job.projectName + ' >----------------------',
+      '[INFO] Building ' + job.projectName + ' 1.0.0',
       '[INFO] --------------------------------[ pom ]---------------------------------',
       '[INFO] ',
       '[INFO] --- maven-clean-plugin:3.2.0:clean (default-clean) ---',
@@ -156,11 +159,11 @@ export const mockElectronAPI: ElectronAPI = {
       '[INFO] Compiling 156 source files',
       '[INFO] ',
       '[INFO] --- maven-surefire-plugin:3.1.2:test (default-test) ---',
-      job.skipTests ? '[INFO] Tests are skipped.' : '[INFO] Running tests...',
-      job.skipTests ? '' : '[INFO] Tests run: 42, Failures: 0, Errors: 0, Skipped: 0',
+      skipTests ? '[INFO] Tests are skipped.' : '[INFO] Running tests...',
+      skipTests ? '' : '[INFO] Tests run: 42, Failures: 0, Errors: 0, Skipped: 0',
       '[INFO] ',
       '[INFO] --- maven-jar-plugin:3.3.0:jar (default-jar) ---',
-      '[INFO] Building jar: target/' + job.name + '-1.0.0.jar',
+      '[INFO] Building jar: target/' + job.projectName + '-1.0.0.jar',
       '[INFO] ',
       '[INFO] --- maven-install-plugin:3.1.1:install (default-install) ---',
       '[INFO] Installing artifact to local repository',
