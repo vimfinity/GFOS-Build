@@ -1506,6 +1506,57 @@
   font-weight: 600;
 }
 
+/* Build Log Styles */
+.gfos-build-log-container {
+  padding: 0 24px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.gfos-log-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gfos-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gfos-build-log {
+  background: var(--gfos-bg-tertiary);
+  border: 1px solid var(--gfos-border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 150px;
+  max-height: 300px;
+}
+
+.gfos-log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.gfos-log-error {
+  color: var(--gfos-error);
+}
+
+.gfos-log-warning {
+  color: var(--gfos-warning);
+}
+
+.gfos-log-info {
+  color: var(--gfos-text-secondary);
+}
+
 .gfos-details-actions {
   padding: 20px 24px;
   border-top: 1px solid rgba(0, 125, 143, 0.1);
@@ -2152,6 +2203,155 @@
 
 .gfos-btn-danger:hover {
   background: #dc2626;
+}
+
+/* ============================================
+   Build Config Modal
+   ============================================ */
+
+.gfos-build-config-modal {
+  width: 100%;
+  max-width: 520px;
+  background: var(--gfos-bg-primary);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.gfos-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--gfos-border);
+}
+
+.gfos-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--gfos-accent);
+}
+
+.gfos-modal-title h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--gfos-text-primary);
+  margin: 0;
+}
+
+.gfos-modal-project-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 24px;
+  background: var(--gfos-bg-secondary);
+  border-bottom: 1px solid var(--gfos-border);
+}
+
+.gfos-modal-project-info .gfos-project-name {
+  font-weight: 600;
+  color: var(--gfos-text-primary);
+}
+
+.gfos-modal-project-info .gfos-project-path {
+  font-size: 0.75rem;
+  color: var(--gfos-text-muted);
+  background: transparent;
+  padding: 0;
+}
+
+.gfos-modal-form {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.gfos-select-wrapper {
+  position: relative;
+}
+
+.gfos-select-wrapper .gfos-select-icon {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--gfos-text-muted);
+  pointer-events: none;
+}
+
+.gfos-loading-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--gfos-bg-secondary);
+  border: 1px solid var(--gfos-border);
+  border-radius: 10px;
+  color: var(--gfos-text-muted);
+  font-size: 0.875rem;
+}
+
+.gfos-profile-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gfos-profile-tag {
+  padding: 6px 12px;
+  background: var(--gfos-bg-secondary);
+  border: 1px solid var(--gfos-border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--gfos-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gfos-profile-tag:hover {
+  border-color: var(--gfos-accent);
+  color: var(--gfos-accent);
+}
+
+.gfos-profile-tag.gfos-profile-active {
+  background: var(--gfos-accent-subtle);
+  border-color: var(--gfos-accent);
+  color: var(--gfos-accent);
+}
+
+.gfos-option-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gfos-toggle-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--gfos-text-secondary);
+}
+
+.gfos-toggle-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gfos-accent);
+  cursor: pointer;
+}
+
+.gfos-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--gfos-border);
+  background: var(--gfos-bg-secondary);
 }
 
 /* ============================================

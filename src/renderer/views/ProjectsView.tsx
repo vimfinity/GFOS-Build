@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { StatusIndicator, ConfirmDialog } from '../components/shared';
+import { BuildConfigModal, type BuildConfig } from '../components/BuildConfigModal';
+import type { Project } from '../store/useAppStore';
 
 export default function ProjectsView() {
   const { 
@@ -24,6 +26,10 @@ export default function ProjectsView() {
     isOpen: false,
     projectId: null
   });
+  const [buildConfigModal, setBuildConfigModal] = useState<{ isOpen: boolean; project: Project | null }>({
+    isOpen: false,
+    project: null
+  });
 
   // Filter projects based on search
   const filteredProjects = projects.filter(p => 
@@ -37,6 +43,15 @@ export default function ProjectsView() {
       removeProject(deleteDialog.projectId);
       setDeleteDialog({ isOpen: false, projectId: null });
     }
+  };
+
+  const openBuildConfig = (project: Project) => {
+    setBuildConfigModal({ isOpen: true, project });
+  };
+
+  const handleStartBuild = (config: BuildConfig) => {
+    startBuild(config.projectId, config.goals);
+    // TODO: Pass full config to startBuild when backend supports it
   };
 
   return (
@@ -123,7 +138,7 @@ export default function ProjectsView() {
                     whileTap={{ scale: 0.95 }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      startBuild(project.id);
+                      openBuildConfig(project);
                     }}
                   >
                     <Play size={18} />
@@ -171,7 +186,10 @@ export default function ProjectsView() {
                     </div>
 
                     <div className="gfos-project-expanded-actions">
-                      <button className="gfos-secondary-btn gfos-btn-sm">
+                      <button 
+                        className="gfos-secondary-btn gfos-btn-sm"
+                        onClick={() => openBuildConfig(project)}
+                      >
                         <Edit2 size={16} />
                         <span>Bearbeiten</span>
                       </button>
@@ -185,7 +203,7 @@ export default function ProjectsView() {
                       <div className="gfos-flex-spacer" />
                       <button 
                         className="gfos-primary-btn"
-                        onClick={() => startBuild(project.id)}
+                        onClick={() => openBuildConfig(project)}
                       >
                         <Play size={18} />
                         <span>Build starten</span>
@@ -229,6 +247,14 @@ export default function ProjectsView() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setDeleteDialog({ isOpen: false, projectId: null })}
+      />
+
+      {/* Build Configuration Modal */}
+      <BuildConfigModal
+        isOpen={buildConfigModal.isOpen}
+        project={buildConfigModal.project}
+        onClose={() => setBuildConfigModal({ isOpen: false, project: null })}
+        onStartBuild={handleStartBuild}
       />
     </>
   );

@@ -285,6 +285,27 @@ export default function BuildsView() {
               )}
             </div>
 
+            {/* Build Log Output */}
+            {selectedJob.logs && selectedJob.logs.length > 0 && (
+              <div className="gfos-build-log-container">
+                <label className="gfos-log-label">Log Output</label>
+                <div className="gfos-build-log">
+                  {selectedJob.logs.map((line, i) => (
+                    <div 
+                      key={i} 
+                      className={`gfos-log-line ${
+                        line.includes('[ERROR]') ? 'gfos-log-error' : 
+                        line.includes('[WARNING]') ? 'gfos-log-warning' :
+                        line.includes('[INFO]') ? 'gfos-log-info' : ''
+                      }`}
+                    >
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="gfos-details-actions">
               {(selectedJob.status === 'running' || selectedJob.status === 'pending') && (
                 <button 
