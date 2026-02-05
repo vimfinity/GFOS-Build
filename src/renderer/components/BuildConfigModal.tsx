@@ -27,6 +27,11 @@ export interface BuildConfig {
   jdkId: string;
   skipTests: boolean;
   offline: boolean;
+  updateSnapshots: boolean;
+  forceUpdate: boolean;
+  debug: boolean;
+  quiet: boolean;
+  threads?: string;
   profiles: string[];
 }
 
@@ -51,6 +56,11 @@ export function BuildConfigModal({
   const [selectedJdk, setSelectedJdk] = useState<string>('');
   const [skipTests, setSkipTests] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [updateSnapshots, setUpdateSnapshots] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(false);
+  const [debug, setDebug] = useState(false);
+  const [quiet, setQuiet] = useState(false);
+  const [threads, setThreads] = useState<string>('');
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   
   // Data loading state
@@ -66,6 +76,11 @@ export function BuildConfigModal({
       setGoals(project.mavenGoals || settings.defaultGoals || 'clean install');
       setSkipTests(false);
       setOffline(false);
+      setUpdateSnapshots(false);
+      setForceUpdate(false);
+      setDebug(false);
+      setQuiet(false);
+      setThreads('');
       setSelectedProfiles([]);
       
       // Find default JDK
@@ -111,6 +126,11 @@ export function BuildConfigModal({
       jdkId: selectedJdk,
       skipTests,
       offline,
+      updateSnapshots,
+      forceUpdate,
+      debug,
+      quiet,
+      threads: threads || undefined,
       profiles: selectedProfiles,
     });
     onClose();
@@ -278,7 +298,57 @@ export function BuildConfigModal({
                   />
                   <span>Offline-Modus (-o)</span>
                 </label>
+                <label className="gfos-toggle-option">
+                  <input
+                    type="checkbox"
+                    checked={updateSnapshots}
+                    onChange={(e) => setUpdateSnapshots(e.target.checked)}
+                  />
+                  <span>Snapshots aktualisieren (-U)</span>
+                </label>
+                <label className="gfos-toggle-option">
+                  <input
+                    type="checkbox"
+                    checked={forceUpdate}
+                    onChange={(e) => setForceUpdate(e.target.checked)}
+                  />
+                  <span>Dependencies forcieren (-fae)</span>
+                </label>
+                <label className="gfos-toggle-option">
+                  <input
+                    type="checkbox"
+                    checked={debug}
+                    onChange={(e) => setDebug(e.target.checked)}
+                  />
+                  <span>Debug-Ausgabe (-X)</span>
+                </label>
+                <label className="gfos-toggle-option">
+                  <input
+                    type="checkbox"
+                    checked={quiet}
+                    onChange={(e) => setQuiet(e.target.checked)}
+                  />
+                  <span>Stille Ausgabe (-q)</span>
+                </label>
               </div>
+            </div>
+
+            {/* Threads */}
+            <div className="gfos-form-group">
+              <label>
+                <Settings2 size={16} />
+                Parallele Threads (optional)
+              </label>
+              <input
+                type="text"
+                className="gfos-input"
+                value={threads}
+                onChange={(e) => setThreads(e.target.value)}
+                placeholder="z.B. 4 oder 1C (1 Thread pro Core)"
+              />
+              <span className="gfos-input-hint">
+                Leer lassen für Standard Maven-Verhalten
+              </span>
             </div>
           </div>
 

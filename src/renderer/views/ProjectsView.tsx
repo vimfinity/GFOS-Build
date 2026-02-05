@@ -6,10 +6,11 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FolderGit2, Coffee, Play, GitBranch, Clock, 
-  ChevronDown, Search, Plus, Trash2, Edit2, FolderOpen
+  ChevronDown, Search, Trash2, Edit2, FolderOpen
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { StatusIndicator, ConfirmDialog } from '../components/shared';
+import { api } from '../api';
 import { BuildConfigModal, type BuildConfig } from '../components/BuildConfigModal';
 import type { Project } from '../store/useAppStore';
 
@@ -18,8 +19,35 @@ export default function ProjectsView() {
     projects, 
     searchQuery, 
     startBuild, 
-    removeProject
+    removeProject,
+    setProjects
   } = useAppStore();
+  const [isScanning, setIsScanning] = useState(false);
+  
+  // Convert DiscoveredProject to Project format
+  const convertToProject = (discovered: { path: string; name: string }): Project => ({
+    id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    name: discovered.name,
+    path: discovered.path,
+    branch: 'main',
+    jdk: '',
+  });
+
+  const handleScanFolder = async () => {
+    const folder = await api.selectFolder();
+    if (folder) {
+      setIsScanning(true);
+      try {
+        const scanned = await api.scanProjects(folder);
+        if (scanned.length > 0) {
+          const newProjects = scanned.map(convertToProject);
+          setProjects([...projects, ...newProjects]);
+        }
+      } finally {
+        setIsScanning(false);
+      }
+    }
+  };
   
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; projectId: string | null }>({
@@ -70,13 +98,13 @@ export default function ProjectsView() {
           </div>
         </div>
         <div className="gfos-page-actions">
-          <button className="gfos-secondary-btn">
+          <button 
+            className="gfos-secondary-btn" 
+            disabled={isScanning}
+            onClick={handleScanFolder}
+          >
             <FolderOpen size={18} />
-            <span>Ordner scannen</span>
-          </button>
-          <button className="gfos-primary-btn">
-            <Plus size={18} />
-            <span>Projekt hinzufügen</span>
+            <span>{isScanning ? 'Scannt...' : 'Ordner scannen'}</span>
           </button>
         </div>
       </motion.div>
@@ -227,11 +255,15 @@ export default function ProjectsView() {
             <p>
               {searchQuery 
                 ? `Keine Projekte für "${searchQuery}" gefunden.`
-                : 'Füge dein erstes Maven-Projekt hinzu.'}
+                : 'Scanne einen Ordner, um Maven-Projekte zu finden.'}
             </p>
-            <button className="gfos-primary-btn">
-              <Plus size={18} />
-              <span>Projekt hinzufügen</span>
+            <button 
+              className="gfos-primary-btn"
+              disabled={isScanning}
+              onClick={handleScanFolder}
+            >
+              <FolderOpen size={18} />
+              <span>{isScanning ? 'Scannt...' : 'Ordner scannen'}</span>
             </button>
           </motion.div>
         )}

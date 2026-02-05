@@ -127,6 +127,7 @@ export default function Layout({ children }: LayoutProps) {
           <AnimatePresence mode="wait">
             <motion.div
               key={activeView}
+              className="gfos-view-wrapper"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}

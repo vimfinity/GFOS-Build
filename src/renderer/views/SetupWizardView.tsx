@@ -8,9 +8,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Cpu, FolderSearch, Coffee, Settings, 
   Check, Loader2, AlertCircle, Folder, ArrowRight, 
-  ArrowLeft, Sparkles, GitBranch, Terminal
+  ArrowLeft, Sparkles, GitBranch, Terminal, RefreshCw
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { api } from '../api';
 import type { SetupWizardStep } from '../types';
 
 const STEPS: { id: SetupWizardStep; label: string }[] = [
@@ -26,14 +27,18 @@ export default function SetupWizardView() {
     setupWizard,
     updateSetupWizard,
     completeSetup,
-    projects,
-    jdks,
-    addNotification
+    setProjects,
+    setJdks,
+    updateSettings,
   } = useAppStore();
 
-  const [localScanPath, setLocalScanPath] = useState(setupWizard.scanRootPath);
-  const [localJdkPath, setLocalJdkPath] = useState(setupWizard.jdkScanPaths);
-  const [localMavenPath, setLocalMavenPath] = useState(setupWizard.mavenPath);
+  const [localScanPath, setLocalScanPath] = useState(setupWizard.scanRootPath || '');
+  const [localJdkPath, setLocalJdkPath] = useState(setupWizard.jdkScanPaths || '');
+  const [localMavenPath, setLocalMavenPath] = useState(setupWizard.mavenPath || '');
+  
+  // Local scan results to display
+  const [scannedJdks, setScannedJdks] = useState<Array<{ id: string; version: string; path: string; vendor: string }>>([]);
+  const [scannedProjects, setScannedProjects] = useState<Array<{ name: string; path: string; hasPom: boolean }>>([]);
 
   const currentStepIndex = STEPS.findIndex(s => s.id === setupWizard.currentStep);
 
@@ -55,7 +60,47 @@ export default function SetupWizardView() {
     }
   };
 
+  // Folder selection dialogs
+  const selectProjectFolder = async () => {
+    try {
+      const folder = await api.selectFolder();
+      if (folder) {
+        setLocalScanPath(folder);
+      }
+    } catch (err) {
+      console.error('Failed to select folder:', err);
+    }
+  };
+
+  const selectJdkFolder = async () => {
+    try {
+      const folder = await api.selectFolder();
+      if (folder) {
+        setLocalJdkPath(folder);
+      }
+    } catch (err) {
+      console.error('Failed to select folder:', err);
+    }
+  };
+
+  const selectMavenFile = async () => {
+    try {
+      const folder = await api.selectFolder();
+      if (folder) {
+        setLocalMavenPath(folder);
+      }
+    } catch (err) {
+      console.error('Failed to select folder:', err);
+    }
+  };
+
+  // Actual scanning functions using the API
   const handleScanJdks = async () => {
+    if (!localJdkPath.trim()) {
+      updateSetupWizard({ scanError: 'Bitte gib ein JDK-Verzeichnis an.' });
+      return;
+    }
+
     updateSetupWizard({ 
       isScanning: true, 
       scanError: undefined,
@@ -63,40 +108,93 @@ export default function SetupWizardView() {
       mavenPath: localMavenPath
     });
     
-    // Simulate JDK scan
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    updateSetupWizard({ 
-      isScanning: false, 
-      foundJdks: jdks.length 
-    });
-    
-    addNotification('success', `${jdks.length} JDKs gefunden`);
-    nextStep();
+    try {
+      const jdks = await api.scanJDKs(localJdkPath);
+      setScannedJdks(jdks.map((jdk: { id?: string; jdkHome: string; version: string; vendor?: string }) => ({
+        id: jdk.id || jdk.jdkHome,
+        version: jdk.version,
+        path: jdk.jdkHome,
+        vendor: jdk.vendor || 'Unknown'
+      })));
+      
+      updateSetupWizard({ 
+        isScanning: false, 
+        foundJdks: jdks.length 
+      });
+      
+      // Store JDKs in app state
+      if (jdks.length > 0) {
+        setJdks(jdks.map((jdk: { id?: string; jdkHome: string; version: string; vendor?: string; majorVersion?: number }, i: number) => ({
+          id: jdk.id || `jdk-${i}`,
+          version: jdk.version,
+          path: jdk.jdkHome,
+          vendor: jdk.vendor || 'Unknown',
+          isDefault: i === 0
+        })));
+      }
+    } catch (err) {
+      console.error('JDK scan failed:', err);
+      updateSetupWizard({ 
+        isScanning: false, 
+        scanError: `Scan fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`
+      });
+    }
   };
 
   const handleScanProjects = async () => {
+    if (!localScanPath.trim()) {
+      updateSetupWizard({ scanError: 'Bitte gib ein Projekt-Verzeichnis an.' });
+      return;
+    }
+
     updateSetupWizard({ 
       isScanning: true, 
       scanError: undefined,
       scanRootPath: localScanPath 
     });
     
-    // Simulate project scan
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    updateSetupWizard({ 
-      isScanning: false, 
-      foundProjects: projects.length 
-    });
-    
-    addNotification('success', `${projects.length} Projekte gefunden`);
-    nextStep();
+    try {
+      const projects = await api.scanProjects(localScanPath);
+      setScannedProjects(projects.map((p: { name: string; path: string; hasPom?: boolean }) => ({
+        name: p.name,
+        path: p.path,
+        hasPom: p.hasPom ?? true
+      })));
+      
+      updateSetupWizard({ 
+        isScanning: false, 
+        foundProjects: projects.length 
+      });
+      
+      // Store projects in app state
+      if (projects.length > 0) {
+        setProjects(projects.map((p: { name: string; path: string; isGitRepo?: boolean; relativePath?: string }, i: number) => ({
+          id: `project-${i}`,
+          name: p.name,
+          path: p.path,
+          branch: 'main',
+          jdk: 'JDK 21',
+          mavenGoals: 'clean install'
+        })));
+      }
+    } catch (err) {
+      console.error('Project scan failed:', err);
+      updateSetupWizard({ 
+        isScanning: false, 
+        scanError: `Scan fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`
+      });
+    }
   };
 
   const handleComplete = () => {
+    // Save settings
+    updateSettings({
+      mavenPath: localMavenPath,
+      scanPaths: localScanPath ? [localScanPath] : [],
+      jdkScanPath: localJdkPath,
+      setupComplete: true
+    });
     completeSetup();
-    addNotification('success', 'Setup abgeschlossen! Willkommen bei GFOS Build.');
   };
 
   const renderStep = () => {
@@ -189,10 +287,14 @@ export default function SetupWizardView() {
                     type="text"
                     value={localScanPath}
                     onChange={(e) => setLocalScanPath(e.target.value)}
-                    placeholder="z.B. C:\dev\quellen"
+                    placeholder="z.B. J:\dev\quellen"
                     className="gfos-input"
                   />
-                  <button className="gfos-secondary-btn gfos-btn-icon">
+                  <button 
+                    className="gfos-secondary-btn gfos-btn-icon"
+                    onClick={selectProjectFolder}
+                    type="button"
+                  >
                     <Folder size={18} />
                   </button>
                 </div>
@@ -211,10 +313,14 @@ export default function SetupWizardView() {
                     type="text"
                     value={localJdkPath}
                     onChange={(e) => setLocalJdkPath(e.target.value)}
-                    placeholder="z.B. C:\dev\java"
+                    placeholder="z.B. J:\dev\java"
                     className="gfos-input"
                   />
-                  <button className="gfos-secondary-btn gfos-btn-icon">
+                  <button 
+                    className="gfos-secondary-btn gfos-btn-icon"
+                    onClick={selectJdkFolder}
+                    type="button"
+                  >
                     <Folder size={18} />
                   </button>
                 </div>
@@ -223,20 +329,24 @@ export default function SetupWizardView() {
               <div className="gfos-form-group">
                 <label>
                   <Terminal size={16} />
-                  Maven-Executable
+                  Maven-Verzeichnis
                 </label>
                 <p className="gfos-form-hint">
-                  Der Pfad zur Maven-Executable (mvn.cmd oder mvn)
+                  Das Verzeichnis, das Maven enthält (z.B. mvn3 Ordner)
                 </p>
                 <div className="gfos-input-with-btn">
                   <input
                     type="text"
                     value={localMavenPath}
                     onChange={(e) => setLocalMavenPath(e.target.value)}
-                    placeholder="z.B. C:\dev\maven\bin\mvn.cmd"
+                    placeholder="z.B. J:\dev\maven\mvn3"
                     className="gfos-input"
                   />
-                  <button className="gfos-secondary-btn gfos-btn-icon">
+                  <button 
+                    className="gfos-secondary-btn gfos-btn-icon"
+                    onClick={selectMavenFile}
+                    type="button"
+                  >
                     <Folder size={18} />
                   </button>
                 </div>
@@ -248,7 +358,11 @@ export default function SetupWizardView() {
                 <ArrowLeft size={18} />
                 <span>Zurück</span>
               </button>
-              <button className="gfos-primary-btn" onClick={nextStep}>
+              <button 
+                className="gfos-primary-btn" 
+                onClick={nextStep}
+                disabled={!localScanPath.trim() || !localJdkPath.trim()}
+              >
                 <span>Weiter</span>
                 <ArrowRight size={18} />
               </button>
@@ -272,10 +386,17 @@ export default function SetupWizardView() {
               </div>
             </div>
 
+            {setupWizard.scanError && (
+              <div className="gfos-wizard-error">
+                <AlertCircle size={20} />
+                <span>{setupWizard.scanError}</span>
+              </div>
+            )}
+
             <div className="gfos-wizard-scan-info">
               <div className="gfos-scan-path">
                 <Folder size={18} />
-                <code>{localJdkPath}</code>
+                <code>{localJdkPath || 'Kein Verzeichnis angegeben'}</code>
               </div>
               
               {setupWizard.isScanning ? (
@@ -283,14 +404,28 @@ export default function SetupWizardView() {
                   <Loader2 size={48} className="gfos-spin" />
                   <p>Suche nach JDKs...</p>
                 </div>
-              ) : setupWizard.foundJdks > 0 ? (
+              ) : scannedJdks.length > 0 ? (
                 <div className="gfos-wizard-scan-result">
                   <Check size={48} />
-                  <h3>{setupWizard.foundJdks} JDKs gefunden</h3>
-                  <p>Du kannst die JDK-Konfiguration später anpassen.</p>
+                  <h3>{scannedJdks.length} JDKs gefunden</h3>
+                  <div className="gfos-scanned-list">
+                    {scannedJdks.slice(0, 5).map((jdk, i) => (
+                      <div key={i} className="gfos-scanned-item">
+                        <Coffee size={16} />
+                        <span>{jdk.version}</span>
+                        <code>{jdk.path}</code>
+                      </div>
+                    ))}
+                    {scannedJdks.length > 5 && (
+                      <p className="gfos-more-items">
+                        +{scannedJdks.length - 5} weitere
+                      </p>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="gfos-wizard-scan-preview">
+                  <FolderSearch size={48} />
                   <p>Klicke auf "Scannen" um nach JDKs zu suchen.</p>
                 </div>
               )}
@@ -301,30 +436,44 @@ export default function SetupWizardView() {
                 <ArrowLeft size={18} />
                 <span>Zurück</span>
               </button>
-              {setupWizard.foundJdks > 0 ? (
-                <button className="gfos-primary-btn" onClick={nextStep}>
-                  <span>Weiter</span>
-                  <ArrowRight size={18} />
-                </button>
-              ) : (
-                <button 
-                  className="gfos-primary-btn" 
-                  onClick={handleScanJdks}
-                  disabled={setupWizard.isScanning}
-                >
-                  {setupWizard.isScanning ? (
-                    <>
-                      <Loader2 size={18} className="gfos-spin" />
-                      <span>Scanne...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FolderSearch size={18} />
-                      <span>Scannen</span>
-                    </>
-                  )}
-                </button>
-              )}
+              
+              <div className="gfos-wizard-actions-right">
+                {scannedJdks.length > 0 && (
+                  <button 
+                    className="gfos-secondary-btn" 
+                    onClick={handleScanJdks}
+                    disabled={setupWizard.isScanning}
+                  >
+                    <RefreshCw size={18} />
+                    <span>Erneut scannen</span>
+                  </button>
+                )}
+                
+                {scannedJdks.length > 0 ? (
+                  <button className="gfos-primary-btn" onClick={nextStep}>
+                    <span>Weiter</span>
+                    <ArrowRight size={18} />
+                  </button>
+                ) : (
+                  <button 
+                    className="gfos-primary-btn" 
+                    onClick={handleScanJdks}
+                    disabled={setupWizard.isScanning || !localJdkPath.trim()}
+                  >
+                    {setupWizard.isScanning ? (
+                      <>
+                        <Loader2 size={18} className="gfos-spin" />
+                        <span>Scanne...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FolderSearch size={18} />
+                        <span>Scannen</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         );
@@ -345,10 +494,17 @@ export default function SetupWizardView() {
               </div>
             </div>
 
+            {setupWizard.scanError && (
+              <div className="gfos-wizard-error">
+                <AlertCircle size={20} />
+                <span>{setupWizard.scanError}</span>
+              </div>
+            )}
+
             <div className="gfos-wizard-scan-info">
               <div className="gfos-scan-path">
                 <Folder size={18} />
-                <code>{localScanPath}</code>
+                <code>{localScanPath || 'Kein Verzeichnis angegeben'}</code>
               </div>
               
               {setupWizard.isScanning ? (
@@ -356,14 +512,28 @@ export default function SetupWizardView() {
                   <Loader2 size={48} className="gfos-spin" />
                   <p>Suche nach Projekten...</p>
                 </div>
-              ) : setupWizard.foundProjects > 0 ? (
+              ) : scannedProjects.length > 0 ? (
                 <div className="gfos-wizard-scan-result">
                   <Check size={48} />
-                  <h3>{setupWizard.foundProjects} Projekte gefunden</h3>
-                  <p>Du kannst Projekte später hinzufügen oder entfernen.</p>
+                  <h3>{scannedProjects.length} Projekte gefunden</h3>
+                  <div className="gfos-scanned-list">
+                    {scannedProjects.slice(0, 5).map((proj, i) => (
+                      <div key={i} className="gfos-scanned-item">
+                        <GitBranch size={16} />
+                        <span>{proj.name}</span>
+                        <code>{proj.path}</code>
+                      </div>
+                    ))}
+                    {scannedProjects.length > 5 && (
+                      <p className="gfos-more-items">
+                        +{scannedProjects.length - 5} weitere
+                      </p>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="gfos-wizard-scan-preview">
+                  <FolderSearch size={48} />
                   <p>Klicke auf "Scannen" um nach Projekten zu suchen.</p>
                 </div>
               )}
@@ -374,30 +544,44 @@ export default function SetupWizardView() {
                 <ArrowLeft size={18} />
                 <span>Zurück</span>
               </button>
-              {setupWizard.foundProjects > 0 ? (
-                <button className="gfos-primary-btn" onClick={nextStep}>
-                  <span>Weiter</span>
-                  <ArrowRight size={18} />
-                </button>
-              ) : (
-                <button 
-                  className="gfos-primary-btn" 
-                  onClick={handleScanProjects}
-                  disabled={setupWizard.isScanning}
-                >
-                  {setupWizard.isScanning ? (
-                    <>
-                      <Loader2 size={18} className="gfos-spin" />
-                      <span>Scanne...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FolderSearch size={18} />
-                      <span>Scannen</span>
-                    </>
-                  )}
-                </button>
-              )}
+              
+              <div className="gfos-wizard-actions-right">
+                {scannedProjects.length > 0 && (
+                  <button 
+                    className="gfos-secondary-btn" 
+                    onClick={handleScanProjects}
+                    disabled={setupWizard.isScanning}
+                  >
+                    <RefreshCw size={18} />
+                    <span>Erneut scannen</span>
+                  </button>
+                )}
+                
+                {scannedProjects.length > 0 ? (
+                  <button className="gfos-primary-btn" onClick={nextStep}>
+                    <span>Weiter</span>
+                    <ArrowRight size={18} />
+                  </button>
+                ) : (
+                  <button 
+                    className="gfos-primary-btn" 
+                    onClick={handleScanProjects}
+                    disabled={setupWizard.isScanning || !localScanPath.trim()}
+                  >
+                    {setupWizard.isScanning ? (
+                      <>
+                        <Loader2 size={18} className="gfos-spin" />
+                        <span>Scanne...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FolderSearch size={18} />
+                        <span>Scannen</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         );
@@ -423,14 +607,14 @@ export default function SetupWizardView() {
               <div className="gfos-summary-item">
                 <Coffee size={24} />
                 <div>
-                  <strong>{jdks.length}</strong>
+                  <strong>{scannedJdks.length}</strong>
                   <span>JDKs konfiguriert</span>
                 </div>
               </div>
               <div className="gfos-summary-item">
                 <FolderSearch size={24} />
                 <div>
-                  <strong>{projects.length}</strong>
+                  <strong>{scannedProjects.length}</strong>
                   <span>Projekte gefunden</span>
                 </div>
               </div>

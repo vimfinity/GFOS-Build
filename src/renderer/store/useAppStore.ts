@@ -110,12 +110,14 @@ interface AppState {
   projects: Project[];
   selectedProject: Project | null;
   setSelectedProject: (project: Project | null) => void;
+  setProjects: (projects: Project[]) => void;
   addProject: (project: Project) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
   removeProject: (id: string) => void;
   
   // JDKs
   jdks: JDK[];
+  setJdks: (jdks: JDK[]) => void;
   addJdk: (jdk: JDK) => void;
   removeJdk: (id: string) => void;
   setDefaultJdk: (id: string) => void;
@@ -227,6 +229,7 @@ export const useAppStore = create<AppState>()(
       projects: initialProjects,
       selectedProject: null,
       setSelectedProject: (project) => set({ selectedProject: project }),
+      setProjects: (projects) => set({ projects }),
       addProject: (project) => set((state) => ({ projects: [...state.projects, project] })),
       updateProject: (id, updates) => set((state) => ({
         projects: state.projects.map(p => p.id === id ? { ...p, ...updates } : p)
@@ -237,6 +240,7 @@ export const useAppStore = create<AppState>()(
       
       // JDKs
       jdks: initialJdks,
+      setJdks: (jdks) => set({ jdks }),
       addJdk: (jdk) => set((state) => ({ jdks: [...state.jdks, jdk] })),
       removeJdk: (id) => set((state) => ({
         jdks: state.jdks.filter(j => j.id !== id)
