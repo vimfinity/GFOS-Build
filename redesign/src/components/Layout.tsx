@@ -5,10 +5,11 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LayoutGrid, FolderGit2, Play, Coffee, Settings,
-  Search, Bell, X
+  LayoutGrid, FolderGit2, Play, Coffee, Settings, Workflow,
+  Search, Bell, X, Sun, Moon, Monitor, Command
 } from 'lucide-react';
 import { useAppStore, useStats } from '../store/useAppStore';
+import { useTheme, getThemeIcon, getThemeLabel } from '../hooks/useTheme';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -20,10 +21,21 @@ export default function Layout({ children }: LayoutProps) {
     setActiveView, 
     searchQuery, 
     setSearchQuery,
+    setIsSearchOpen,
     notifications,
     removeNotification
   } = useAppStore();
   const stats = useStats();
+  const { theme, cycleTheme, isDark } = useTheme();
+
+  const getThemeIconComponent = () => {
+    const iconType = getThemeIcon(theme);
+    switch (iconType) {
+      case 'sun': return <Sun size={20} />;
+      case 'moon': return <Moon size={20} />;
+      case 'monitor': return <Monitor size={20} />;
+    }
+  };
 
   return (
     <div className="gfos-page">
@@ -70,8 +82,15 @@ export default function Layout({ children }: LayoutProps) {
               icon={<Play size={18} />} 
               label="Builds"
               badge={stats.activeBuilds > 0 ? stats.activeBuilds : undefined}
-              active={activeView === 'builds'}
+              active={activeView === 'builds' || activeView === 'job-log'}
               onClick={() => setActiveView('builds')}
+            />
+            <NavTab 
+              icon={<Workflow size={18} />} 
+              label="Pipelines"
+              badge={stats.pipelineCount > 0 ? stats.pipelineCount : undefined}
+              active={activeView === 'pipelines' || activeView === 'pipeline-editor'}
+              onClick={() => setActiveView('pipelines')}
             />
             <NavTab 
               icon={<Coffee size={18} />} 
@@ -83,21 +102,36 @@ export default function Layout({ children }: LayoutProps) {
           </nav>
 
           <div className="gfos-header-actions">
-            <div className="gfos-search">
+            {/* Search Button */}
+            <button 
+              className="gfos-search"
+              onClick={() => setIsSearchOpen(true)}
+            >
               <Search size={18} />
-              <input 
-                type="text" 
-                placeholder="Suchen..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+              <span>Suchen...</span>
+              <kbd className="gfos-search-kbd">
+                <Command size={12} />K
+              </kbd>
+            </button>
+            
+            {/* Theme Toggle */}
+            <button 
+              className="gfos-icon-btn"
+              onClick={cycleTheme}
+              title={`Theme: ${getThemeLabel(theme)}`}
+            >
+              {getThemeIconComponent()}
+            </button>
+            
+            {/* Notifications */}
             <button className="gfos-icon-btn gfos-notification-btn">
               <Bell size={20} />
               {notifications.length > 0 && (
                 <span className="gfos-notification-dot" />
               )}
             </button>
+            
+            {/* Settings */}
             <button 
               className={`gfos-icon-btn ${activeView === 'settings' ? 'gfos-icon-btn-active' : ''}`}
               onClick={() => setActiveView('settings')}
