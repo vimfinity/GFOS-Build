@@ -3,129 +3,258 @@ import { useAppStore } from '../../../src/renderer/store/useAppStore';
 
 describe('useAppStore', () => {
   beforeEach(() => {
-    // Reset store between tests
+    // Reset store to a clean state (preserving structure but clearing data)
     useAppStore.setState({
-      jobs: [],
-      jobLogs: {},
+      activeView: 'overview',
+      previousView: null,
+      theme: 'system',
+      resolvedTheme: 'light',
       projects: [],
+      selectedProject: null,
       jdks: [],
-      pipelines: [],
-      modulesByProject: {},
-      profilesByProject: {},
-      navigation: {
-        currentScreen: 'HOME',
-        history: [],
-        params: {},
-      },
-      isScanning: false,
-      scanStatus: null,
-      selectedProjectPath: null,
+      buildJobs: [],
       selectedJobId: null,
+      jobLogs: {},
+      pipelines: [],
       selectedPipelineId: null,
-    });
-  });
-
-  describe('jobs', () => {
-    it('should add a job with generated ID', () => {
-      const { addJob } = useAppStore.getState();
-
-      const jobId = addJob({
-        projectPath: '/test/project',
-        name: 'Test Build',
-        jdkPath: '/java/17',
-        mavenGoals: ['clean', 'install'],
-      });
-
-      expect(jobId).toMatch(/^job-\d+-/);
-
-      const { jobs } = useAppStore.getState();
-      expect(jobs).toHaveLength(1);
-      expect(jobs[0].name).toBe('Test Build');
-      expect(jobs[0].status).toBe('pending');
-      expect(jobs[0].progress).toBe(0);
-    });
-
-    it('should update a job', () => {
-      const { addJob, updateJob } = useAppStore.getState();
-
-      const jobId = addJob({
-        projectPath: '/test',
-        name: 'Test',
-        jdkPath: '/java',
-        mavenGoals: ['install'],
-      });
-
-      updateJob(jobId, { status: 'running', progress: 50 });
-
-      const { jobs } = useAppStore.getState();
-      expect(jobs[0].status).toBe('running');
-      expect(jobs[0].progress).toBe(50);
-    });
-
-    it('should remove a job and its logs', () => {
-      const { addJob, appendJobLog, removeJob } = useAppStore.getState();
-
-      const jobId = addJob({
-        projectPath: '/test',
-        name: 'Test',
-        jdkPath: '/java',
-        mavenGoals: ['install'],
-      });
-
-      appendJobLog(jobId, 'line 1');
-      appendJobLog(jobId, 'line 2');
-
-      removeJob(jobId);
-
-      const { jobs, jobLogs } = useAppStore.getState();
-      expect(jobs).toHaveLength(0);
-      expect(jobLogs[jobId]).toBeUndefined();
-    });
-
-    it('should append job logs', () => {
-      const { addJob, appendJobLog } = useAppStore.getState();
-
-      const jobId = addJob({
-        projectPath: '/test',
-        name: 'Test',
-        jdkPath: '/java',
-        mavenGoals: ['install'],
-      });
-
-      appendJobLog(jobId, '[INFO] Building...');
-      appendJobLog(jobId, '[INFO] BUILD SUCCESS');
-
-      const { jobLogs } = useAppStore.getState();
-      expect(jobLogs[jobId]).toHaveLength(2);
-      expect(jobLogs[jobId][1]).toBe('[INFO] BUILD SUCCESS');
+      settings: {
+        mavenPath: '',
+        defaultGoals: 'clean install',
+        parallelBuilds: 1,
+        autoScan: false,
+        scanPaths: [],
+        setupComplete: false,
+      },
+      searchQuery: '',
+      isSearchOpen: false,
+      searchResults: [],
+      isShortcutsHelpOpen: false,
+      isLoading: false,
+      notifications: [],
     });
   });
 
   describe('navigation', () => {
-    it('should navigate between screens with history', () => {
-      const { setScreen, goBack } = useAppStore.getState();
+    it('should change active view', () => {
+      const { setActiveView } = useAppStore.getState();
 
-      setScreen('PROJECTS');
-      setScreen('PROJECT_DETAIL', { projectPath: '/test' });
+      setActiveView('projects');
 
-      let { navigation } = useAppStore.getState();
-      expect(navigation.currentScreen).toBe('PROJECT_DETAIL');
-      expect(navigation.history).toContain('PROJECTS');
-      expect(navigation.params).toEqual({ projectPath: '/test' });
+      const { activeView, previousView } = useAppStore.getState();
+      expect(activeView).toBe('projects');
+      expect(previousView).toBe('overview');
+    });
+
+    it('should go back to previous view', () => {
+      const { setActiveView, goBack } = useAppStore.getState();
+
+      setActiveView('projects');
+      setActiveView('builds');
 
       goBack();
 
-      ({ navigation } = useAppStore.getState());
-      expect(navigation.currentScreen).toBe('PROJECTS');
+      const { activeView } = useAppStore.getState();
+      expect(activeView).toBe('projects');
     });
 
-    it('should go back to HOME when history is empty', () => {
+    it('should go to overview when no previous view exists', () => {
       const { goBack } = useAppStore.getState();
 
       goBack();
 
-      const { navigation } = useAppStore.getState();
-      expect(navigation.currentScreen).toBe('HOME');
+      const { activeView } = useAppStore.getState();
+      expect(activeView).toBe('overview');
+    });
+  });
+
+  describe('projects', () => {
+    it('should add a project', () => {
+      const { addProject } = useAppStore.getState();
+
+      addProject({
+        id: 'p1',
+        name: 'test-project',
+        path: '/test/project',
+        branch: 'main',
+        jdk: 'JDK 21',
+      });
+
+      const { projects } = useAppStore.getState();
+      expect(projects).toHaveLength(1);
+      expect(projects[0].name).toBe('test-project');
+    });
+
+    it('should update a project', () => {
+      const { addProject, updateProject } = useAppStore.getState();
+
+      addProject({
+        id: 'p1',
+        name: 'test-project',
+        path: '/test/project',
+        branch: 'main',
+        jdk: 'JDK 21',
+      });
+
+      updateProject('p1', { branch: 'develop' });
+
+      const { projects } = useAppStore.getState();
+      expect(projects[0].branch).toBe('develop');
+    });
+
+    it('should remove a project', () => {
+      const { addProject, removeProject } = useAppStore.getState();
+
+      addProject({
+        id: 'p1',
+        name: 'test-project',
+        path: '/test/project',
+        branch: 'main',
+        jdk: 'JDK 21',
+      });
+
+      removeProject('p1');
+
+      const { projects } = useAppStore.getState();
+      expect(projects).toHaveLength(0);
+    });
+  });
+
+  describe('jdks', () => {
+    it('should add a JDK', () => {
+      const { addJdk } = useAppStore.getState();
+
+      addJdk({
+        id: 'jdk1',
+        version: '21.0.2',
+        vendor: 'Eclipse Temurin',
+        path: '/java/jdk21',
+      });
+
+      const { jdks } = useAppStore.getState();
+      expect(jdks).toHaveLength(1);
+      expect(jdks[0].version).toBe('21.0.2');
+    });
+
+    it('should remove a JDK', () => {
+      const { addJdk, removeJdk } = useAppStore.getState();
+
+      addJdk({
+        id: 'jdk1',
+        version: '21.0.2',
+        vendor: 'Eclipse Temurin',
+        path: '/java/jdk21',
+      });
+
+      removeJdk('jdk1');
+
+      const { jdks } = useAppStore.getState();
+      expect(jdks).toHaveLength(0);
+    });
+
+    it('should set default JDK', () => {
+      const { addJdk, setDefaultJdk } = useAppStore.getState();
+
+      addJdk({ id: 'jdk1', version: '21', vendor: 'Test', path: '/jdk21' });
+      addJdk({ id: 'jdk2', version: '17', vendor: 'Test', path: '/jdk17' });
+
+      setDefaultJdk('jdk2');
+
+      const { jdks } = useAppStore.getState();
+      expect(jdks.find(j => j.id === 'jdk2')?.isDefault).toBe(true);
+      expect(jdks.find(j => j.id === 'jdk1')?.isDefault).toBeFalsy();
+    });
+  });
+
+  describe('build jobs', () => {
+    it('should add a build job', () => {
+      const { addBuildJob } = useAppStore.getState();
+
+      addBuildJob({
+        id: 'job1',
+        projectId: 'p1',
+        projectName: 'test',
+        status: 'pending',
+        progress: 0,
+        startTime: 'now',
+        jdk: 'JDK 21',
+        goals: 'clean install',
+      });
+
+      const { buildJobs } = useAppStore.getState();
+      expect(buildJobs).toHaveLength(1);
+      expect(buildJobs[0].projectName).toBe('test');
+    });
+
+    it('should update a build job', () => {
+      const { addBuildJob, updateBuildJob } = useAppStore.getState();
+
+      addBuildJob({
+        id: 'job1',
+        projectId: 'p1',
+        projectName: 'test',
+        status: 'pending',
+        progress: 0,
+        startTime: 'now',
+        jdk: 'JDK 21',
+        goals: 'clean install',
+      });
+
+      updateBuildJob('job1', { status: 'running', progress: 50 });
+
+      const { buildJobs } = useAppStore.getState();
+      expect(buildJobs[0].status).toBe('running');
+      expect(buildJobs[0].progress).toBe(50);
+    });
+
+    it('should cancel a build job', () => {
+      const { addBuildJob, cancelBuildJob } = useAppStore.getState();
+
+      addBuildJob({
+        id: 'job1',
+        projectId: 'p1',
+        projectName: 'test',
+        status: 'running',
+        progress: 50,
+        startTime: 'now',
+        jdk: 'JDK 21',
+        goals: 'clean install',
+      });
+
+      cancelBuildJob('job1');
+
+      const { buildJobs } = useAppStore.getState();
+      expect(buildJobs[0].status).toBe('cancelled');
+    });
+
+    it('should clear completed jobs', () => {
+      const { addBuildJob, clearCompletedJobs } = useAppStore.getState();
+
+      addBuildJob({
+        id: 'job1',
+        projectId: 'p1',
+        projectName: 'test1',
+        status: 'success',
+        progress: 100,
+        startTime: 'now',
+        jdk: 'JDK 21',
+        goals: 'clean install',
+      });
+      addBuildJob({
+        id: 'job2',
+        projectId: 'p2',
+        projectName: 'test2',
+        status: 'running',
+        progress: 50,
+        startTime: 'now',
+        jdk: 'JDK 21',
+        goals: 'clean install',
+      });
+
+      clearCompletedJobs();
+
+      const { buildJobs } = useAppStore.getState();
+      expect(buildJobs).toHaveLength(1);
+      expect(buildJobs[0].id).toBe('job2');
     });
   });
 
@@ -133,15 +262,11 @@ describe('useAppStore', () => {
     it('should add a pipeline', () => {
       const { addPipeline } = useAppStore.getState();
 
-      const id = addPipeline({
-        name: 'Full Build',
-        projectPath: '/test',
-        steps: [
-          { name: 'Clean Install', goals: ['clean', 'install'] },
-        ],
-      });
+      const id = addPipeline('Full Build', 'p1', [
+        { id: 's1', name: 'Clean Install', goals: ['clean', 'install'] },
+      ]);
 
-      expect(id).toMatch(/^pipeline-\d+-/);
+      expect(id).toBeTruthy();
 
       const { pipelines } = useAppStore.getState();
       expect(pipelines).toHaveLength(1);
@@ -151,11 +276,7 @@ describe('useAppStore', () => {
     it('should update a pipeline', () => {
       const { addPipeline, updatePipeline } = useAppStore.getState();
 
-      const id = addPipeline({
-        name: 'Old Name',
-        projectPath: '/test',
-        steps: [],
-      });
+      const id = addPipeline('Old Name', 'p1', []);
 
       updatePipeline(id, { name: 'New Name' });
 
@@ -166,11 +287,7 @@ describe('useAppStore', () => {
     it('should remove a pipeline', () => {
       const { addPipeline, removePipeline } = useAppStore.getState();
 
-      const id = addPipeline({
-        name: 'Test',
-        projectPath: '/test',
-        steps: [],
-      });
+      const id = addPipeline('Test', 'p1', []);
 
       removePipeline(id);
 
@@ -180,87 +297,81 @@ describe('useAppStore', () => {
   });
 
   describe('settings', () => {
-    it('should set settings and mark as loaded', () => {
-      const { setSettings } = useAppStore.getState();
+    it('should update settings partially', () => {
+      const { updateSettings } = useAppStore.getState();
 
-      setSettings({
-        scanRootPath: '/projects',
-        jdkScanPaths: '/java',
-        defaultMavenHome: '/maven',
-        defaultMavenGoal: 'clean install',
-        maxParallelBuilds: 4,
-        skipTestsByDefault: true,
-        offlineMode: false,
-        enableThreads: true,
-        threadCount: '2C',
-        setupComplete: true,
-      });
-
-      const { settings, settingsLoaded } = useAppStore.getState();
-      expect(settingsLoaded).toBe(true);
-      expect(settings.maxParallelBuilds).toBe(4);
-      expect(settings.skipTestsByDefault).toBe(true);
-    });
-
-    it('should partially update settings', () => {
-      const { setSettings, updateSettings } = useAppStore.getState();
-
-      setSettings({
-        scanRootPath: '/old',
-        jdkScanPaths: '/java',
-        defaultMavenHome: '/maven',
-        defaultMavenGoal: 'clean install',
-        maxParallelBuilds: 2,
-        skipTestsByDefault: false,
-        offlineMode: false,
-        enableThreads: false,
-        threadCount: '1C',
-      });
-
-      updateSettings({ scanRootPath: '/new', maxParallelBuilds: 8 });
+      updateSettings({ parallelBuilds: 4, autoScan: true });
 
       const { settings } = useAppStore.getState();
-      expect(settings.scanRootPath).toBe('/new');
-      expect(settings.maxParallelBuilds).toBe(8);
-      expect(settings.defaultMavenGoal).toBe('clean install');
+      expect(settings.parallelBuilds).toBe(4);
+      expect(settings.autoScan).toBe(true);
+      expect(settings.defaultGoals).toBe('clean install'); // unchanged
     });
   });
 
-  describe('data', () => {
-    it('should set projects', () => {
-      const { setProjects } = useAppStore.getState();
+  describe('notifications', () => {
+    it('should add a notification', () => {
+      const { addNotification } = useAppStore.getState();
 
-      setProjects([
-        {
-          path: '/test',
-          name: 'test-project',
-          isGitRepo: true,
-          hasPom: true,
-        },
-      ]);
+      addNotification('success', 'Build completed');
 
-      const { projects } = useAppStore.getState();
-      expect(projects).toHaveLength(1);
-      expect(projects[0].name).toBe('test-project');
+      const { notifications } = useAppStore.getState();
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0].type).toBe('success');
+      expect(notifications[0].message).toBe('Build completed');
     });
 
-    it('should set modules per project', () => {
-      const { setModules } = useAppStore.getState();
+    it('should remove a notification', () => {
+      const { addNotification } = useAppStore.getState();
 
-      setModules('/test', [
-        {
-          artifactId: 'core',
-          groupId: 'com.test',
-          pomPath: '/test/pom.xml',
-          packaging: 'jar',
-          relativePath: '.',
-          displayName: 'core',
-          depth: 0,
-        },
-      ]);
+      addNotification('info', 'Test');
+      
+      const { notifications: after } = useAppStore.getState();
+      const id = after[0].id;
 
-      const { modulesByProject } = useAppStore.getState();
-      expect(modulesByProject['/test']).toHaveLength(1);
+      const { removeNotification } = useAppStore.getState();
+      removeNotification(id);
+
+      const { notifications } = useAppStore.getState();
+      expect(notifications).toHaveLength(0);
+    });
+  });
+
+  describe('search', () => {
+    it('should open and close search', () => {
+      const { setIsSearchOpen } = useAppStore.getState();
+
+      setIsSearchOpen(true);
+      expect(useAppStore.getState().isSearchOpen).toBe(true);
+
+      setIsSearchOpen(false);
+      expect(useAppStore.getState().isSearchOpen).toBe(false);
+    });
+
+    it('should set search query', () => {
+      const { setSearchQuery } = useAppStore.getState();
+
+      setSearchQuery('test query');
+
+      expect(useAppStore.getState().searchQuery).toBe('test query');
+    });
+  });
+
+  describe('theme', () => {
+    it('should set theme', () => {
+      const { setTheme } = useAppStore.getState();
+
+      setTheme('dark');
+
+      expect(useAppStore.getState().theme).toBe('dark');
+    });
+
+    it('should set resolved theme', () => {
+      const { setResolvedTheme } = useAppStore.getState();
+
+      setResolvedTheme('dark');
+
+      expect(useAppStore.getState().resolvedTheme).toBe('dark');
     });
   });
 });
