@@ -173,6 +173,10 @@ export default function SearchModal() {
     setIsSearchOpen(false);
   }, [projects, setSelectedProject, setActiveView, setSelectedJobId, setSelectedPipelineId, setIsSearchOpen]);
 
+  const searchCategories = useMemo<
+    ('all' | 'projects' | 'builds' | 'pipelines' | 'jdks' | 'modules')[]
+  >(() => ['all', 'projects', 'builds', 'pipelines', 'jdks', 'modules'], []);
+
   // Keyboard navigation
   useEffect(() => {
     if (!isSearchOpen) return;
@@ -197,19 +201,19 @@ export default function SearchModal() {
           e.preventDefault();
           setIsSearchOpen(false);
           break;
-        case 'Tab':
+        case 'Tab': {
           e.preventDefault();
           // Cycle through categories
-          const categories: typeof category[] = ['all', 'projects', 'builds', 'pipelines', 'jdks'];
-          const currentIdx = categories.indexOf(category);
-          setCategory(categories[(currentIdx + 1) % categories.length]);
+          const currentIdx = searchCategories.indexOf(category);
+          setCategory(searchCategories[(currentIdx + 1) % searchCategories.length]);
           break;
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSearchOpen, searchResults, selectedIndex, setIsSearchOpen, handleSelect, category]);
+  }, [isSearchOpen, searchResults, selectedIndex, setIsSearchOpen, handleSelect, category, searchCategories]);
 
   const getIcon = (type: SearchResult['type']) => {
     switch (type) {
