@@ -1,12 +1,12 @@
 /**
  * Main Application Layout
- * Shared header with navigation, notifications, and page wrapper
+ * Shared header with navigation and page wrapper
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LayoutGrid, FolderGit2, Play, Coffee, Settings, Workflow,
-  Search, Bell, X, Sun, Moon, Monitor, Command
+  LayoutGrid, FolderGit2, Play, Settings, Workflow,
+  Search, Sun, Moon, Monitor, Command
 } from 'lucide-react';
 import { useAppStore, useStats } from '../store/useAppStore';
 import { useTheme, getThemeIcon, getThemeLabel } from '../hooks/useTheme';
@@ -20,8 +20,6 @@ export default function Layout({ children }: LayoutProps) {
     activeView, 
     setActiveView, 
     setIsSearchOpen,
-    notifications,
-    removeNotification
   } = useAppStore();
   const stats = useStats();
   const { theme, cycleTheme } = useTheme();
@@ -55,7 +53,7 @@ export default function Layout({ children }: LayoutProps) {
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
         >
           <div className="gfos-logo">
-            <img src="/GFOS_Logo.svg" alt="GFOS" className="gfos-logo-icon" />
+            <img src="./GFOS_Logo.svg" alt="GFOS" className="gfos-logo-icon" />
             <div className="gfos-logo-text">
               <span className="gfos-logo-primary">GFOS</span>
               <span className="gfos-logo-secondary">Build</span>
@@ -90,13 +88,6 @@ export default function Layout({ children }: LayoutProps) {
               active={activeView === 'pipelines' || activeView === 'pipeline-editor'}
               onClick={() => setActiveView('pipelines')}
             />
-            <NavTab 
-              icon={<Coffee size={18} />} 
-              label="JDKs"
-              badge={stats.jdkCount}
-              active={activeView === 'jdks'}
-              onClick={() => setActiveView('jdks')}
-            />
           </nav>
 
           <div className="gfos-header-actions">
@@ -121,14 +112,6 @@ export default function Layout({ children }: LayoutProps) {
               {getThemeIconComponent()}
             </button>
             
-            {/* Notifications */}
-            <button className="gfos-icon-btn gfos-notification-btn">
-              <Bell size={20} />
-              {notifications.length > 0 && (
-                <span className="gfos-notification-dot" />
-              )}
-            </button>
-            
             {/* Settings */}
             <button 
               className={`gfos-icon-btn ${activeView === 'settings' ? 'gfos-icon-btn-active' : ''}`}
@@ -138,28 +121,6 @@ export default function Layout({ children }: LayoutProps) {
             </button>
           </div>
         </motion.header>
-
-        {/* Notifications Toast */}
-        <AnimatePresence>
-          {notifications.length > 0 && (
-            <div className="gfos-notifications">
-              {notifications.slice(0, 3).map((notification) => (
-                <motion.div
-                  key={notification.id}
-                  className={`gfos-notification gfos-notification-${notification.type}`}
-                  initial={{ opacity: 0, x: 100 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 100 }}
-                >
-                  <span>{notification.message}</span>
-                  <button onClick={() => removeNotification(notification.id)}>
-                    <X size={16} />
-                  </button>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </AnimatePresence>
 
         {/* Main Content */}
         <main className="gfos-main">

@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Cpu, FolderSearch, Coffee, Settings, 
   Check, Loader2, AlertCircle, Folder, ArrowRight, 
-  ArrowLeft, Sparkles, GitBranch
+  ArrowLeft, Sparkles, GitBranch, Terminal
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import type { SetupWizardStep } from '../types';
@@ -33,6 +33,7 @@ export default function SetupWizardView() {
 
   const [localScanPath, setLocalScanPath] = useState(setupWizard.scanRootPath);
   const [localJdkPath, setLocalJdkPath] = useState(setupWizard.jdkScanPaths);
+  const [localMavenPath, setLocalMavenPath] = useState(setupWizard.mavenPath);
 
   const currentStepIndex = STEPS.findIndex(s => s.id === setupWizard.currentStep);
 
@@ -58,7 +59,8 @@ export default function SetupWizardView() {
     updateSetupWizard({ 
       isScanning: true, 
       scanError: undefined,
-      jdkScanPaths: localJdkPath 
+      jdkScanPaths: localJdkPath,
+      mavenPath: localMavenPath
     });
     
     // Simulate JDK scan
@@ -210,6 +212,28 @@ export default function SetupWizardView() {
                     value={localJdkPath}
                     onChange={(e) => setLocalJdkPath(e.target.value)}
                     placeholder="z.B. C:\dev\java"
+                    className="gfos-input"
+                  />
+                  <button className="gfos-secondary-btn gfos-btn-icon">
+                    <Folder size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="gfos-form-group">
+                <label>
+                  <Terminal size={16} />
+                  Maven-Executable
+                </label>
+                <p className="gfos-form-hint">
+                  Der Pfad zur Maven-Executable (mvn.cmd oder mvn)
+                </p>
+                <div className="gfos-input-with-btn">
+                  <input
+                    type="text"
+                    value={localMavenPath}
+                    onChange={(e) => setLocalMavenPath(e.target.value)}
+                    placeholder="z.B. C:\dev\maven\bin\mvn.cmd"
                     className="gfos-input"
                   />
                   <button className="gfos-secondary-btn gfos-btn-icon">

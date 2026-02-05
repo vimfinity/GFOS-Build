@@ -1,13 +1,31 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/GFOS_Logo.svg" />
+    <link rel="icon" type="image/svg+xml" href="./GFOS_Logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GFOS Build</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Prevent theme flash by setting theme class before render
+      (function() {
+        try {
+          const stored = localStorage.getItem('gfos-build-storage');
+          if (stored) {
+            const data = JSON.parse(stored);
+            const theme = data.state?.theme || 'system';
+            const isDark = theme === 'dark' || 
+              (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            if (isDark) {
+              document.documentElement.classList.add('gfos-dark');
+              document.documentElement.style.colorScheme = 'dark';
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -61,6 +61,7 @@ export interface AppSettings {
   parallelBuilds: number;
   autoScan: boolean;
   scanPaths: string[];
+  jdkScanPath: string;
   setupComplete?: boolean;
 }
 
@@ -155,6 +156,7 @@ interface AppState {
     currentStep: SetupWizardStep;
     scanRootPath: string;
     jdkScanPaths: string;
+    mavenPath: string;
     isScanning: boolean;
     scanError?: string;
     foundProjects: number;
@@ -533,6 +535,7 @@ export const useAppStore = create<AppState>()(
         parallelBuilds: 2,
         autoScan: true,
         scanPaths: ['C:\\dev\\quellen\\2025'],
+        jdkScanPath: 'C:\\dev\\java',
         setupComplete: true,
       },
       updateSettings: (updates) => set((state) => ({
@@ -544,6 +547,7 @@ export const useAppStore = create<AppState>()(
         currentStep: 'welcome',
         scanRootPath: 'C:\\dev\\quellen',
         jdkScanPaths: 'C:\\dev\\java',
+        mavenPath: 'C:\\dev\\maven\\bin\\mvn.cmd',
         isScanning: false,
         foundProjects: 0,
         foundJdks: 0,

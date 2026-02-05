@@ -438,25 +438,20 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 32px;
-  background: linear-gradient(135deg, #007d8f, #00a3b8);
+  padding: 12px 24px;
+  background: var(--gfos-accent);
   border: none;
-  border-radius: 16px;
+  border-radius: 12px;
   cursor: pointer;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: white;
-  box-shadow: 
-    0 8px 24px rgba(0, 125, 143, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: box-shadow 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .gfos-primary-btn:hover {
-  box-shadow: 
-    0 12px 32px rgba(0, 125, 143, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  background: var(--gfos-petrol-600);
 }
 
 /* ============================================
@@ -628,12 +623,12 @@
 .gfos-project-icon {
   width: 44px;
   height: 44px;
-  background: linear-gradient(135deg, rgba(0, 125, 143, 0.1), rgba(0, 163, 184, 0.08));
+  background: var(--gfos-accent-light);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #007d8f;
+  color: var(--gfos-accent);
   flex-shrink: 0;
 }
 
@@ -673,7 +668,7 @@
   width: 36px;
   height: 36px;
   border: none;
-  background: linear-gradient(135deg, #007d8f, #00a3b8);
+  background: var(--gfos-accent);
   border-radius: 10px;
   color: white;
   cursor: pointer;
@@ -682,8 +677,11 @@
   justify-content: center;
   opacity: 0;
   transform: scale(0.9);
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(0, 125, 143, 0.3);
+  transition: all 0.2s ease;
+}
+
+.gfos-action-btn:hover {
+  background: var(--gfos-petrol-600);
 }
 
 .gfos-project-card:hover .gfos-action-btn {
@@ -701,7 +699,6 @@
   background: var(--status-color);
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 8px var(--status-color);
 }
 
 .gfos-status-sm {
@@ -714,8 +711,8 @@
 }
 
 @keyframes gfos-status-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--status-color); }
-  50% { opacity: 0.6; box-shadow: 0 0 16px var(--status-color); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* ============================================
@@ -842,14 +839,15 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--gfos-bg-elevated);
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--gfos-border);
   transition: all 0.2s ease;
 }
 
 .gfos-jdk-card:hover {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--gfos-bg-surface);
+  border-color: var(--gfos-accent);
 }
 
 .gfos-jdk-card svg {
@@ -1134,12 +1132,12 @@
 .gfos-project-icon-lg {
   width: 56px;
   height: 56px;
-  background: linear-gradient(135deg, rgba(0, 125, 143, 0.1), rgba(0, 163, 184, 0.08));
+  background: var(--gfos-accent-light);
   border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #007d8f;
+  color: var(--gfos-accent);
   flex-shrink: 0;
 }
 
@@ -1528,8 +1526,8 @@
   align-items: center;
   gap: 16px;
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(0, 125, 143, 0.1), rgba(0, 163, 184, 0.08));
-  border: 1px solid rgba(0, 125, 143, 0.2);
+  background: var(--gfos-accent-light);
+  border: 1px solid var(--gfos-border);
   border-radius: 16px;
   margin-bottom: 24px;
 }
@@ -1537,7 +1535,7 @@
 .gfos-banner-icon {
   width: 44px;
   height: 44px;
-  background: linear-gradient(135deg, #007d8f, #00a3b8);
+  background: var(--gfos-accent);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -1608,12 +1606,12 @@
 .gfos-jdk-icon-lg {
   width: 52px;
   height: 52px;
-  background: linear-gradient(135deg, rgba(0, 125, 143, 0.1), rgba(0, 163, 184, 0.08));
+  background: var(--gfos-accent-light);
   border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #007d8f;
+  color: var(--gfos-accent);
 }
 
 .gfos-default-badge {
@@ -1621,7 +1619,7 @@
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  background: linear-gradient(135deg, #007d8f, #00a3b8);
+  background: var(--gfos-accent);
   border-radius: 20px;
   font-size: 0.7rem;
   font-weight: 600;
@@ -1693,31 +1691,31 @@
   display: block;
   font-size: 0.8rem;
   font-weight: 500;
-  color: #5a6b73;
+  color: var(--gfos-text-secondary);
   margin-bottom: 6px;
 }
 
 .gfos-form-group input {
   width: 100%;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(0, 125, 143, 0.15);
-  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--gfos-bg-elevated);
+  border: 1px solid var(--gfos-border);
+  border-radius: 8px;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 0.9rem;
-  color: #1a3a3f;
+  color: var(--gfos-text-primary);
   outline: none;
   transition: all 0.2s ease;
 }
 
 .gfos-form-group input:focus {
-  border-color: rgba(0, 125, 143, 0.4);
-  box-shadow: 0 0 0 3px rgba(0, 125, 143, 0.1);
+  border-color: var(--gfos-accent);
 }
 
 .gfos-input-with-btn {
   display: flex;
   gap: 8px;
+  align-items: stretch;
 }
 
 .gfos-input-with-btn input {
@@ -1737,7 +1735,7 @@
 
 .gfos-settings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
   gap: 24px;
 }
 
@@ -1747,22 +1745,86 @@
 }
 
 .gfos-section-header {
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(0, 125, 143, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--gfos-border);
 }
 
 .gfos-section-header h2 {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
-  color: #1a3a3f;
+  color: var(--gfos-text-primary);
   margin: 0;
+}
+
+/* Settings JDK List */
+.gfos-jdk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.gfos-settings-jdk-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: var(--gfos-bg-elevated);
+  border: 1px solid var(--gfos-border);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.gfos-settings-jdk-item.gfos-jdk-default {
+  border-color: var(--gfos-accent);
+  background: var(--gfos-accent-subtle);
+}
+
+.gfos-jdk-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gfos-jdk-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--gfos-text-primary);
+}
+
+.gfos-jdk-path {
+  font-size: 0.75rem;
+  color: var(--gfos-text-muted);
+  background: var(--gfos-bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.gfos-jdk-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.gfos-empty-state-small {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--gfos-text-muted);
 }
 
 .gfos-input-hint {
   display: block;
   font-size: 0.75rem;
-  color: #8a9ba3;
+  color: var(--gfos-text-muted);
   margin-top: 6px;
 }
 
@@ -1776,17 +1838,17 @@
 .gfos-number-input button {
   width: 36px;
   height: 36px;
-  border: 1px solid rgba(0, 125, 143, 0.2);
-  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--gfos-border);
+  background: var(--gfos-bg-elevated);
   border-radius: 8px;
   font-size: 1.25rem;
-  color: #007d8f;
+  color: var(--gfos-accent);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .gfos-number-input button:hover:not(:disabled) {
-  background: rgba(0, 125, 143, 0.1);
+  background: var(--gfos-accent-light);
 }
 
 .gfos-number-input button:disabled {
@@ -1796,13 +1858,15 @@
 
 .gfos-number-input input {
   width: 60px;
+  height: 36px;
   text-align: center;
   padding: 8px;
-  border: 1px solid rgba(0, 125, 143, 0.15);
+  border: 1px solid var(--gfos-border);
   border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
-  color: #1a3a3f;
+  color: var(--gfos-text-primary);
+  background: var(--gfos-bg-elevated);
 }
 
 .gfos-toggle-label {
@@ -1883,22 +1947,23 @@
 }
 
 .gfos-about-info h3 {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  color: #1a3a3f;
+  color: var(--gfos-text-primary);
   margin: 0 0 4px 0;
 }
 
 .gfos-about-info p {
   margin: 0;
-  color: #5a6b73;
+  color: var(--gfos-text-secondary);
 }
 
 .gfos-about-meta {
   display: flex;
-  gap: 32px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(0, 125, 143, 0.1);
+  flex-wrap: wrap;
+  gap: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gfos-border);
 }
 
 .gfos-meta-item {
@@ -1909,15 +1974,15 @@
 
 .gfos-meta-label {
   font-size: 0.7rem;
-  color: #8a9ba3;
+  color: var(--gfos-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .gfos-meta-value {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 500;
-  color: #1a3a3f;
+  color: var(--gfos-text-primary);
 }
 
 .gfos-unsaved-banner {
@@ -1928,23 +1993,48 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 16px 24px;
-  background: rgba(251, 191, 36, 0.95);
-  backdrop-filter: blur(16px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  color: #1a3a3f;
+  padding: 14px 24px;
+  background: var(--gfos-warning);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  color: white;
   z-index: 100;
+  font-size: 0.9rem;
 }
 
 .gfos-unsaved-banner svg {
-  color: #b45309;
+  color: white;
+  flex-shrink: 0;
+}
+
+.gfos-unsaved-banner span {
+  white-space: nowrap;
 }
 
 .gfos-banner-actions {
   display: flex;
+  align-items: center;
   gap: 12px;
-  margin-left: 16px;
+  margin-left: 8px;
+}
+
+.gfos-banner-actions .gfos-text-btn {
+  color: white;
+  opacity: 0.9;
+}
+
+.gfos-banner-actions .gfos-text-btn:hover {
+  opacity: 1;
+}
+
+.gfos-banner-actions .gfos-primary-btn {
+  background: white;
+  color: var(--gfos-warning);
+  box-shadow: none;
+}
+
+.gfos-banner-actions .gfos-primary-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
 }
 
 /* ============================================
@@ -2140,13 +2230,13 @@
    ============================================ */
 
 .gfos-jdk-default {
-  border-color: rgba(0, 125, 143, 0.2);
-  background: rgba(0, 125, 143, 0.05);
+  border-color: var(--gfos-accent);
+  background: var(--gfos-accent-light);
 }
 
 .gfos-jdk-badge {
   padding: 2px 8px;
-  background: linear-gradient(135deg, #007d8f, #00a3b8);
+  background: var(--gfos-accent);
   border-radius: 10px;
   font-size: 0.65rem;
   font-weight: 600;
@@ -2358,18 +2448,22 @@
 
 /* Dark Mode - Buttons & Forms */
 .gfos-dark .gfos-primary-btn {
-  background: linear-gradient(135deg, #007d8f, #005966);
+  background: var(--gfos-petrol-600);
+}
+
+.gfos-dark .gfos-primary-btn:hover {
+  background: var(--gfos-petrol-700);
 }
 
 .gfos-dark .gfos-secondary-btn {
-  background: rgba(43, 45, 50, 0.8);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #54a8b4;
+  background: var(--gfos-bg-elevated);
+  border-color: var(--gfos-border);
+  color: var(--gfos-petrol-300);
 }
 
 .gfos-dark .gfos-secondary-btn:hover {
-  background: rgba(56, 57, 65, 0.9);
-  border-color: rgba(0, 125, 143, 0.3);
+  background: var(--gfos-bg-surface);
+  border-color: var(--gfos-accent);
 }
 
 .gfos-dark .gfos-danger-btn {
@@ -3352,21 +3446,31 @@
 
 .gfos-select {
   width: 100%;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(0, 125, 143, 0.15);
+  padding: 12px 40px 12px 16px;
+  background: var(--gfos-bg-elevated);
+  border: 1px solid var(--gfos-border);
   border-radius: 10px;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 0.9rem;
-  color: #1a3a3f;
+  color: var(--gfos-text-primary);
   outline: none;
   cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23007d8f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+}
+
+.gfos-select:focus {
+  border-color: var(--gfos-accent);
 }
 
 .gfos-dark .gfos-select {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #e5e7eb;
+  background-color: var(--gfos-bg-elevated);
+  border-color: var(--gfos-border);
+  color: var(--gfos-text-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2354a8b4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 .gfos-goals-chips {
@@ -3540,7 +3644,7 @@
   width: 100px;
   height: 100px;
   margin: 0 auto;
-  background: linear-gradient(135deg, #007d8f, #00a3b8);
+  background: var(--gfos-accent);
   border-radius: 24px;
   display: flex;
   align-items: center;
@@ -3617,25 +3721,25 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 32px;
-  background: linear-gradient(135deg, #007d8f, #00a3b8);
+  padding: 14px 28px;
+  background: var(--gfos-accent);
   border: none;
-  border-radius: 14px;
+  border-radius: 12px;
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 1rem;
   font-weight: 600;
   color: white;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(0, 125, 143, 0.35);
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .gfos-wizard-primary-btn:hover {
-  box-shadow: 0 12px 32px rgba(0, 125, 143, 0.4);
-  transform: translateY(-2px);
+  background: var(--gfos-petrol-600);
 }
 
-.gfos-wizard-content {}
+.gfos-wizard-content {
+  display: block;
+}
 
 .gfos-wizard-step-header {
   display: flex;
@@ -3774,7 +3878,7 @@
   width: 100px;
   height: 100px;
   margin: 0 auto 32px;
-  background: linear-gradient(135deg, #10b981, #34d399);
+  background: var(--gfos-success);
   border-radius: 50%;
   display: flex;
   align-items: center;

@@ -6,13 +6,13 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Settings, Save, FolderOpen, Plus, Trash2,
-  RefreshCw, AlertTriangle
+  RefreshCw, AlertTriangle, Coffee, Check
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 // Shared components can be imported if needed
 
 export default function SettingsView() {
-  const { settings, updateSettings, addNotification } = useAppStore();
+  const { settings, updateSettings, addNotification, jdks, setDefaultJdk } = useAppStore();
   
   const [localSettings, setLocalSettings] = useState(settings);
   const [hasChanges, setHasChanges] = useState(false);
@@ -146,6 +146,75 @@ export default function SettingsView() {
           </div>
         </motion.section>
 
+        {/* JDK Configuration */}
+        <motion.section 
+          className="gfos-glass-panel gfos-settings-section"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+        >
+          <div className="gfos-section-header">
+            <h2>JDK Konfiguration</h2>
+            <span className="gfos-badge">{jdks.length}</span>
+          </div>
+
+          <div className="gfos-jdk-list">
+            {jdks.length === 0 ? (
+              <div className="gfos-empty-state-small">
+                <Coffee size={24} />
+                <p>Keine JDKs gefunden</p>
+              </div>
+            ) : (
+              jdks.map((jdk) => (
+                <div 
+                  key={jdk.id} 
+                  className={`gfos-settings-jdk-item ${jdk.isDefault ? 'gfos-jdk-default' : ''}`}
+                >
+                  <div className="gfos-jdk-info">
+                    <div className="gfos-jdk-version">
+                      <Coffee size={16} />
+                      <span>Java {jdk.version}</span>
+                      {jdk.isDefault && (
+                        <span className="gfos-badge gfos-badge-accent">Standard</span>
+                      )}
+                    </div>
+                    <code className="gfos-jdk-path">{jdk.path}</code>
+                    <span className="gfos-muted">{jdk.vendor}</span>
+                  </div>
+                  <div className="gfos-jdk-actions">
+                    {!jdk.isDefault && (
+                      <button 
+                        className="gfos-text-btn"
+                        onClick={() => setDefaultJdk(jdk.id)}
+                        title="Als Standard setzen"
+                      >
+                        <Check size={16} />
+                        <span>Standard</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="gfos-form-group">
+            <label>JDK-Scan-Verzeichnis</label>
+            <div className="gfos-input-with-btn">
+              <input
+                type="text"
+                value={localSettings.jdkScanPath || ''}
+                onChange={(e) => handleChange('jdkScanPath' as keyof typeof settings, e.target.value as never)}
+                placeholder="C:\dev\java"
+              />
+              <button className="gfos-icon-btn-sm">
+                <FolderOpen size={16} />
+              </button>
+            </div>
+            <span className="gfos-input-hint">Verzeichnis mit JDK-Installationen</span>
+          </div>
+        </motion.section>
+
         {/* Scan Configuration */}
         <motion.section 
           className="gfos-glass-panel gfos-settings-section"
@@ -215,7 +284,7 @@ export default function SettingsView() {
 
           <div className="gfos-about-content">
             <div className="gfos-about-logo">
-              <img src="/GFOS_Logo.svg" alt="GFOS" />
+              <img src="./GFOS_Logo.svg" alt="GFOS" />
             </div>
             <div className="gfos-about-info">
               <h3>GFOS Build</h3>

@@ -42,7 +42,7 @@ export default function Dashboard() {
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
         >
           <div className="gfos-logo">
-            <img src="/GFOS_Logo.svg" alt="GFOS" className="gfos-logo-icon" />
+            <img src="./GFOS_Logo.svg" alt="GFOS" className="gfos-logo-icon" />
             <div className="gfos-logo-text">
               <span className="gfos-logo-primary">GFOS</span>
               <span className="gfos-logo-secondary">Build</span>
