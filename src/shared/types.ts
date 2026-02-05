@@ -87,6 +87,7 @@ export interface BuildJob {
   enableThreads?: boolean;
   threads?: string;
   profiles?: string[];
+  disabledProfiles?: string[]; // Profiles to disable with -P !profile
   pipelineId?: string;
   pipelineStep?: number;
 }

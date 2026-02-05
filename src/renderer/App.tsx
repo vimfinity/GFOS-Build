@@ -18,7 +18,6 @@ import ShortcutsHelpOverlay from './components/ShortcutsHelpOverlay';
 import { useAppStore } from './store/useAppStore';
 import { useTheme } from './hooks/useTheme';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import './Dashboard.css';
 
 function App() {
   const activeView = useAppStore((state) => state.activeView);

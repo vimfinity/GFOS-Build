@@ -73,8 +73,19 @@ class BuildService {
     if (job.skipTests) args.push('-DskipTests');
     if (job.offline) args.push('-o');
     if (job.enableThreads && job.threads) args.push('-T', job.threads);
-    if (job.profiles && job.profiles.length > 0)
-      args.push('-P', job.profiles.join(','));
+    
+    // Handle profiles (both active and disabled with !)
+    const allProfiles: string[] = [];
+    if (job.profiles && job.profiles.length > 0) {
+      allProfiles.push(...job.profiles);
+    }
+    if (job.disabledProfiles && job.disabledProfiles.length > 0) {
+      allProfiles.push(...job.disabledProfiles.map(p => `!${p}`));
+    }
+    if (allProfiles.length > 0) {
+      args.push('-P', allProfiles.join(','));
+    }
+    
     if (job.modulePath) args.push('-pl', job.modulePath, '-am');
     return args;
   }

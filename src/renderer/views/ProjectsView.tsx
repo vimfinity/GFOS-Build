@@ -86,20 +86,20 @@ export default function ProjectsView() {
     <>
       {/* Page Header */}
       <motion.div 
-        className="gfos-page-header"
+        className="flex items-center justify-between"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="gfos-page-title">
+        <div className="flex items-center gap-4">
           <FolderGit2 size={28} />
           <div>
-            <h1>Projekte</h1>
-            <p>{filteredProjects.length} Maven-Projekte gefunden</p>
+            <h1 className="text-2xl font-bold text-dark-500 dark:text-light-100">Projekte</h1>
+            <p className="text-sm text-dark-300 dark:text-light-400">{filteredProjects.length} Maven-Projekte gefunden</p>
           </div>
         </div>
-        <div className="gfos-page-actions">
+        <div className="flex items-center gap-3">
           <button 
-            className="gfos-secondary-btn" 
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-light-200 dark:bg-dark-700 text-dark-500 dark:text-light-100 font-medium rounded-xl hover:bg-light-300 dark:hover:bg-dark-600 transition-colors disabled:opacity-50" 
             disabled={isScanning}
             onClick={handleScanFolder}
           >
@@ -110,12 +110,12 @@ export default function ProjectsView() {
       </motion.div>
 
       {/* Projects Grid */}
-      <div className="gfos-projects-grid-full">
+      <div className="grid grid-cols-1 gap-4 mt-6">
         <AnimatePresence>
           {filteredProjects.map((project, i) => (
             <motion.div
               key={project.id}
-              className={`gfos-project-card-full ${expandedProject === project.id ? 'gfos-project-expanded' : ''}`}
+              className={`bg-white/60 dark:bg-dark-800/80 backdrop-blur-xl rounded-2xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(0,125,143,0.08)] overflow-hidden ${expandedProject === project.id ? 'ring-2 ring-petrol-500/30' : ''}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -124,34 +124,34 @@ export default function ProjectsView() {
             >
               {/* Main Content */}
               <div 
-                className="gfos-project-main"
+                className="flex items-center gap-4 p-5 cursor-pointer hover:bg-light-100/50 dark:hover:bg-dark-700/50 transition-colors"
                 onClick={() => setExpandedProject(
                   expandedProject === project.id ? null : project.id
                 )}
               >
-                <div className="gfos-project-icon-lg">
+                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-petrol-100 dark:bg-petrol-900/30 text-petrol-500">
                   <FolderGit2 size={24} />
                 </div>
                 
-                <div className="gfos-project-details">
-                  <div className="gfos-project-name-row">
-                    <h3>{project.name}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold text-dark-500 dark:text-light-100 truncate">{project.name}</h3>
                     {project.lastBuild && (
                       <StatusIndicator status={project.lastBuild.status} />
                     )}
                   </div>
-                  <p className="gfos-project-path">{project.path}</p>
-                  <div className="gfos-project-tags">
-                    <span className="gfos-tag">
+                  <p className="text-sm text-dark-300 dark:text-light-400 truncate mt-0.5">{project.path}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-light-200 dark:bg-dark-600 text-dark-400 dark:text-light-300">
                       <GitBranch size={12} />
                       {project.branch}
                     </span>
-                    <span className="gfos-tag">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-light-200 dark:bg-dark-600 text-dark-400 dark:text-light-300">
                       <Coffee size={12} />
                       {project.jdk}
                     </span>
                     {project.lastBuild && (
-                      <span className="gfos-tag gfos-tag-muted">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-light-100 dark:bg-dark-700 text-dark-300 dark:text-light-400">
                         <Clock size={12} />
                         {project.lastBuild.timestamp}
                       </span>
@@ -159,9 +159,9 @@ export default function ProjectsView() {
                   </div>
                 </div>
 
-                <div className="gfos-project-actions-row">
+                <div className="flex items-center gap-3">
                   <motion.button 
-                    className="gfos-action-btn"
+                    className="flex items-center justify-center w-10 h-10 rounded-xl bg-petrol-500 text-white hover:bg-petrol-600 transition-colors"
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={(e) => {
@@ -173,7 +173,7 @@ export default function ProjectsView() {
                   </motion.button>
                   <ChevronDown 
                     size={20} 
-                    className={`gfos-expand-icon ${expandedProject === project.id ? 'gfos-rotated' : ''}`}
+                    className={`text-dark-300 transition-transform duration-300 ${expandedProject === project.id ? 'rotate-180' : ''}`}
                   />
                 </div>
               </div>
@@ -182,55 +182,56 @@ export default function ProjectsView() {
               <AnimatePresence>
                 {expandedProject === project.id && (
                   <motion.div
-                    className="gfos-project-expanded-content"
+                    className="border-t border-light-300 dark:border-dark-600"
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <div className="gfos-project-info-grid">
-                      <div className="gfos-info-item">
-                        <label>Maven Goals</label>
-                        <code>{project.mavenGoals || 'clean install'}</code>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 bg-light-50/50 dark:bg-dark-900/30">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase tracking-wide">Maven Goals</label>
+                        <code className="block text-sm text-dark-500 dark:text-light-100">{project.mavenGoals || 'clean install'}</code>
                       </div>
-                      <div className="gfos-info-item">
-                        <label>JDK Version</label>
-                        <span>{project.jdk}</span>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase tracking-wide">JDK Version</label>
+                        <span className="block text-sm text-dark-500 dark:text-light-100">{project.jdk}</span>
                       </div>
-                      <div className="gfos-info-item">
-                        <label>Branch</label>
-                        <span>{project.branch}</span>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase tracking-wide">Branch</label>
+                        <span className="block text-sm text-dark-500 dark:text-light-100">{project.branch}</span>
                       </div>
                       {project.lastBuild && (
-                        <div className="gfos-info-item">
-                          <label>Letzter Build</label>
-                          <div className="gfos-last-build-info">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-dark-300 dark:text-light-400 uppercase tracking-wide">Letzter Build</label>
+                          <div className="flex items-center gap-2 text-sm">
                             <StatusIndicator status={project.lastBuild.status} size="small" />
-                            <span>{project.lastBuild.duration}</span>
-                            <span className="gfos-muted">({project.lastBuild.timestamp})</span>
+                            <span className="text-dark-500 dark:text-light-100">{project.lastBuild.duration}</span>
+                            <span className="text-dark-300 dark:text-light-400">({project.lastBuild.timestamp})</span>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    <div className="gfos-project-expanded-actions">
+                    <div className="flex items-center justify-between p-5 bg-light-100/30 dark:bg-dark-800/50">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-light-200 dark:bg-dark-700 text-dark-500 dark:text-light-100 text-sm font-medium rounded-lg hover:bg-light-300 dark:hover:bg-dark-600 transition-colors"
+                          onClick={() => openBuildConfig(project)}
+                        >
+                          <Edit2 size={16} />
+                          <span>Bearbeiten</span>
+                        </button>
+                        <button 
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400 text-sm font-medium rounded-lg hover:bg-error-200 dark:hover:bg-error-900/50 transition-colors"
+                          onClick={() => setDeleteDialog({ isOpen: true, projectId: project.id })}
+                        >
+                          <Trash2 size={16} />
+                          <span>Entfernen</span>
+                        </button>
+                      </div>
                       <button 
-                        className="gfos-secondary-btn gfos-btn-sm"
-                        onClick={() => openBuildConfig(project)}
-                      >
-                        <Edit2 size={16} />
-                        <span>Bearbeiten</span>
-                      </button>
-                      <button 
-                        className="gfos-danger-btn gfos-btn-sm"
-                        onClick={() => setDeleteDialog({ isOpen: true, projectId: project.id })}
-                      >
-                        <Trash2 size={16} />
-                        <span>Entfernen</span>
-                      </button>
-                      <div className="gfos-flex-spacer" />
-                      <button 
-                        className="gfos-primary-btn"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-petrol-500 text-white font-medium rounded-xl hover:bg-petrol-600 transition-colors"
                         onClick={() => openBuildConfig(project)}
                       >
                         <Play size={18} />
@@ -246,19 +247,19 @@ export default function ProjectsView() {
 
         {filteredProjects.length === 0 && (
           <motion.div 
-            className="gfos-empty-state"
+            className="flex flex-col items-center justify-center py-16 text-center text-dark-300"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
           >
-            <Search size={48} />
-            <h3>Keine Projekte gefunden</h3>
-            <p>
+            <Search size={48} className="mb-4 text-dark-200" />
+            <h3 className="text-lg font-semibold text-dark-400 dark:text-light-200 mb-2">Keine Projekte gefunden</h3>
+            <p className="text-dark-300 dark:text-light-400 mb-6">
               {searchQuery 
                 ? `Keine Projekte für "${searchQuery}" gefunden.`
                 : 'Scanne einen Ordner, um Maven-Projekte zu finden.'}
             </p>
             <button 
-              className="gfos-primary-btn"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-petrol-500 text-white font-medium rounded-xl hover:bg-petrol-600 transition-colors"
               disabled={isScanning}
               onClick={handleScanFolder}
             >
