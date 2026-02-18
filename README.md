@@ -37,23 +37,25 @@ Das Zielsystem braucht **keine** JS-Runtime.
 Wir bauen ein Standalone-Binary via Bun-Compile:
 
 ```bash
-bun run binary:build
+bun run binary:build  # baut immer Windows-Binary (gfos-build.exe)
 ```
 
-Danach liegt (plattformabhängig) ein ausführbares Artefakt in `release/` (`gfos-build` oder `gfos-build.exe`).
-Dieses Artefakt kann direkt auf dem Zielsystem ausgeführt werden.
+Danach liegt ein Windows-Artefakt in `release/gfos-build.exe`, das direkt auf dem Zielsystem ausführbar ist.
+
+Für lokale Smoke-Tests auf Nicht-Windows-Systemen gibt es zusätzlich:
+- `bun run binary:build:native` (baut natives Binary für das aktuelle Host-OS)
 
 ## Teststrategie (du + ich + CI + Zielsystem)
 
 1. **Unit/Domain-Tests** (lokal + CI)
    - `bun run check` (lint, typecheck, tests, ts-build)
 2. **Binary Smoke-Test** (lokal + CI)
-   - `bun run binary:build`
+   - `bun run binary:build:native`
    - `bun run binary:smoke`
-   - prüft reale Ausführung des kompilierten Binaries gegen Fixture-Workspace
+   - prüft reale Ausführung des kompilierten nativen Binaries gegen Fixture-Workspace
 3. **Plattformvalidierung in CI**
-   - GitHub Actions baut und smoket das Binary auf Linux und Windows
-   - Artefakte werden hochgeladen
+   - GitHub Actions baut und smoket das Windows-Binary
+   - Windows-Artefakt wird hochgeladen
 4. **Zielsystem-Test ohne Runtime**
    - Binary-Artefakt kopieren
    - `gfos-build.exe scan --root <dein-path> --json` ausführen

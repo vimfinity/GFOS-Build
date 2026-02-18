@@ -37,8 +37,8 @@ Diese Trennung erlaubt später UI-, API- oder Worker-Schichten ohne Rewrites.
 
 ## 6) CI/CD & Distribution
 - Strikte Quality-Gates: `lint`, `typecheck`, `test`, `build`.
-- Zusätzlicher Binary-Smoke-Job auf Linux und Windows.
-- Standalone Distribution via `bun build --compile`, damit Zielsysteme ohne Node/npm/Bun das Tool direkt ausführen können.
+- Zusätzlicher Windows-Binary-Build/Smoke-Job auf der Zielplattform.
+- Standalone Distribution via `bun build --compile` mit Windows-Target (`bun-windows-x64-modern`), damit Zielsysteme ohne Node/npm/Bun das Tool direkt ausführen können.
 
 ## 7) Erweiterbarkeit
 Die Foundation ist vorbereitet für:

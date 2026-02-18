@@ -11,15 +11,16 @@ Das Zielsystem hat weder npm, Node.js noch Bun. Deshalb muss GFOS Build als ausf
 
 ## 2. Binary Build
 - `bun run binary:build`
-- Erzeugt `release/gfos-build` bzw. `release/gfos-build.exe`.
+- Erzeugt immer das Windows-Binary: `release/gfos-build.exe`.
+- Optional lokal: `bun run binary:build:native` für Host-OS-Binary (nur für lokale Smoke-Tests).
 
 ## 3. Binary Smoke-Test
 - `bun run binary:smoke`
 - Führt das echte Binary gegen Fixture-Repositories aus und validiert JSON-Output.
 
 ## 4. CI Plattformabdeckung
-- Linux + Windows Build/Smoke in GitHub Actions.
-- Upload der Binärartefakte pro OS.
+- Windows Build/Smoke in GitHub Actions (Zielplattform).
+- Upload des Windows-Binärartefakts.
 
 ## 5. Zielsystem-Akzeptanztest
 Empfehlung vor Rollout:
