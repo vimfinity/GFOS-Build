@@ -1,0 +1,12 @@
+{
+  "roots": ["J:/dev/quellen"],
+  "scan": {
+    "maxDepth": 4,
+    "includeHidden": false
+  },
+  "build": {
+    "goals": ["clean", "install"],
+    "mavenExecutable": "mvn",
+    "failFast": true
+  }
+}
