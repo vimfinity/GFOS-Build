@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { ModuleGraph } from '../core/types.js';
 
@@ -14,16 +15,32 @@ export interface DiscoveryCache {
   createKey(input: { roots: string[]; maxDepth: number; includeHidden: boolean }): string;
 }
 
+function getDefaultCacheDir(): string {
+  if (process.platform === 'win32') {
+    const base = process.env.LOCALAPPDATA ?? process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Local');
+    return path.join(base, 'GFOS-Build', 'cache');
+  }
+
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Caches', 'gfos-build');
+  }
+
+  const xdg = process.env.XDG_CACHE_HOME;
+  return path.join(xdg ?? path.join(os.homedir(), '.cache'), 'gfos-build');
+}
+
 export class NodeDiscoveryCache implements DiscoveryCache {
-  private readonly cacheDir = path.resolve('.gfos-build-cache');
+  private readonly cacheDir = getDefaultCacheDir();
 
   createKey(input: { roots: string[]; maxDepth: number; includeHidden: boolean }): string {
     const digest = createHash('sha256')
-      .update(JSON.stringify({
-        roots: [...input.roots].sort(),
-        maxDepth: input.maxDepth,
-        includeHidden: input.includeHidden,
-      }))
+      .update(
+        JSON.stringify({
+          roots: [...input.roots].sort(),
+          maxDepth: input.maxDepth,
+          includeHidden: input.includeHidden,
+        })
+      )
       .digest('hex');
 
     return `scan-${digest}`;

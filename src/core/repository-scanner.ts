@@ -15,21 +15,27 @@ interface QueueItem {
 }
 
 function buildModuleGraph(modules: MavenRepository[]): ModuleGraph {
-  const sorted = [...modules].sort((a, b) => a.path.localeCompare(b.path));
-  const modulePaths = new Set(sorted.map(module => module.path));
+  const sorted = [...modules]
+    .map(module => ({ ...module, path: path.normalize(module.path), pomPath: path.normalize(module.pomPath) }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  const moduleMap = new Map(sorted.map(module => [module.path, module]));
 
   const modulesWithParent = sorted.map(module => {
-    const relativeSegments = module.path.split(path.sep).filter(Boolean);
     let parentPath: string | undefined;
+    let cursor = path.dirname(module.path);
 
-    for (let i = relativeSegments.length - 1; i > 0; i -= 1) {
-      const candidate = `${path.isAbsolute(module.path) ? path.sep : ''}${relativeSegments
-        .slice(0, i)
-        .join(path.sep)}`;
-      if (modulePaths.has(candidate)) {
-        parentPath = candidate;
+    while (cursor !== module.path && cursor !== '.') {
+      if (moduleMap.has(cursor)) {
+        parentPath = cursor;
         break;
       }
+
+      const next = path.dirname(cursor);
+      if (next === cursor) {
+        break;
+      }
+      cursor = next;
     }
 
     return {

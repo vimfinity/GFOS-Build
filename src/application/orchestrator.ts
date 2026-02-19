@@ -150,7 +150,20 @@ function createBuildPlan(
 async function loadPipelineDefinition(pipelinePath: string): Promise<PipelineDefinition> {
   const { promises: fs } = await import('node:fs');
   const nodePath = await import('node:path');
-  const content = await fs.readFile(nodePath.resolve(pipelinePath), 'utf-8');
+  const resolved = nodePath.resolve(pipelinePath);
+
+  let content = '';
+  try {
+    content = await fs.readFile(resolved, 'utf-8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(
+        `Pipeline-Datei nicht gefunden: ${resolved}. Lege eine pipeline.json an oder nutze --pipeline <path>.`
+      );
+    }
+    throw error;
+  }
+
   const parsed = JSON.parse(content) as unknown;
   return pipelineSchema.parse(parsed);
 }

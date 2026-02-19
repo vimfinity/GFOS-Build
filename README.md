@@ -152,3 +152,18 @@ Beispiel `pipeline.json`:
   ]
 }
 ```
+
+
+## Hinweis zu `discovered` vs. `moduleGraph.rootModules`
+
+- `discovered` enthält **alle** gefundenen Maven-Module (inkl. Submodule).
+- `moduleGraph.rootModules` enthält nur Top-Level-Module ohne Parent.
+- Für BuildScope `root-only` werden ausschließlich `rootModules` als Startpunkte genutzt.
+
+## Speicherorte (Best Practice)
+
+- `gfos-build.config.json`: standardmäßig im aktuellen Arbeitsverzeichnis (alternativ über `--config <path>`).
+- Discovery-Cache: im Nutzer-Cache-Verzeichnis des Betriebssystems, nicht neben dem Binary.
+  - Windows: `%LOCALAPPDATA%\GFOS-Build\cache`
+  - macOS: `~/Library/Caches/gfos-build`
+  - Linux: `${XDG_CACHE_HOME:-~/.cache}/gfos-build`
