@@ -74,7 +74,7 @@ describe('CLI Phase-1 integration', () => {
         };
       };
 
-      expect(report.schemaVersion).toBe('1.0');
+      expect(report.schemaVersion).toBe('1.1');
       expect(report.command).toBe('build');
       expect(report.mode).toBe('build-plan');
       expect(report.events.length).toBeGreaterThan(0);
@@ -126,7 +126,7 @@ describe('CLI Phase-1 integration', () => {
         };
       };
 
-      expect(report.schemaVersion).toBe('1.0');
+      expect(report.schemaVersion).toBe('1.1');
       expect(report.command).toBe('build');
       expect(report.mode).toBe('build-run');
       expect(report.events.length).toBeGreaterThan(0);

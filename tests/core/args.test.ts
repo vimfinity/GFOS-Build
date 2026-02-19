@@ -76,7 +76,11 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['pipeline', 'execute'])).toThrow(CliUsageError);
   });
 
-  it('parst pipeline plan/run', () => {
+  it('parst pipeline lint/plan/run', () => {
+    const lint = parseArgs(['pipeline', 'lint', '--pipeline', './pipeline.json', '--json']);
+    expect(lint.command).toBe('pipeline');
+    expect(lint.pipelineAction).toBe('lint');
+
     const plan = parseArgs(['pipeline', 'plan', '--pipeline', './pipeline.json', '--json']);
     expect(plan.command).toBe('pipeline');
     expect(plan.pipelineAction).toBe('plan');

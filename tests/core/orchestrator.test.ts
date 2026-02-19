@@ -84,7 +84,7 @@ describe('runCommand', () => {
       createCache() as never
     );
 
-    expect(report.schemaVersion).toBe('1.0');
+    expect(report.schemaVersion).toBe('1.1');
     expect(report.mode).toBe('scan');
     expect(report.discovered).toHaveLength(3);
     expect(report.moduleGraph.rootModules).toHaveLength(2);

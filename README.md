@@ -156,7 +156,7 @@ Konkrete Priorisierung der nächsten Umsetzungsschritte: [`docs/NEXT_STEPS.md`](
 
 ## Run-Report (versioniert)
 
-Die JSON-Ausgabe liefert ab Phase 1 einen versionierten Report (`schemaVersion: "1.0"`) inkl.
+Die JSON-Ausgabe liefert ab Phase 1 einen versionierten Report (`schemaVersion: "1.1"`) inkl.
 - Laufzeitmetadaten (`startedAt`, `finishedAt`, `durationMs`),
 - optionalem `buildPlan` für `build --plan`,
 - Modulgraph (`moduleGraph`) für Root/Submodule-Beziehungen,

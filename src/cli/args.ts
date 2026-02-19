@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { ErrorCode } from '../core/errors.js';
 
 const argsSchema = z.object({
   command: z.enum(['scan', 'build', 'pipeline']),
-  pipelineAction: z.enum(['plan', 'run']).optional(),
+  pipelineAction: z.enum(['lint', 'plan', 'run']).optional(),
   pipelinePath: z.string().min(1).optional(),
   roots: z.array(z.string().min(1)),
   modules: z.array(z.string().min(1)),
@@ -29,7 +30,7 @@ const argsSchema = z.object({
 export type CliArgs = z.infer<typeof argsSchema>;
 
 export class CliUsageError extends Error {
-  constructor(message: string) {
+  constructor(public readonly code: ErrorCode, message: string) {
     super(message);
     this.name = 'CliUsageError';
   }
@@ -67,9 +68,10 @@ function parseCommand(rawArgs: string[]): {
 
   if (rootCommand === 'pipeline') {
     const action = rawArgs[1];
-    if (action !== 'plan' && action !== 'run') {
+    if (action !== 'lint' && action !== 'plan' && action !== 'run') {
       throw new CliUsageError(
-        `Ungültige Pipeline-Aktion: ${action ?? '<leer>'}. Erlaubt sind: plan | run.`
+        'USAGE_INVALID_PIPELINE_ACTION',
+        `Ungültige Pipeline-Aktion: ${action ?? '<leer>'}. Erlaubt sind: lint | plan | run.`
       );
     }
 
@@ -81,6 +83,7 @@ function parseCommand(rawArgs: string[]): {
   }
 
   throw new CliUsageError(
+    'USAGE_INVALID_COMMAND',
     `Unbekannter Befehl: ${rootCommand}. Erlaubt sind: scan | build | pipeline.`
   );
 }

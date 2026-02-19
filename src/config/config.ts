@@ -30,6 +30,12 @@ const configSchema = z.object({
       toolchains: z.array(toolchainRuleSchema).default([]),
       failFast: z.boolean().default(true),
       maxParallel: z.number().int().min(1).max(32).default(1),
+      resourceLimits: z
+        .object({
+          maxParallelCap: z.number().int().min(1).max(64).optional(),
+          reserveCpuCores: z.number().int().min(0).max(8).default(0),
+        })
+        .default({ reserveCpuCores: 0 }),
     })
     .default({
       goals: ['clean', 'install'],
@@ -37,6 +43,7 @@ const configSchema = z.object({
       toolchains: [],
       failFast: true,
       maxParallel: 1,
+      resourceLimits: { reserveCpuCores: 0 },
     }),
 });
 

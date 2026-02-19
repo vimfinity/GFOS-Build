@@ -72,6 +72,26 @@ function runCli(args: string[], env?: NodeJS.ProcessEnv) {
 }
 
 describe('pipeline integration', () => {
+
+  it('pipeline lint validiert Definition ohne Ausführung', () => {
+    const { workspaceRoot, pipelinePath, mavenLogPath } = createFixtureWorkspace();
+
+    const result = runCli(
+      ['pipeline', 'lint', '--root', workspaceRoot, '--max-depth', '6', '--pipeline', pipelinePath, '--json'],
+      { GFOS_MVN_LOG: mavenLogPath }
+    );
+
+    try {
+      expect(result.status).toBe(0);
+      const report = JSON.parse(result.stdout) as { mode: string; buildResults: unknown[] };
+      expect(report.mode).toBe('pipeline-lint');
+      expect(report.buildResults).toHaveLength(0);
+      expect(() => readFileSync(mavenLogPath, 'utf-8')).toThrow();
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('pipeline plan liefert Stage-Pläne ohne Ausführung', () => {
     const { workspaceRoot, pipelinePath, mavenLogPath } = createFixtureWorkspace();
 
@@ -91,7 +111,7 @@ describe('pipeline integration', () => {
         pipeline?: { action: string; stages: Array<{ stageName: string; plan: { repositories: unknown[] } }> };
       };
 
-      expect(report.schemaVersion).toBe('1.0');
+      expect(report.schemaVersion).toBe('1.1');
       expect(report.command).toBe('pipeline');
       expect(report.mode).toBe('pipeline-plan');
       expect(report.pipeline?.action).toBe('plan');
@@ -129,7 +149,7 @@ describe('pipeline integration', () => {
         };
       };
 
-      expect(report.schemaVersion).toBe('1.0');
+      expect(report.schemaVersion).toBe('1.1');
       expect(report.command).toBe('pipeline');
       expect(report.mode).toBe('pipeline-run');
       expect(report.pipeline?.action).toBe('run');

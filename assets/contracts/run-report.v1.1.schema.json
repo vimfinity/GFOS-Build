@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gfos-build.local/schemas/run-report.v1.1.json",
+  "title": "GFOS Build Run Report v1.1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "runId",
+    "command",
+    "mode",
+    "startedAt",
+    "finishedAt",
+    "durationMs",
+    "discovered",
+    "moduleGraph",
+    "profileScan",
+    "buildResults",
+    "events",
+    "stats"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.1" },
+    "runId": { "type": "string", "minLength": 1 },
+    "command": { "enum": ["scan", "build", "pipeline"] },
+    "mode": {
+      "enum": [
+        "scan",
+        "build-plan",
+        "build-run",
+        "pipeline-lint",
+        "pipeline-plan",
+        "pipeline-run"
+      ]
+    },
+    "durationMs": { "type": "number", "minimum": 0 },
+    "comparison": {
+      "type": "object",
+      "required": ["previousRunId", "previousDurationMs", "durationDeltaMs"],
+      "properties": {
+        "previousRunId": { "type": "string" },
+        "previousDurationMs": { "type": "number" },
+        "durationDeltaMs": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "stats": {
+      "type": "object",
+      "required": [
+        "discoveredCount",
+        "plannedCount",
+        "builtCount",
+        "succeededCount",
+        "failedCount",
+        "totalBuildDurationMs",
+        "failedBuildDurationMs",
+        "maxParallelUsed",
+        "profileCount",
+        "discoveryDurationMs"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

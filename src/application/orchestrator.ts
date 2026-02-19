@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { z } from 'zod';
 import { loadConfig } from '../config/config.js';
 import { BuildService } from '../core/build-service.js';
@@ -12,11 +13,11 @@ import {
   PipelineDefinition,
   PipelineReport,
   PipelineStageDefinition,
-  PipelineStageReport,
   RunEvent,
   RunReport,
 } from '../core/types.js';
 import { DiscoveryCache } from '../infrastructure/discovery-cache.js';
+import { RunHistory } from '../infrastructure/run-history.js';
 
 const pipelineSchema = z.object({
   schemaVersion: z.literal('1.0'),
@@ -40,16 +41,16 @@ const pipelineSchema = z.object({
 
 export interface RunCommandInput {
   command: 'scan' | 'build' | 'pipeline';
-  pipelineAction?: 'plan' | 'run';
+  pipelineAction?: 'lint' | 'plan' | 'run';
   pipelinePath?: string;
   roots?: string[];
   maxDepth?: number;
   includeHidden?: boolean;
   goals?: string[];
   mavenExecutable?: string;
+  javaHome?: string;
   failFast?: boolean;
   maxParallel?: number;
-  javaHome?: string;
   verbose?: boolean;
   useScanCache?: boolean;
   scanCacheTtlSec?: number;
@@ -61,6 +62,19 @@ export interface RunCommandInput {
   includeModules?: string[];
   excludeModules?: string[];
   configPath?: string;
+}
+
+interface ToolchainRule {
+  selector: string;
+  javaHome?: string;
+  mavenExecutable?: string;
+}
+
+interface BuildRuntimeDefaults {
+  mavenExecutable: string;
+  javaHome?: string;
+  failFast: boolean;
+  verbose: boolean;
 }
 
 function nowIso(): string {
@@ -79,26 +93,43 @@ function containsToken(target: string, token: string): boolean {
   return target.toLowerCase().includes(token.trim().toLowerCase());
 }
 
-interface ToolchainRule {
-  selector: string;
-  javaHome?: string;
-  mavenExecutable?: string;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-interface BuildRuntimeDefaults {
-  mavenExecutable: string;
-  javaHome?: string;
-  failFast: boolean;
-  verbose: boolean;
+function matchesSelector(repository: MavenRepository, selector: string): boolean {
+  const value = selector.trim();
+  if (value.length === 0) {
+    return false;
+  }
+
+  const [prefix, rawPattern] = value.includes(':')
+    ? [value.split(':', 1)[0] ?? '', value.slice(value.indexOf(':') + 1)]
+    : ['', value];
+
+  const targetPath = repository.path.toLowerCase();
+  const targetName = repository.name.toLowerCase();
+  const pattern = rawPattern.trim().toLowerCase();
+
+  if (prefix === 'exact') {
+    return targetPath === pattern || targetName === pattern;
+  }
+
+  if (prefix === 'path') {
+    return targetPath.includes(pattern);
+  }
+
+  if (prefix === 'glob') {
+    const escaped = escapeRegExp(pattern).replace(/\\\*/g, '.*');
+    const regex = new RegExp(`^${escaped}$`);
+    return regex.test(targetPath) || regex.test(targetName);
+  }
+
+  return containsToken(targetPath, pattern) || containsToken(targetName, pattern);
 }
 
-function resolveToolchainRule(
-  repository: MavenRepository,
-  rules: ToolchainRule[]
-): ToolchainRule | undefined {
-  return rules.find(rule =>
-    containsToken(repository.path, rule.selector) || containsToken(repository.name, rule.selector)
-  );
+function resolveToolchainRule(repository: MavenRepository, rules: ToolchainRule[]): ToolchainRule | undefined {
+  return rules.find(rule => matchesSelector(repository, rule.selector));
 }
 
 function createRuntimeOptions(
@@ -107,28 +138,25 @@ function createRuntimeOptions(
   defaults: BuildRuntimeDefaults,
   rules: ToolchainRule[],
   overrides: { mavenExecutable?: string; javaHome?: string }
-): {
-  goals: string[];
-  mavenExecutable: string;
-  javaHome?: string;
-  failFast: boolean;
-  verbose: boolean;
-} {
+) {
   const matchedRule = resolveToolchainRule(repository, rules);
-
   return {
     goals,
-    mavenExecutable:
-      overrides.mavenExecutable ??
-      matchedRule?.mavenExecutable ??
-      defaults.mavenExecutable,
-    javaHome:
-      overrides.javaHome ??
-      matchedRule?.javaHome ??
-      defaults.javaHome,
+    mavenExecutable: overrides.mavenExecutable ?? matchedRule?.mavenExecutable ?? defaults.mavenExecutable,
+    javaHome: overrides.javaHome ?? matchedRule?.javaHome ?? defaults.javaHome,
     failFast: defaults.failFast,
     verbose: defaults.verbose,
   };
+}
+
+function applyResourceLimits(
+  requestedMaxParallel: number,
+  limits: { maxParallelCap?: number; reserveCpuCores: number }
+): number {
+  const cpuCount = os.cpus().length;
+  const usableCpu = Math.max(1, cpuCount - limits.reserveCpuCores);
+  const capped = limits.maxParallelCap ? Math.min(requestedMaxParallel, limits.maxParallelCap) : requestedMaxParallel;
+  return Math.max(1, Math.min(capped, usableCpu));
 }
 
 function selectModules(
@@ -140,16 +168,12 @@ function selectModules(
     return modules.filter(module => !module.parentPath);
   }
 
-  const normalizedSelectors = explicitModules.map(value => value.trim()).filter(Boolean);
-  if (normalizedSelectors.length === 0) {
+  const selectors = explicitModules.map(value => value.trim()).filter(Boolean);
+  if (selectors.length === 0) {
     return [];
   }
 
-  return modules.filter(module =>
-    normalizedSelectors.some(selector =>
-      containsToken(module.path, selector) || containsToken(module.name, selector)
-    )
-  );
+  return modules.filter(module => selectors.some(selector => matchesSelector(module, selector)));
 }
 
 function applyModuleFilters(
@@ -161,18 +185,12 @@ function applyModuleFilters(
   const excludes = excludeModules.map(token => token.trim()).filter(Boolean);
 
   return modules.filter(module => {
-    const includeMatch =
-      includes.length === 0 ||
-      includes.some(token => containsToken(module.path, token) || containsToken(module.name, token));
-
+    const includeMatch = includes.length === 0 || includes.some(token => matchesSelector(module, token));
     if (!includeMatch) {
       return false;
     }
 
-    const excluded = excludes.some(
-      token => containsToken(module.path, token) || containsToken(module.name, token)
-    );
-
+    const excluded = excludes.some(token => matchesSelector(module, token));
     return !excluded;
   });
 }
@@ -182,8 +200,8 @@ function createBuildPlan(
   options: {
     goals: string[];
     mavenExecutable: string;
-    failFast: boolean;
     javaHome?: string;
+    failFast: boolean;
     scope: BuildScope;
     maxParallel: number;
   }
@@ -192,6 +210,7 @@ function createBuildPlan(
 
   return {
     strategy: normalizedParallel > 1 ? 'parallel' : 'sequential',
+    queueStrategy: 'fifo',
     failFast: options.failFast,
     goals: options.goals,
     mavenExecutable: options.mavenExecutable,
@@ -222,11 +241,11 @@ async function loadPipelineDefinition(pipelinePath: string): Promise<PipelineDef
     throw error;
   }
 
-  const parsed = JSON.parse(content) as unknown;
-  return pipelineSchema.parse(parsed);
+  return pipelineSchema.parse(JSON.parse(content) as unknown);
 }
 
 function createReport(input: {
+  runId: string;
   command: 'scan' | 'build' | 'pipeline';
   mode: RunReport['mode'];
   startedAtMs: number;
@@ -238,6 +257,7 @@ function createReport(input: {
   pipeline?: PipelineReport;
   events: RunEvent[];
   maxParallelUsed: number;
+  discoveryDurationMs: number;
 }): RunReport {
   const finishedAtMs = Date.now();
   const succeededCount = input.buildResults.filter(result => result.exitCode === 0).length;
@@ -248,7 +268,8 @@ function createReport(input: {
     .reduce((sum, result) => sum + result.durationMs, 0);
 
   return {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
+    runId: input.runId,
     command: input.command,
     mode: input.mode,
     startedAt: new Date(input.startedAtMs).toISOString(),
@@ -274,6 +295,7 @@ function createReport(input: {
       failedBuildDurationMs,
       maxParallelUsed: Math.max(1, input.maxParallelUsed),
       profileCount: input.profileScan.profiles.length,
+      discoveryDurationMs: input.discoveryDurationMs,
     },
   };
 }
@@ -318,8 +340,10 @@ async function executePlan(
         mavenExecutable: moduleRuntime.mavenExecutable,
         javaHome: moduleRuntime.javaHome ?? '',
       });
+
       const result = await buildService.buildRepository(repository, moduleRuntime);
       results.push(result);
+
       emit(events, 'module_finished', {
         repository: repository.path,
         exitCode: result.exitCode,
@@ -350,7 +374,6 @@ async function executePlan(
 
       const currentIndex = nextIndex;
       nextIndex += 1;
-
       if (currentIndex >= selectedModules.length) {
         return;
       }
@@ -376,9 +399,10 @@ async function executePlan(
         mavenExecutable: moduleRuntime.mavenExecutable,
         javaHome: moduleRuntime.javaHome ?? '',
       });
-      const result = await buildService.buildRepository(repository, moduleRuntime);
 
+      const result = await buildService.buildRepository(repository, moduleRuntime);
       indexedResults.push({ index: currentIndex, result });
+
       emit(events, 'module_finished', {
         repository: repository.path,
         exitCode: result.exitCode,
@@ -393,9 +417,8 @@ async function executePlan(
 
   await Promise.all(Array.from({ length: maxWorkers }, () => worker()));
 
-  const ordered = indexedResults.sort((a, b) => a.index - b.index).map(entry => entry.result);
   return {
-    results: ordered,
+    results: indexedResults.sort((a, b) => a.index - b.index).map(entry => entry.result),
     wallDurationMs: Date.now() - startedAtMs,
   };
 }
@@ -413,8 +436,8 @@ function stageToPlan(
   const plan = createBuildPlan(selected, {
     goals: stage.goals,
     mavenExecutable: defaults.mavenExecutable,
-    failFast: stage.failFast ?? defaults.failFast,
     javaHome: stage.javaHome ?? defaults.javaHome,
+    failFast: stage.failFast ?? defaults.failFast,
     scope,
     maxParallel: stage.maxParallel ?? defaults.maxParallel,
   });
@@ -463,15 +486,24 @@ async function discoverWithOptionalCache(input: {
   return graph;
 }
 
+
+const inMemoryFallbackHistory: RunHistory = {
+  assignRunId: () => `run-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+  write: async () => {},
+  findLatest: async () => null,
+};
+
 export async function runCommand(
   input: RunCommandInput,
   scanner: RepositoryScanner,
   buildService: BuildService,
-  cache: DiscoveryCache
+  cache: DiscoveryCache,
+  history: RunHistory = inMemoryFallbackHistory
 ): Promise<RunReport> {
   const startedAtMs = Date.now();
   const events: RunEvent[] = [];
   let maxParallelUsed = 1;
+  const runId = history.assignRunId();
 
   emit(events, 'run_started', { command: input.command });
 
@@ -486,7 +518,9 @@ export async function runCommand(
   const verbose = input.verbose ?? false;
   const javaHome = input.javaHome ?? config.build.javaHome;
   const toolchainRules: ToolchainRule[] = config.build.toolchains;
+  const resourceLimits = config.build.resourceLimits;
 
+  const discoveryStartedAtMs = Date.now();
   const moduleGraph = await discoverWithOptionalCache({
     scanner,
     cache,
@@ -497,6 +531,7 @@ export async function runCommand(
     includeHidden,
     events,
   });
+  const discoveryDurationMs = Date.now() - discoveryStartedAtMs;
 
   emit(events, 'discovery_completed', {
     modules: moduleGraph.modules.length,
@@ -505,9 +540,7 @@ export async function runCommand(
 
   const discoverProfiles = input.discoverProfiles ?? false;
   const profileFilter = input.profileFilter?.trim() || undefined;
-  const profiles = discoverProfiles
-    ? await scanner.scanProfiles(moduleGraph.modules, profileFilter)
-    : [];
+  const profiles = discoverProfiles ? await scanner.scanProfiles(moduleGraph.modules, profileFilter) : [];
 
   if (discoverProfiles) {
     emit(events, 'profile_discovery_completed', {
@@ -522,19 +555,37 @@ export async function runCommand(
     profiles,
   };
 
+  const finalize = async (report: RunReport): Promise<RunReport> => {
+    const previous = await history.findLatest(report.command, report.mode, report.runId);
+    if (previous) {
+      report.comparison = {
+        previousRunId: previous.runId,
+        previousDurationMs: previous.durationMs,
+        durationDeltaMs: report.durationMs - previous.durationMs,
+      };
+    }
+
+    await history.write(report);
+    return report;
+  };
+
   if (input.command === 'scan') {
     emit(events, 'run_finished', { mode: 'scan' });
-    return createReport({
-      command: input.command,
-      mode: 'scan',
-      startedAtMs,
-      discovered: moduleGraph.modules,
-      moduleGraph,
-      profileScan,
-      buildResults: [],
-      events,
-      maxParallelUsed,
-    });
+    return finalize(
+      createReport({
+        runId,
+        command: 'scan',
+        mode: 'scan',
+        startedAtMs,
+        discovered: moduleGraph.modules,
+        moduleGraph,
+        profileScan,
+        buildResults: [],
+        events,
+        maxParallelUsed,
+        discoveryDurationMs,
+      })
+    );
   }
 
   if (input.command === 'pipeline') {
@@ -547,12 +598,33 @@ export async function runCommand(
     const defaultMavenExecutable = input.mavenExecutable ?? definition.mavenExecutable ?? config.build.mavenExecutable;
     const defaultJavaHome = input.javaHome ?? definition.javaHome ?? config.build.javaHome;
     const defaultFailFast = config.build.failFast;
-    const defaultMaxParallel = input.maxParallel ?? config.build.maxParallel;
+    const requestedDefaultMaxParallel = input.maxParallel ?? config.build.maxParallel;
+    const defaultMaxParallel = applyResourceLimits(requestedDefaultMaxParallel, resourceLimits);
 
     const pipeline: PipelineReport = {
       action,
       stages: [],
     };
+
+    if (action === 'lint') {
+      emit(events, 'run_finished', { mode: 'pipeline-lint' });
+      return finalize(
+        createReport({
+          runId,
+          command: 'pipeline',
+          mode: 'pipeline-lint',
+          startedAtMs,
+          discovered: moduleGraph.modules,
+          moduleGraph,
+          profileScan,
+          buildResults: [],
+          pipeline,
+          events,
+          maxParallelUsed,
+          discoveryDurationMs,
+        })
+      );
+    }
 
     const allResults: BuildResult[] = [];
 
@@ -572,7 +644,6 @@ export async function runCommand(
       );
 
       maxParallelUsed = Math.max(maxParallelUsed, plan.maxParallel);
-
       emit(events, 'plan_created', {
         stage: stage.name,
         planned: plan.repositories.length,
@@ -582,14 +653,13 @@ export async function runCommand(
       });
 
       if (action === 'plan') {
-        const stageReport: PipelineStageReport = {
+        pipeline.stages.push({
           stageName: stage.name,
           plan,
           buildResults: [],
           stageDurationMs: 0,
           estimatedSequentialDurationMs: 0,
-        };
-        pipeline.stages.push(stageReport);
+        });
         emit(events, 'stage_finished', { stage: stage.name, built: 0 });
         continue;
       }
@@ -607,25 +677,22 @@ export async function runCommand(
           javaHome: input.javaHome,
         },
       });
-      const estimatedSequentialDurationMs = stageOutcome.results.reduce(
-        (sum, result) => sum + result.durationMs,
-        0
-      );
+
+      const estimatedSequentialDurationMs = stageOutcome.results.reduce((sum, result) => sum + result.durationMs, 0);
       const speedupFactor =
         stageOutcome.wallDurationMs > 0 && estimatedSequentialDurationMs > 0
           ? Number((estimatedSequentialDurationMs / stageOutcome.wallDurationMs).toFixed(2))
           : undefined;
 
-      const stageReport: PipelineStageReport = {
+      pipeline.stages.push({
         stageName: stage.name,
         plan,
         buildResults: stageOutcome.results,
         stageDurationMs: stageOutcome.wallDurationMs,
         estimatedSequentialDurationMs,
         speedupFactor,
-      };
+      });
 
-      pipeline.stages.push(stageReport);
       allResults.push(...stageOutcome.results);
       emit(events, 'stage_finished', {
         stage: stage.name,
@@ -639,26 +706,34 @@ export async function runCommand(
       }
     }
 
-    emit(events, 'run_finished', { mode: action === 'plan' ? 'pipeline-plan' : 'pipeline-run' });
-    return createReport({
-      command: 'pipeline',
-      mode: action === 'plan' ? 'pipeline-plan' : 'pipeline-run',
-      startedAtMs,
-      discovered: moduleGraph.modules,
-      moduleGraph,
-      profileScan,
-      buildResults: allResults,
-      pipeline,
-      events,
-      maxParallelUsed,
-    });
+    const mode = action === 'plan' ? 'pipeline-plan' : 'pipeline-run';
+    emit(events, 'run_finished', { mode });
+
+    return finalize(
+      createReport({
+        runId,
+        command: 'pipeline',
+        mode,
+        startedAtMs,
+        discovered: moduleGraph.modules,
+        moduleGraph,
+        profileScan,
+        buildResults: allResults,
+        pipeline,
+        events,
+        maxParallelUsed,
+        discoveryDurationMs,
+      })
+    );
   }
 
   const goals = input.goals && input.goals.length > 0 ? input.goals : config.build.goals;
   const mavenExecutable = input.mavenExecutable ?? config.build.mavenExecutable;
   const failFast = input.failFast ?? config.build.failFast;
-  const maxParallel = input.maxParallel ?? config.build.maxParallel;
+  const requestedMaxParallel = input.maxParallel ?? config.build.maxParallel;
+  const maxParallel = applyResourceLimits(requestedMaxParallel, resourceLimits);
   const scope = input.buildScope ?? 'root-only';
+
   const selectedModules = applyModuleFilters(
     selectModules(moduleGraph.modules, scope, input.modules ?? []),
     includeModules,
@@ -673,8 +748,8 @@ export async function runCommand(
     scope,
     maxParallel,
   });
-  maxParallelUsed = Math.max(maxParallelUsed, buildPlan.maxParallel);
 
+  maxParallelUsed = Math.max(maxParallelUsed, buildPlan.maxParallel);
   emit(events, 'plan_created', {
     scope,
     planned: buildPlan.repositories.length,
@@ -684,18 +759,22 @@ export async function runCommand(
 
   if (input.planOnly) {
     emit(events, 'run_finished', { mode: 'build-plan' });
-    return createReport({
-      command: input.command,
-      mode: 'build-plan',
-      startedAtMs,
-      discovered: moduleGraph.modules,
-      moduleGraph,
-      profileScan,
-      buildPlan,
-      buildResults: [],
-      events,
-      maxParallelUsed,
-    });
+    return finalize(
+      createReport({
+        runId,
+        command: 'build',
+        mode: 'build-plan',
+        startedAtMs,
+        discovered: moduleGraph.modules,
+        moduleGraph,
+        profileScan,
+        buildPlan,
+        buildResults: [],
+        events,
+        maxParallelUsed,
+        discoveryDurationMs,
+      })
+    );
   }
 
   const buildOutcome = await executePlan(buildPlan, selectedModules, buildService, events, {
@@ -718,16 +797,20 @@ export async function runCommand(
     estimatedSequentialDurationMs: buildOutcome.results.reduce((sum, result) => sum + result.durationMs, 0),
   });
 
-  return createReport({
-    command: input.command,
-    mode: 'build-run',
-    startedAtMs,
-    discovered: moduleGraph.modules,
-    moduleGraph,
-    profileScan,
-    buildPlan,
-    buildResults: buildOutcome.results,
-    events,
-    maxParallelUsed,
-  });
+  return finalize(
+    createReport({
+      runId,
+      command: 'build',
+      mode: 'build-run',
+      startedAtMs,
+      discovered: moduleGraph.modules,
+      moduleGraph,
+      profileScan,
+      buildPlan,
+      buildResults: buildOutcome.results,
+      events,
+      maxParallelUsed,
+      discoveryDurationMs,
+    })
+  );
 }

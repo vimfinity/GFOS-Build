@@ -9,7 +9,7 @@ function printHelp(): void {
 Usage:
   gfos-build scan [options]
   gfos-build build [options]
-  gfos-build pipeline <plan|run> [options]
+  gfos-build pipeline <lint|plan|run> [options]
 
 Core options:
   --root <path>          One root path (repeatable)
@@ -43,6 +43,7 @@ Examples:
   gfos-build build --root "J:/dev/quellen/2025/web" --scope root-only --plan --json
   gfos-build build --root "J:/dev/quellen" --scope explicit-modules --module shared --include-module web --exclude-module legacy
   gfos-build build --root "J:/dev/quellen" --mvn "J:/dev/maven/mvn3/bin/mvn.cmd" --java-home "J:/dev/java/jdk21" --json
+  gfos-build pipeline lint --pipeline ./pipeline.json --json
   gfos-build pipeline plan --root "J:/dev/quellen" --pipeline ./pipeline.json --json
   gfos-build pipeline run --root "J:/dev/quellen" --pipeline ./pipeline.json --json`);
 }
@@ -155,7 +156,7 @@ async function main(): Promise<void> {
 
 main().catch(error => {
   if (error instanceof CliUsageError) {
-    console.error(error.message);
+    console.error(`[${error.code}] ${error.message}`);
     console.error('Nutze --help für eine vollständige Übersicht.');
     process.exitCode = 2;
     return;

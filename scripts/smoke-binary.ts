@@ -38,8 +38,8 @@ function runAndParse(args: string[], env?: NodeJS.ProcessEnv): Record<string, un
 
 
 function assertBaseReport(report: Record<string, unknown>, expectedCommand: string): void {
-  if (report.schemaVersion !== '1.0') {
-    console.error(`Expected schemaVersion 1.0, got ${String(report.schemaVersion)}`);
+  if (report.schemaVersion !== '1.1') {
+    console.error(`Expected schemaVersion 1.1, got ${String(report.schemaVersion)}`);
     process.exit(1);
   }
 
@@ -154,7 +154,7 @@ writeFileSync(
   pipelinePath,
   JSON.stringify(
     {
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       mavenExecutable: mockMvnPath,
       stages: [
         { name: 'shared', scope: 'explicit-modules', modules: ['shared'], goals: ['clean'] },

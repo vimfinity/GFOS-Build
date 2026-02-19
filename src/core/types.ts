@@ -24,6 +24,7 @@ export interface ModuleGraph {
 }
 
 export type BuildScope = 'root-only' | 'explicit-modules' | 'auto';
+export type QueueStrategy = 'fifo';
 
 export interface BuildOptions {
   goals: string[];
@@ -42,7 +43,13 @@ export interface BuildResult {
 }
 
 export type RunCommand = 'scan' | 'build' | 'pipeline';
-export type RunMode = 'scan' | 'build-plan' | 'build-run' | 'pipeline-plan' | 'pipeline-run';
+export type RunMode =
+  | 'scan'
+  | 'build-plan'
+  | 'build-run'
+  | 'pipeline-lint'
+  | 'pipeline-plan'
+  | 'pipeline-run';
 
 export interface PlannedBuildRepository {
   name: string;
@@ -51,6 +58,7 @@ export interface PlannedBuildRepository {
 
 export interface BuildPlan {
   strategy: 'sequential' | 'parallel';
+  queueStrategy: QueueStrategy;
   failFast: boolean;
   goals: string[];
   mavenExecutable: string;
@@ -88,7 +96,7 @@ export interface PipelineStageReport {
 }
 
 export interface PipelineReport {
-  action: 'plan' | 'run';
+  action: 'lint' | 'plan' | 'run';
   stages: PipelineStageReport[];
 }
 
@@ -125,10 +133,18 @@ export interface RunStats {
   failedBuildDurationMs: number;
   maxParallelUsed: number;
   profileCount: number;
+  discoveryDurationMs: number;
+}
+
+export interface RunComparison {
+  previousRunId: string;
+  previousDurationMs: number;
+  durationDeltaMs: number;
 }
 
 export interface RunReport {
-  schemaVersion: '1.0';
+  schemaVersion: '1.1';
+  runId: string;
   command: RunCommand;
   mode: RunMode;
   startedAt: string;
@@ -142,4 +158,5 @@ export interface RunReport {
   pipeline?: PipelineReport;
   events: RunEvent[];
   stats: RunStats;
+  comparison?: RunComparison;
 }
