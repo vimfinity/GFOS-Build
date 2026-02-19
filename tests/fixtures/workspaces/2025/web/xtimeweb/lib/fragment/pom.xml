@@ -1,0 +1,24 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>fragment</artifactId>
+  <version>1.0.0</version>
+
+  <profiles>
+    <profile>
+      <!-- Minify JS -->
+      <id>jsminify</id>
+    </profile>
+    <profile>
+      <id>
+        dev
+      </id>
+    </profile>
+  </profiles>
+
+  <mvn:profiles xmlns:mvn="https://example.com/mvn">
+    <mvn:profile>
+      <mvn:id><![CDATA[ qa ]]></mvn:id>
+    </mvn:profile>
+  </mvn:profiles>
+</project>

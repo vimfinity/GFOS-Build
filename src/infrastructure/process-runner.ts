@@ -5,12 +5,16 @@ export interface ProcessResult {
   durationMs: number;
 }
 
+export interface ProcessRunOptions {
+  verbose: boolean;
+}
+
 export interface ProcessRunner {
-  run(command: string, args: string[], cwd: string): Promise<ProcessResult>;
+  run(command: string, args: string[], cwd: string, options: ProcessRunOptions): Promise<ProcessResult>;
 }
 
 export class NodeProcessRunner implements ProcessRunner {
-  run(command: string, args: string[], cwd: string): Promise<ProcessResult> {
+  run(command: string, args: string[], cwd: string, options: ProcessRunOptions): Promise<ProcessResult> {
     const startedAt = Date.now();
 
     return new Promise((resolve, reject) => {
@@ -20,13 +24,15 @@ export class NodeProcessRunner implements ProcessRunner {
         shell: process.platform === 'win32',
       });
 
-      child.stdout?.on('data', chunk => {
-        process.stderr.write(chunk);
-      });
+      if (options.verbose) {
+        child.stdout?.on('data', chunk => {
+          process.stderr.write(chunk);
+        });
 
-      child.stderr?.on('data', chunk => {
-        process.stderr.write(chunk);
-      });
+        child.stderr?.on('data', chunk => {
+          process.stderr.write(chunk);
+        });
+      }
 
       child.on('error', reject);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseArgs } from '../../src/cli/args.js';
+import { CliUsageError, parseArgs } from '../../src/cli/args.js';
 
 describe('parseArgs', () => {
   it('parst scan defaults', () => {
@@ -35,6 +35,7 @@ describe('parseArgs', () => {
       '--no-fail-fast',
       '--max-parallel',
       '3',
+      '--verbose',
       '--scan-cache',
       '--scan-cache-ttl-sec',
       '600',
@@ -55,10 +56,21 @@ describe('parseArgs', () => {
     expect(parsed.profileFilter).toBe('dev');
     expect(parsed.failFast).toBe(false);
     expect(parsed.maxParallel).toBe(3);
+    expect(parsed.verbose).toBe(true);
     expect(parsed.useScanCache).toBe(true);
     expect(parsed.scanCacheTtlSec).toBe(600);
     expect(parsed.planOnly).toBe(true);
     expect(parsed.outputJson).toBe(true);
+  });
+
+
+
+  it('wirft Fehler bei unbekanntem command', () => {
+    expect(() => parseArgs(['deploy'])).toThrow(CliUsageError);
+  });
+
+  it('wirft Fehler bei ungültiger pipeline Aktion', () => {
+    expect(() => parseArgs(['pipeline', 'execute'])).toThrow(CliUsageError);
   });
 
   it('parst pipeline plan/run', () => {

@@ -47,6 +47,7 @@ export interface RunCommandInput {
   mavenExecutable?: string;
   failFast?: boolean;
   maxParallel?: number;
+  verbose?: boolean;
   useScanCache?: boolean;
   scanCacheTtlSec?: number;
   discoverProfiles?: boolean;
@@ -229,7 +230,8 @@ async function executePlan(
   plan: BuildPlan,
   selectedModules: MavenRepository[],
   buildService: BuildService,
-  events: RunEvent[]
+  events: RunEvent[],
+  verbose: boolean
 ): Promise<ExecutionOutcome> {
   const startedAtMs = Date.now();
   if (selectedModules.length === 0) {
@@ -244,6 +246,7 @@ async function executePlan(
         goals: plan.goals,
         mavenExecutable: plan.mavenExecutable,
         failFast: plan.failFast,
+        verbose,
       });
       results.push(result);
       emit(events, 'module_finished', {
@@ -291,6 +294,7 @@ async function executePlan(
         goals: plan.goals,
         mavenExecutable: plan.mavenExecutable,
         failFast: plan.failFast,
+        verbose,
       });
 
       indexedResults.push({ index: currentIndex, result });
@@ -397,6 +401,7 @@ export async function runCommand(
   const cacheTtlSec = input.scanCacheTtlSec ?? config.scan.cacheTtlSec;
   const includeModules = input.includeModules ?? [];
   const excludeModules = input.excludeModules ?? [];
+  const verbose = input.verbose ?? false;
 
   const moduleGraph = await discoverWithOptionalCache({
     scanner,
@@ -503,7 +508,7 @@ export async function runCommand(
         continue;
       }
 
-      const stageOutcome = await executePlan(plan, selected, buildService, events);
+      const stageOutcome = await executePlan(plan, selected, buildService, events, verbose);
       const estimatedSequentialDurationMs = stageOutcome.results.reduce(
         (sum, result) => sum + result.durationMs,
         0
@@ -594,7 +599,7 @@ export async function runCommand(
     });
   }
 
-  const buildOutcome = await executePlan(buildPlan, selectedModules, buildService, events);
+  const buildOutcome = await executePlan(buildPlan, selectedModules, buildService, events, verbose);
 
   emit(events, 'run_finished', {
     mode: 'build-run',

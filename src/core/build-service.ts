@@ -8,11 +8,9 @@ export class BuildService {
     repository: MavenRepository,
     options: BuildOptions
   ): Promise<BuildResult> {
-    const result = await this.processRunner.run(
-      options.mavenExecutable,
-      options.goals,
-      repository.path
-    );
+    const result = await this.processRunner.run(options.mavenExecutable, options.goals, repository.path, {
+      verbose: options.verbose,
+    });
 
     return {
       repository,

@@ -19,12 +19,20 @@ const argsSchema = z.object({
   mavenExecutable: z.string().min(1).optional(),
   failFast: z.boolean().optional(),
   maxParallel: z.number().int().min(1).max(32).optional(),
+  verbose: z.boolean().optional(),
   planOnly: z.boolean().optional(),
   configPath: z.string().min(1).optional(),
   outputJson: z.boolean(),
 });
 
 export type CliArgs = z.infer<typeof argsSchema>;
+
+export class CliUsageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CliUsageError';
+  }
+}
 
 function isFlag(value: string): boolean {
   return value.startsWith('--');
@@ -37,22 +45,50 @@ function parseGoals(value: string): string[] {
     .filter(Boolean);
 }
 
-export function parseArgs(rawArgs: string[]): CliArgs {
-  let command: CliArgs['command'] = 'scan';
-  let options: string[] = [];
-  let pipelineAction: CliArgs['pipelineAction'];
-
-  if (rawArgs[0] === 'pipeline') {
-    command = 'pipeline';
-    pipelineAction = rawArgs[1] === 'run' ? 'run' : 'plan';
-    options = rawArgs.slice(2);
-  } else {
-    command = rawArgs[0] === 'build' ? 'build' : 'scan';
-    options = rawArgs.slice(1);
+function parseCommand(rawArgs: string[]): {
+  command: CliArgs['command'];
+  pipelineAction?: CliArgs['pipelineAction'];
+  options: string[];
+} {
+  if (rawArgs.length === 0) {
+    return { command: 'scan', options: [] };
   }
 
+  const rootCommand = rawArgs[0];
+
+  if (rootCommand === 'scan') {
+    return { command: 'scan', options: rawArgs.slice(1) };
+  }
+
+  if (rootCommand === 'build') {
+    return { command: 'build', options: rawArgs.slice(1) };
+  }
+
+  if (rootCommand === 'pipeline') {
+    const action = rawArgs[1];
+    if (action !== 'plan' && action !== 'run') {
+      throw new CliUsageError(
+        `Ungültige Pipeline-Aktion: ${action ?? '<leer>'}. Erlaubt sind: plan | run.`
+      );
+    }
+
+    return {
+      command: 'pipeline',
+      pipelineAction: action,
+      options: rawArgs.slice(2),
+    };
+  }
+
+  throw new CliUsageError(
+    `Unbekannter Befehl: ${rootCommand}. Erlaubt sind: scan | build | pipeline.`
+  );
+}
+
+export function parseArgs(rawArgs: string[]): CliArgs {
+  const commandInfo = parseCommand(rawArgs);
+
   const parsed: Omit<CliArgs, 'command'> = {
-    pipelineAction,
+    pipelineAction: commandInfo.pipelineAction,
     roots: [],
     modules: [],
     includeModules: [],
@@ -60,47 +96,47 @@ export function parseArgs(rawArgs: string[]): CliArgs {
     outputJson: false,
   };
 
-  for (let i = 0; i < options.length; i += 1) {
-    const current = options[i];
+  for (let i = 0; i < commandInfo.options.length; i += 1) {
+    const current = commandInfo.options[i];
 
     if (current === '--root') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.roots.push(value);
         i += 1;
       }
     } else if (current === '--module') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.modules.push(value);
         i += 1;
       }
     } else if (current === '--include-module') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.includeModules.push(value);
         i += 1;
       }
     } else if (current === '--exclude-module') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.excludeModules.push(value);
         i += 1;
       }
     } else if (current === '--scope') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.buildScope = value as CliArgs['buildScope'];
         i += 1;
       }
     } else if (current === '--pipeline') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.pipelinePath = value;
         i += 1;
       }
     } else if (current === '--max-depth') {
-      const value = Number.parseInt(options[i + 1] ?? '', 10);
+      const value = Number.parseInt(commandInfo.options[i + 1] ?? '', 10);
       if (!Number.isNaN(value)) {
         parsed.maxDepth = value;
       }
@@ -110,7 +146,7 @@ export function parseArgs(rawArgs: string[]): CliArgs {
     } else if (current === '--scan-cache') {
       parsed.useScanCache = true;
     } else if (current === '--scan-cache-ttl-sec') {
-      const value = Number.parseInt(options[i + 1] ?? '', 10);
+      const value = Number.parseInt(commandInfo.options[i + 1] ?? '', 10);
       if (!Number.isNaN(value)) {
         parsed.scanCacheTtlSec = value;
       }
@@ -118,19 +154,19 @@ export function parseArgs(rawArgs: string[]): CliArgs {
     } else if (current === '--profiles') {
       parsed.discoverProfiles = true;
     } else if (current === '--profile-filter') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.profileFilter = value;
         i += 1;
       }
     } else if (current === '--goals') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.goals = parseGoals(value);
         i += 1;
       }
     } else if (current === '--mvn') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.mavenExecutable = value;
       }
@@ -138,15 +174,17 @@ export function parseArgs(rawArgs: string[]): CliArgs {
     } else if (current === '--no-fail-fast') {
       parsed.failFast = false;
     } else if (current === '--max-parallel') {
-      const value = Number.parseInt(options[i + 1] ?? '', 10);
+      const value = Number.parseInt(commandInfo.options[i + 1] ?? '', 10);
       if (!Number.isNaN(value)) {
         parsed.maxParallel = value;
       }
       i += 1;
+    } else if (current === '--verbose') {
+      parsed.verbose = true;
     } else if (current === '--plan') {
       parsed.planOnly = true;
     } else if (current === '--config') {
-      const value = options[i + 1];
+      const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.configPath = value;
       }
@@ -156,5 +194,5 @@ export function parseArgs(rawArgs: string[]): CliArgs {
     }
   }
 
-  return argsSchema.parse({ command, ...parsed });
+  return argsSchema.parse({ command: commandInfo.command, ...parsed });
 }

@@ -51,18 +51,42 @@ function buildModuleGraph(modules: MavenRepository[]): ModuleGraph {
 }
 
 function parseProfilesFromPom(content: string): string[] {
-  const profileBlocks = content.match(/<profile\b[\s\S]*?<\/profile>/g) ?? [];
-  const ids: string[] = [];
+  const withoutComments = content.replace(/<!--[\s\S]*?-->/g, '');
+  const profileSectionMatches = withoutComments.matchAll(
+    /<(?:[A-Za-z0-9_-]+:)?profiles\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9_-]+:)?profiles>/g
+  );
+  const ids = new Set<string>();
 
-  for (const block of profileBlocks) {
-    const match = block.match(/<id>\s*([^<\s][^<]*)\s*<\/id>/);
-    if (match?.[1]) {
-      ids.push(match[1].trim());
+  for (const section of profileSectionMatches) {
+    const sectionContent = section[1] ?? '';
+    const profileMatches = sectionContent.matchAll(
+      /<(?:[A-Za-z0-9_-]+:)?profile\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9_-]+:)?profile>/g
+    );
+
+    for (const profileMatch of profileMatches) {
+      const profileContent = profileMatch[1] ?? '';
+      const idMatch = profileContent.match(
+        /<(?:[A-Za-z0-9_-]+:)?id\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9_-]+:)?id>/i
+      );
+
+      if (!idMatch?.[1]) {
+        continue;
+      }
+
+      const normalized = idMatch[1]
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (normalized.length > 0) {
+        ids.add(normalized);
+      }
     }
   }
 
-  return [...new Set(ids)].sort();
+  return [...ids].sort((a, b) => a.localeCompare(b));
 }
+
 
 export class RepositoryScanner {
   constructor(private readonly fileSystem: FileSystem) {}

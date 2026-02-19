@@ -83,15 +83,23 @@ describe('pipeline integration', () => {
     try {
       expect(result.status).toBe(0);
       const report = JSON.parse(result.stdout) as {
+        schemaVersion: string;
+        command: string;
         mode: string;
+        events: unknown[];
+        stats: { discoveredCount: number; plannedCount: number };
         pipeline?: { action: string; stages: Array<{ stageName: string; plan: { repositories: unknown[] } }> };
       };
 
+      expect(report.schemaVersion).toBe('1.0');
+      expect(report.command).toBe('pipeline');
       expect(report.mode).toBe('pipeline-plan');
       expect(report.pipeline?.action).toBe('plan');
       expect(report.pipeline?.stages).toHaveLength(2);
       expect(report.pipeline?.stages[0]?.plan.repositories).toHaveLength(1);
       expect(report.pipeline?.stages[1]?.plan.repositories.length).toBeGreaterThanOrEqual(2);
+      expect(report.events.length).toBeGreaterThan(0);
+      expect(report.stats.plannedCount).toBeGreaterThanOrEqual(3);
       expect(() => readFileSync(mavenLogPath, 'utf-8')).toThrow();
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
@@ -109,16 +117,27 @@ describe('pipeline integration', () => {
     try {
       expect(result.status).toBe(0);
       const report = JSON.parse(result.stdout) as {
+        schemaVersion: string;
+        command: string;
         mode: string;
         pipeline?: { action: string; stages: Array<{ buildResults: unknown[]; speedupFactor?: number; plan: { maxParallel: number } }> };
-        stats: { builtCount: number; maxParallelUsed: number };
+        stats: {
+          builtCount: number;
+          maxParallelUsed: number;
+          totalBuildDurationMs: number;
+          failedBuildDurationMs: number;
+        };
       };
 
+      expect(report.schemaVersion).toBe('1.0');
+      expect(report.command).toBe('pipeline');
       expect(report.mode).toBe('pipeline-run');
       expect(report.pipeline?.action).toBe('run');
       expect(report.pipeline?.stages).toHaveLength(2);
       expect(report.stats.builtCount).toBeGreaterThanOrEqual(3);
       expect(report.stats.maxParallelUsed).toBe(2);
+      expect(report.stats.totalBuildDurationMs).toBeGreaterThanOrEqual(0);
+      expect(report.stats.failedBuildDurationMs).toBe(0);
       expect(report.pipeline?.stages[1]?.plan.maxParallel).toBe(2);
 
       const mavenRuns = readFileSync(mavenLogPath, 'utf-8').trim().split('\n').filter(Boolean);

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createApplication } from '../application/app.js';
 import { PipelineStageReport, RunReport } from '../core/types.js';
-import { parseArgs } from './args.js';
+import { CliUsageError, parseArgs } from './args.js';
 
 function printHelp(): void {
   console.log(`GFOS Build Foundation CLI
@@ -28,6 +28,7 @@ Build options:
   --no-fail-fast
   --max-parallel <n>     Parallel builds per plan/stage (1..32)
   --plan                 Only create build plan (no Maven execution)
+  --verbose              Forward Maven output to stderr (default: on for text, off for --json)
   --scope <mode>         root-only | explicit-modules | auto
   --module <selector>    Repeatable selector for explicit-modules
   --include-module <q>   Include filter for selected modules
@@ -128,6 +129,7 @@ async function main(): Promise<void> {
     scanCacheTtlSec: cliArgs.scanCacheTtlSec,
     discoverProfiles: cliArgs.discoverProfiles,
     profileFilter: cliArgs.profileFilter,
+    verbose: cliArgs.verbose ?? !cliArgs.outputJson,
     planOnly: cliArgs.planOnly,
     buildScope: cliArgs.buildScope,
     modules: cliArgs.modules,
@@ -149,6 +151,13 @@ async function main(): Promise<void> {
 }
 
 main().catch(error => {
+  if (error instanceof CliUsageError) {
+    console.error(error.message);
+    console.error('Nutze --help für eine vollständige Übersicht.');
+    process.exitCode = 2;
+    return;
+  }
+
   console.error('Unerwarteter Fehler:', error);
   process.exitCode = 1;
 });

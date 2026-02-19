@@ -62,7 +62,9 @@ describe('CLI Phase-1 integration', () => {
       expect(result.status).toBe(0);
       const report = JSON.parse(result.stdout) as {
         schemaVersion: string;
+        command: string;
         mode: string;
+        events: unknown[];
         buildResults: unknown[];
         stats: {
           plannedCount: number;
@@ -73,7 +75,9 @@ describe('CLI Phase-1 integration', () => {
       };
 
       expect(report.schemaVersion).toBe('1.0');
+      expect(report.command).toBe('build');
       expect(report.mode).toBe('build-plan');
+      expect(report.events.length).toBeGreaterThan(0);
       expect(report.buildResults).toHaveLength(0);
       expect(report.stats.plannedCount).toBe(2);
       expect(report.stats.builtCount).toBe(0);
@@ -108,7 +112,9 @@ describe('CLI Phase-1 integration', () => {
       expect(result.status).toBe(0);
       const report = JSON.parse(result.stdout) as {
         schemaVersion: string;
+        command: string;
         mode: string;
+        events: unknown[];
         buildResults: Array<{ exitCode: number }>;
         stats: {
           plannedCount: number;
@@ -121,7 +127,9 @@ describe('CLI Phase-1 integration', () => {
       };
 
       expect(report.schemaVersion).toBe('1.0');
+      expect(report.command).toBe('build');
       expect(report.mode).toBe('build-run');
+      expect(report.events.length).toBeGreaterThan(0);
       expect(report.buildResults).toHaveLength(2);
       expect(report.stats.plannedCount).toBe(2);
       expect(report.stats.builtCount).toBe(2);
@@ -129,8 +137,8 @@ describe('CLI Phase-1 integration', () => {
       expect(report.stats.failedCount).toBe(0);
       expect(report.stats.totalBuildDurationMs).toBeGreaterThanOrEqual(0);
       expect(report.stats.failedBuildDurationMs).toBe(0);
-      expect(result.stderr).toContain('[mvn-stdout]');
-      expect(result.stderr).toContain('[mvn-stderr]');
+      expect(result.stderr).not.toContain('[mvn-stdout]');
+      expect(result.stderr).not.toContain('[mvn-stderr]');
 
       const mavenRuns = readFileSync(mavenLogPath, 'utf-8')
         .trim()
@@ -140,6 +148,37 @@ describe('CLI Phase-1 integration', () => {
       expect(mavenRuns).toHaveLength(2);
       expect(mavenRuns[0]).toContain('clean verify');
       expect(mavenRuns[1]).toContain('clean verify');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+
+  it('leitet Maven-Logs bei --json nur mit --verbose auf stderr weiter', () => {
+    const { workspaceRoot, mavenMockPath, mavenLogPath } = createFixtureWorkspace();
+
+    const result = runCli(
+      [
+        'build',
+        '--root',
+        workspaceRoot,
+        '--max-depth',
+        '6',
+        '--goals',
+        'clean verify',
+        '--mvn',
+        mavenMockPath,
+        '--json',
+        '--verbose',
+      ],
+      { GFOS_MVN_LOG: mavenLogPath }
+    );
+
+    try {
+      expect(result.status).toBe(0);
+      expect(() => JSON.parse(result.stdout)).not.toThrow();
+      expect(result.stderr).toContain('[mvn-stdout]');
+      expect(result.stderr).toContain('[mvn-stderr]');
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
@@ -171,6 +210,14 @@ describe('CLI Phase-1 integration', () => {
     expect(report.discovered).toHaveLength(0);
     expect(report.buildPlan?.scope).toBe('explicit-modules');
     expect(report.buildPlan?.repositories).toHaveLength(0);
+  });
+
+
+  it('beendet CLI mit Exit-Code 2 bei unbekanntem command', () => {
+    const result = runCli(['deploy']);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('Unbekannter Befehl');
   });
 
 });

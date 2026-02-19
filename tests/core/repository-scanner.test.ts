@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { FileSystem } from '../../src/infrastructure/file-system.js';
 import { RepositoryScanner } from '../../src/core/repository-scanner.js';
 
@@ -103,6 +105,31 @@ describe('RepositoryScanner', () => {
     expect(all.map(profile => profile.id)).toEqual(['dev', 'prod']);
     expect(filtered.map(profile => profile.id)).toEqual(['prod']);
   });
+
+
+  it('scanProfiles verarbeitet Kommentare, Namespaces und CDATA robust', async () => {
+    const realPom = readFileSync(
+      path.resolve('tests/fixtures/workspaces/2025/web/xtimeweb/lib/fragment/pom.xml'),
+      'utf-8'
+    );
+
+    const fs = new InMemoryFileSystem(
+      {
+        '/root': { dirs: ['fragment'] },
+        '/root/fragment': { files: ['pom.xml'] },
+      },
+      {
+        '/root/fragment/pom.xml': realPom,
+      }
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const graph = await scanner.scanGraph({ rootPaths: ['/root'], maxDepth: 2, includeHidden: false });
+
+    const profiles = await scanner.scanProfiles(graph.modules);
+    expect(profiles.map(profile => profile.id)).toEqual(['dev', 'jsminify', 'qa']);
+  });
+
 
   it('respektiert maxDepth', async () => {
     const fs = new InMemoryFileSystem({

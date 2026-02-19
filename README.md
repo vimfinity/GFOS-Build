@@ -79,6 +79,12 @@ bun run dev -- scan --root "J:/dev/quellen" --profiles --profile-filter dev --js
 # Build ausführen (parallel vorbereitet)
 bun run dev -- build --root "J:/dev/quellen" --goals "clean install" --max-parallel 4
 
+# Striktes JSON ohne Build-Log-Ausgaben auf stdout (default)
+bun run dev -- build --root "J:/dev/quellen" --json > run.json
+
+# Optional: Maven-Ausgaben trotz --json auf stderr durchreichen
+bun run dev -- build --root "J:/dev/quellen" --json --verbose > run.json
+
 # Build-Plan ohne Ausführung (Phase 1 Planungslogik)
 bun run dev -- build --root "J:/dev/quellen/2025/web" --scope root-only --plan --json
 
@@ -125,6 +131,7 @@ Mehr technische Hintergründe: [`docs/TECH_DECISIONS.md`](docs/TECH_DECISIONS.md
 
 Architektur-Blueprint (inkl. UI-vs-CLI Strategie): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Konkrete Priorisierung der nächsten Umsetzungsschritte: [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md).
+Ausführlicher Entwicklungsleitfaden für kommende Features & UI-Fähigkeit: [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md).
 
 
 ## Run-Report (versioniert)
@@ -135,7 +142,7 @@ Die JSON-Ausgabe liefert ab Phase 1 einen versionierten Report (`schemaVersion: 
 - Modulgraph (`moduleGraph`) für Root/Submodule-Beziehungen,
 - Event-Liste (`events`) als Contract für interaktive Oberflächen,
 - optionalem Profile-Report (`profileScan`) für Maven-Profile über Module/Submodule,
-- aggregierten Kennzahlen unter `stats` (discovered/planned/built/succeeded/failed/maxParallelUsed/profileCount).
+- aggregierten Kennzahlen unter `stats` (discovered/planned/built/succeeded/failed/totalBuildDurationMs/failedBuildDurationMs/maxParallelUsed/profileCount).
 
 
 ## Pipeline-Format (Phase 2 MVP)

@@ -29,6 +29,7 @@ export interface BuildOptions {
   goals: string[];
   mavenExecutable: string;
   failFast: boolean;
+  verbose: boolean;
 }
 
 export interface BuildResult {

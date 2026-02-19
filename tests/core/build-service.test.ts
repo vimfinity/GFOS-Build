@@ -6,7 +6,7 @@ import { MavenRepository } from '../../src/core/types.js';
 class FakeRunner implements ProcessRunner {
   constructor(private readonly exitCodes: number[]) {}
 
-  async run(_command: string, _args: string[], _cwd: string) {
+  async run(_command: string, _args: string[], _cwd: string, _options: { verbose: boolean }) {
     const exitCode = this.exitCodes.shift() ?? 0;
     return { exitCode, durationMs: 1000 };
   }
@@ -26,6 +26,7 @@ describe('BuildService', () => {
       goals: ['clean', 'install'],
       mavenExecutable: 'mvn',
       failFast: true,
+      verbose: false,
     });
 
     expect(results).toHaveLength(2);
@@ -39,6 +40,7 @@ describe('BuildService', () => {
       goals: ['clean', 'install'],
       mavenExecutable: 'mvn',
       failFast: false,
+      verbose: false,
     });
 
     expect(results).toHaveLength(3);

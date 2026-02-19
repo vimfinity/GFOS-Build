@@ -7,7 +7,7 @@ Das Zielsystem hat weder npm, Node.js noch Bun. Deshalb muss GFOS Build als ausf
 
 ## 1. Unit + Static Checks
 - `bun run check`
-- Enthält Lint, Typecheck, Unit Tests und TS Build.
+- Enthält Lint, Typecheck (inkl. Tests), Unit Tests und TS Build.
 
 ## 2. Binary Build
 - `bun run binary:build`
@@ -38,3 +38,9 @@ Empfehlung vor Rollout:
 - Validiert werden dabei insbesondere:
   - `build --plan` führt **keinen** Maven-Prozess aus,
   - `build --json` liefert konsistente Stats und Report-Felder (`schemaVersion`, `mode`, `stats`) inkl. Dauer-Metriken (`totalBuildDurationMs`, `failedBuildDurationMs`).
+
+
+## JSON + Logging Modus
+- `--json` ist strikt für maschinenlesbare Ausgabe auf `stdout`.
+- Build-Logs können optional mit `--verbose` nach `stderr` geleitet werden.
+- Damit bleiben umgeleitete JSON-Dateien (`> report.json`) parsebar.

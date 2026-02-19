@@ -36,13 +36,41 @@ function runAndParse(args: string[], env?: NodeJS.ProcessEnv): Record<string, un
   }
 }
 
-const scanReport = runAndParse(['scan', '--root', fixtureRoot, '--max-depth', '4', '--json']);
-const discovered = (scanReport.discovered as Array<{ path: string }> | undefined) ?? [];
 
-if (scanReport.schemaVersion !== '1.0') {
-  console.error(`Expected schemaVersion 1.0, got ${String(scanReport.schemaVersion)}`);
-  process.exit(1);
+function assertBaseReport(report: Record<string, unknown>, expectedCommand: string): void {
+  if (report.schemaVersion !== '1.0') {
+    console.error(`Expected schemaVersion 1.0, got ${String(report.schemaVersion)}`);
+    process.exit(1);
+  }
+
+  if (report.command !== expectedCommand) {
+    console.error(`Expected command ${expectedCommand}, got ${String(report.command)}`);
+    process.exit(1);
+  }
+
+  const events = report.events as unknown[] | undefined;
+  if (!Array.isArray(events) || events.length === 0) {
+    console.error('Expected non-empty events array');
+    process.exit(1);
+  }
+
+  const stats = report.stats as Record<string, unknown> | undefined;
+  if (!stats) {
+    console.error('Expected stats object');
+    process.exit(1);
+  }
+
+  for (const field of ['discoveredCount', 'plannedCount', 'builtCount', 'totalBuildDurationMs']) {
+    if (typeof stats[field] !== 'number') {
+      console.error(`Expected stats.${field} to be a number`);
+      process.exit(1);
+    }
+  }
 }
+
+const scanReport = runAndParse(['scan', '--root', fixtureRoot, '--max-depth', '4', '--json']);
+assertBaseReport(scanReport, 'scan');
+const discovered = (scanReport.discovered as Array<{ path: string }> | undefined) ?? [];
 
 if (!Array.isArray(discovered) || discovered.length !== 3) {
   console.error(`Expected exactly 3 modules, got ${discovered.length}`);
@@ -66,6 +94,7 @@ const profileReport = runAndParse([
   'dev',
   '--json',
 ]);
+assertBaseReport(profileReport, 'scan');
 const profileScan = profileReport.profileScan as { profiles?: Array<{ id?: string }> } | undefined;
 if (!profileScan || !Array.isArray(profileScan.profiles) || profileScan.profiles.length < 2) {
   console.error('Expected profile scan to return at least 2 profiles');
@@ -88,6 +117,7 @@ const planReport = runAndParse([
   '--plan',
   '--json',
 ]);
+assertBaseReport(planReport, 'build');
 
 if (planReport.mode !== 'build-plan') {
   console.error(`Expected build-plan mode, got ${String(planReport.mode)}`);
@@ -140,6 +170,7 @@ const pipelineReport = runAndParse(
   ['pipeline', 'plan', '--root', fixtureRoot, '--max-depth', '4', '--pipeline', pipelinePath, '--json'],
   { GFOS_MVN_LOG: mockLogPath }
 );
+assertBaseReport(pipelineReport, 'pipeline');
 
 if (pipelineReport.mode !== 'pipeline-plan') {
   console.error(`Expected pipeline-plan mode, got ${String(pipelineReport.mode)}`);
