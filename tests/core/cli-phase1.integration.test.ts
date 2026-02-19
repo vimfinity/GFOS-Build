@@ -64,7 +64,12 @@ describe('CLI Phase-1 integration', () => {
         schemaVersion: string;
         mode: string;
         buildResults: unknown[];
-        stats: { plannedCount: number; builtCount: number };
+        stats: {
+          plannedCount: number;
+          builtCount: number;
+          totalBuildDurationMs: number;
+          failedBuildDurationMs: number;
+        };
       };
 
       expect(report.schemaVersion).toBe('1.0');
@@ -72,6 +77,8 @@ describe('CLI Phase-1 integration', () => {
       expect(report.buildResults).toHaveLength(0);
       expect(report.stats.plannedCount).toBe(2);
       expect(report.stats.builtCount).toBe(0);
+      expect(report.stats.totalBuildDurationMs).toBe(0);
+      expect(report.stats.failedBuildDurationMs).toBe(0);
       expect(() => readFileSync(mavenLogPath, 'utf-8')).toThrow();
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
@@ -108,6 +115,8 @@ describe('CLI Phase-1 integration', () => {
           builtCount: number;
           succeededCount: number;
           failedCount: number;
+          totalBuildDurationMs: number;
+          failedBuildDurationMs: number;
         };
       };
 
@@ -118,6 +127,8 @@ describe('CLI Phase-1 integration', () => {
       expect(report.stats.builtCount).toBe(2);
       expect(report.stats.succeededCount).toBe(2);
       expect(report.stats.failedCount).toBe(0);
+      expect(report.stats.totalBuildDurationMs).toBeGreaterThanOrEqual(0);
+      expect(report.stats.failedBuildDurationMs).toBe(0);
 
       const mavenRuns = readFileSync(mavenLogPath, 'utf-8')
         .trim()

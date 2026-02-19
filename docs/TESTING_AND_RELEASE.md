@@ -37,4 +37,4 @@ Empfehlung vor Rollout:
 - Für Build-Tests wird ein Mock-Maven-Executable genutzt, damit das Verhalten reproduzierbar ohne echte Maven-Installation geprüft wird.
 - Validiert werden dabei insbesondere:
   - `build --plan` führt **keinen** Maven-Prozess aus,
-  - `build --json` liefert konsistente Stats und Report-Felder (`schemaVersion`, `mode`, `stats`).
+  - `build --json` liefert konsistente Stats und Report-Felder (`schemaVersion`, `mode`, `stats`) inkl. Dauer-Metriken (`totalBuildDurationMs`, `failedBuildDurationMs`).
