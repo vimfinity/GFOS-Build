@@ -38,6 +38,9 @@ Wir bauen ein Standalone-Binary via Bun-Compile:
 
 ```bash
 bun run binary:build  # baut immer Windows-Binary (gfos-build.exe)
+
+# UI readiness fixtures (RunReport snapshots für UI/Docs)
+bun run ui:readiness:pack
 ```
 
 Danach liegt ein Windows-Artefakt in `release/gfos-build.exe`, das direkt auf dem Zielsystem ausführbar ist.
@@ -152,6 +155,7 @@ Mehr technische Hintergründe: [`docs/TECH_DECISIONS.md`](docs/TECH_DECISIONS.md
 
 Architektur-Blueprint (inkl. UI-vs-CLI Strategie): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Konkrete Priorisierung der nächsten Umsetzungsschritte: [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md).
+UI-Readiness-Artefakte und Frontend-Referenz: [`docs/UI_READINESS_PACK.md`](docs/UI_READINESS_PACK.md).
 
 
 ## Run-Report (versioniert)

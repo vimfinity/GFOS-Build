@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "1.1",
+  "runId": "8db2f2f3-cb54-42a7-bc23-7f613c2465f2",
+  "command": "scan",
+  "mode": "scan",
+  "startedAt": "<redacted>",
+  "finishedAt": "<redacted>",
+  "durationMs": 0,
+  "discovered": [
+    {
+      "name": "shared",
+      "path": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+      "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/shared/pom.xml",
+      "depth": 2
+    },
+    {
+      "name": "web",
+      "path": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+      "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/pom.xml",
+      "depth": 2
+    },
+    {
+      "name": "module-a",
+      "path": "/tmp/gfos-ui-pack-COkLz1/2025/web/module-a",
+      "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/module-a/pom.xml",
+      "depth": 3,
+      "parentPath": "/tmp/gfos-ui-pack-COkLz1/2025/web"
+    }
+  ],
+  "moduleGraph": {
+    "modules": [
+      {
+        "name": "shared",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/shared/pom.xml",
+        "depth": 2
+      },
+      {
+        "name": "web",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/pom.xml",
+        "depth": 2
+      },
+      {
+        "name": "module-a",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/web/module-a",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/module-a/pom.xml",
+        "depth": 3,
+        "parentPath": "/tmp/gfos-ui-pack-COkLz1/2025/web"
+      }
+    ],
+    "rootModules": [
+      {
+        "name": "shared",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/shared/pom.xml",
+        "depth": 2
+      },
+      {
+        "name": "web",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/pom.xml",
+        "depth": 2
+      }
+    ]
+  },
+  "profileScan": {
+    "enabled": true,
+    "profiles": [
+      {
+        "id": "dev-ui",
+        "modulePath": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/pom.xml"
+      }
+    ]
+  },
+  "buildResults": [],
+  "events": [
+    {
+      "type": "run_started",
+      "timestamp": "<redacted>",
+      "payload": {
+        "command": "scan"
+      }
+    },
+    {
+      "type": "discovery_completed",
+      "timestamp": "<redacted>",
+      "payload": {
+        "modules": 3,
+        "roots": 2
+      }
+    },
+    {
+      "type": "profile_discovery_completed",
+      "timestamp": "<redacted>",
+      "payload": {
+        "profiles": 1,
+        "filter": ""
+      }
+    },
+    {
+      "type": "run_finished",
+      "timestamp": "<redacted>",
+      "payload": {
+        "mode": "scan"
+      }
+    }
+  ],
+  "stats": {
+    "discoveredCount": 3,
+    "plannedCount": 0,
+    "builtCount": 0,
+    "succeededCount": 0,
+    "failedCount": 0,
+    "totalBuildDurationMs": 0,
+    "failedBuildDurationMs": 0,
+    "maxParallelUsed": 1,
+    "profileCount": 1,
+    "discoveryDurationMs": 19
+  }
+}

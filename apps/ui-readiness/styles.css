@@ -1,0 +1,91 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #07111f;
+  color: #dbe7ff;
+}
+
+body {
+  margin: 0;
+  padding: 2rem;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.logo {
+  width: 160px;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.5));
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+main {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  background: #0d1c31;
+  border: 1px solid #1f385b;
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  max-width: 420px;
+  gap: 0.5rem;
+}
+
+select {
+  background: #152743;
+  color: #dbe7ff;
+  border: 1px solid #335684;
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.wide {
+  grid-column: span 2;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+}
+
+dt {
+  color: #8fb6ff;
+}
+
+#events {
+  margin: 0;
+  padding-left: 1.2rem;
+  max-height: 220px;
+  overflow: auto;
+}
+
+pre {
+  max-height: 360px;
+  overflow: auto;
+  background: #07111f;
+  border-radius: 8px;
+  padding: 0.75rem;
+}

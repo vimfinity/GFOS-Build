@@ -1,0 +1,201 @@
+{
+  "schemaVersion": "1.1",
+  "runId": "d258c23b-fbc0-4953-9e7f-b637a0a15402",
+  "command": "build",
+  "mode": "build-run",
+  "startedAt": "<redacted>",
+  "finishedAt": "<redacted>",
+  "durationMs": 0,
+  "discovered": [
+    {
+      "name": "shared",
+      "path": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+      "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/shared/pom.xml",
+      "depth": 2
+    },
+    {
+      "name": "web",
+      "path": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+      "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/pom.xml",
+      "depth": 2
+    },
+    {
+      "name": "module-a",
+      "path": "/tmp/gfos-ui-pack-COkLz1/2025/web/module-a",
+      "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/module-a/pom.xml",
+      "depth": 3,
+      "parentPath": "/tmp/gfos-ui-pack-COkLz1/2025/web"
+    }
+  ],
+  "moduleGraph": {
+    "modules": [
+      {
+        "name": "shared",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/shared/pom.xml",
+        "depth": 2
+      },
+      {
+        "name": "web",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/pom.xml",
+        "depth": 2
+      },
+      {
+        "name": "module-a",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/web/module-a",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/module-a/pom.xml",
+        "depth": 3,
+        "parentPath": "/tmp/gfos-ui-pack-COkLz1/2025/web"
+      }
+    ],
+    "rootModules": [
+      {
+        "name": "shared",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/shared/pom.xml",
+        "depth": 2
+      },
+      {
+        "name": "web",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/pom.xml",
+        "depth": 2
+      }
+    ]
+  },
+  "profileScan": {
+    "enabled": false,
+    "profiles": []
+  },
+  "buildPlan": {
+    "strategy": "parallel",
+    "queueStrategy": "fifo",
+    "failFast": true,
+    "goals": [
+      "clean",
+      "verify"
+    ],
+    "mavenExecutable": "/tmp/gfos-ui-pack-COkLz1/mvn-mock.sh",
+    "scope": "root-only",
+    "maxParallel": 2,
+    "repositories": [
+      {
+        "name": "shared",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/shared"
+      },
+      {
+        "name": "web",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/web"
+      }
+    ]
+  },
+  "buildResults": [
+    {
+      "repository": {
+        "name": "shared",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/shared/pom.xml",
+        "depth": 2
+      },
+      "exitCode": 0,
+      "durationMs": 0,
+      "mavenExecutable": "/tmp/gfos-ui-pack-COkLz1/mvn-mock.sh"
+    },
+    {
+      "repository": {
+        "name": "web",
+        "path": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+        "pomPath": "/tmp/gfos-ui-pack-COkLz1/2025/web/pom.xml",
+        "depth": 2
+      },
+      "exitCode": 0,
+      "durationMs": 0,
+      "mavenExecutable": "/tmp/gfos-ui-pack-COkLz1/mvn-mock.sh"
+    }
+  ],
+  "events": [
+    {
+      "type": "run_started",
+      "timestamp": "<redacted>",
+      "payload": {
+        "command": "build"
+      }
+    },
+    {
+      "type": "discovery_completed",
+      "timestamp": "<redacted>",
+      "payload": {
+        "modules": 3,
+        "roots": 2
+      }
+    },
+    {
+      "type": "plan_created",
+      "timestamp": "<redacted>",
+      "payload": {
+        "scope": "root-only",
+        "planned": 2,
+        "strategy": "parallel",
+        "maxParallel": 2
+      }
+    },
+    {
+      "type": "module_started",
+      "timestamp": "<redacted>",
+      "payload": {
+        "repository": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+        "mavenExecutable": "/tmp/gfos-ui-pack-COkLz1/mvn-mock.sh",
+        "javaHome": ""
+      }
+    },
+    {
+      "type": "module_started",
+      "timestamp": "<redacted>",
+      "payload": {
+        "repository": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+        "mavenExecutable": "/tmp/gfos-ui-pack-COkLz1/mvn-mock.sh",
+        "javaHome": ""
+      }
+    },
+    {
+      "type": "module_finished",
+      "timestamp": "<redacted>",
+      "payload": {
+        "repository": "/tmp/gfos-ui-pack-COkLz1/2025/shared",
+        "exitCode": 0,
+        "durationMs": 23
+      }
+    },
+    {
+      "type": "module_finished",
+      "timestamp": "<redacted>",
+      "payload": {
+        "repository": "/tmp/gfos-ui-pack-COkLz1/2025/web",
+        "exitCode": 0,
+        "durationMs": 18
+      }
+    },
+    {
+      "type": "run_finished",
+      "timestamp": "<redacted>",
+      "payload": {
+        "mode": "build-run",
+        "durationMs": 26,
+        "estimatedSequentialDurationMs": 41
+      }
+    }
+  ],
+  "stats": {
+    "discoveredCount": 3,
+    "plannedCount": 2,
+    "builtCount": 2,
+    "succeededCount": 2,
+    "failedCount": 0,
+    "totalBuildDurationMs": 41,
+    "failedBuildDurationMs": 0,
+    "maxParallelUsed": 2,
+    "profileCount": 0,
+    "discoveryDurationMs": 3
+  }
+}
