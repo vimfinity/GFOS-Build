@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { existsSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
 
 const binaryName = process.platform === 'win32' ? 'gfos-build.exe' : 'gfos-build';
 const binaryPath = path.resolve('release', binaryName);
@@ -134,8 +134,11 @@ if (buildPlan.scope !== 'root-only') {
   process.exit(1);
 }
 
-if (buildPlan.strategy !== 'parallel' || buildPlan.maxParallel !== 3) {
-  console.error(`Expected parallel plan with maxParallel=3, got strategy=${String(buildPlan.strategy)} maxParallel=${String(buildPlan.maxParallel)}`);
+const expectedMaxParallel = Math.min(3, Math.max(1, os.cpus().length));
+if (buildPlan.strategy !== 'parallel' || buildPlan.maxParallel !== expectedMaxParallel) {
+  console.error(
+    `Expected parallel plan with maxParallel=${expectedMaxParallel}, got strategy=${String(buildPlan.strategy)} maxParallel=${String(buildPlan.maxParallel)}`
+  );
   process.exit(1);
 }
 
