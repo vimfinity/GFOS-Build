@@ -154,7 +154,7 @@ writeFileSync(
   pipelinePath,
   JSON.stringify(
     {
-      schemaVersion: '1.1',
+      schemaVersion: '1.0',
       mavenExecutable: mockMvnPath,
       stages: [
         { name: 'shared', scope: 'explicit-modules', modules: ['shared'], goals: ['clean'] },
