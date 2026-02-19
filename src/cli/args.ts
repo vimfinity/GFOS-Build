@@ -9,6 +9,7 @@ const argsSchema = z.object({
   modules: z.array(z.string().min(1)),
   includeModules: z.array(z.string().min(1)),
   excludeModules: z.array(z.string().min(1)),
+  explainSelection: z.boolean().optional(),
   buildScope: z.enum(['root-only', 'explicit-modules', 'auto']).optional(),
   maxDepth: z.number().int().min(0).max(12).optional(),
   includeHidden: z.boolean().optional(),
@@ -127,6 +128,8 @@ export function parseArgs(rawArgs: string[]): CliArgs {
         parsed.excludeModules.push(value);
         i += 1;
       }
+    } else if (current === '--explain-selection') {
+      parsed.explainSelection = true;
     } else if (current === '--scope') {
       const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {

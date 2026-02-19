@@ -117,18 +117,17 @@ ZIP auf Netzlaufwerk ist als Start praktikabel, aber mit Risiken:
 
 Erledigt in der aktuellen Basis:
 - Modulgraph-Discovery + BuildScope (`root-only` / `explicit-modules` / `auto`)
-- Pipeline Plan/Run + Run-Reports + Events
-- Discovery-Cache + Dauer-Metriken
+- Pipeline `lint`/`plan`/`run` + Run-Reports + Events
+- Discovery-Cache + Dauer-Metriken + Run-Historie (Vergleichsdelta)
 - JDK/Maven Toolchain-Basis (`javaHome`, `mavenExecutable`, modulbezogene Toolchain-Regeln)
+- Run-Report `schemaVersion: 1.1` + JSON-Schema-Datei
 
-Neu priorisiert für die nächsten Iterationen:
-1. **Build Queue + Resource Limits (P0)**
-2. **Run-Report v1.1 + JSON Schema (P0)**
-3. **Persistente Run-Historie + Vergleich (P0)**
-4. **Failure Taxonomy + Error Codes (P1)**
-5. **Deterministische Modul-Selektion v2 (P1)**
-6. **Incremental Discovery + Performance Audit (P1)**
-7. **Pipeline UX Hardening inkl. `pipeline lint` (P2)**
-8. **UI Integration Readiness Pack (P2)**
+Nächste priorisierte Sprints:
+1. **Error Taxonomy durchziehen (P0)**: alle Fehlerpfade mit `AppError`/`ErrorCode` + konsistente Exit-Codes
+2. **Contract-Härtung (P0)**: JSON-Schema-Validierung als Test-/Smoke-Gate
+3. **Deterministische Selektion v2 (P1)**: Explain-Mode + dokumentierte Selector-Syntax (`exact|path|glob`)
+4. **Incremental Discovery v1 (P1)**: Cache-Invalidierung über Root-Fingerprint + Discovery-Audit-Metriken
+5. **Pipeline UX Hardening (P1)**: semantisches `pipeline lint` mit Feldpfaden/Severity
+6. **UI-Integration Readiness (P2)**: Event-Stream-Dokumentation + Referenzflows (ohne Frontend-Feature-Duplizierung)
 
-Hinweis: Eine Online-Doku-Plattform (z. B. Next.js/Fumadocs) wird bewusst nach Stabilisierung der Kernfeatures umgesetzt.
+Hinweis: Eine Online-Doku-Plattform (z. B. Next.js/Fumadocs) bleibt bewusst nach Stabilisierung der Kernfeatures.

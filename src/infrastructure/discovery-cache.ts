@@ -7,11 +7,12 @@ import { ModuleGraph } from '../core/types.js';
 interface CacheEnvelope {
   createdAtMs: number;
   graph: ModuleGraph;
+  rootsFingerprint?: string;
 }
 
 export interface DiscoveryCache {
-  read(key: string, ttlMs: number): Promise<ModuleGraph | null>;
-  write(key: string, graph: ModuleGraph): Promise<void>;
+  read(key: string, ttlMs: number, context?: { roots: string[] }): Promise<ModuleGraph | null>;
+  write(key: string, graph: ModuleGraph, context?: { roots: string[] }): Promise<void>;
   createKey(input: { roots: string[]; maxDepth: number; includeHidden: boolean }): string;
 }
 
@@ -46,7 +47,7 @@ export class NodeDiscoveryCache implements DiscoveryCache {
     return `scan-${digest}`;
   }
 
-  async read(key: string, ttlMs: number): Promise<ModuleGraph | null> {
+  async read(key: string, ttlMs: number, context?: { roots: string[] }): Promise<ModuleGraph | null> {
     const filePath = this.getFilePath(key);
 
     try {
@@ -55,22 +56,51 @@ export class NodeDiscoveryCache implements DiscoveryCache {
       if (Date.now() - envelope.createdAtMs > ttlMs) {
         return null;
       }
+
+      if (context?.roots?.length) {
+        const currentFingerprint = await this.createRootsFingerprint(context.roots);
+        if (envelope.rootsFingerprint && currentFingerprint !== envelope.rootsFingerprint) {
+          return null;
+        }
+      }
+
       return envelope.graph;
     } catch {
       return null;
     }
   }
 
-  async write(key: string, graph: ModuleGraph): Promise<void> {
+  async write(key: string, graph: ModuleGraph, context?: { roots: string[] }): Promise<void> {
     const filePath = this.getFilePath(key);
     await fs.mkdir(this.cacheDir, { recursive: true });
 
     const envelope: CacheEnvelope = {
       createdAtMs: Date.now(),
       graph,
+      rootsFingerprint: context?.roots?.length ? await this.createRootsFingerprint(context.roots) : undefined,
     };
 
     await fs.writeFile(filePath, JSON.stringify(envelope), 'utf-8');
+  }
+
+
+  private async createRootsFingerprint(roots: string[]): Promise<string> {
+    const snapshots = await Promise.all(
+      roots
+        .map(root => root.trim())
+        .filter(Boolean)
+        .sort()
+        .map(async root => {
+          try {
+            const stat = await fs.stat(root);
+            return `${root}|${Math.floor(stat.mtimeMs)}|${stat.size}`;
+          } catch {
+            return `${root}|missing`;
+          }
+        })
+    );
+
+    return createHash('sha256').update(snapshots.join('||')).digest('hex');
   }
 
   private getFilePath(key: string): string {

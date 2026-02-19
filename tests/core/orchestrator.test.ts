@@ -134,6 +134,29 @@ describe('runCommand', () => {
     expect(report.buildPlan?.repositories[0]?.path).toContain('/repos/web');
   });
 
+
+  it('liefert explain-selection Entscheidungen im Report', async () => {
+    const report = await runCommand(
+      {
+        command: 'build',
+        roots: ['/repos'],
+        goals: ['clean', 'verify'],
+        mavenExecutable: 'mvn',
+        buildScope: 'root-only',
+        includeModules: ['web'],
+        explainSelection: true,
+        planOnly: true,
+      },
+      createScanner() as never,
+      createBuildService() as never,
+      createCache() as never
+    );
+
+    expect(report.selectionExplanation?.length).toBeGreaterThan(0);
+    expect(report.selectionExplanation?.some(entry => entry.reason.includes('include_filter'))).toBe(true);
+    expect(report.events.some(event => event.type === 'selection_explained')).toBe(true);
+  });
+
   it('unterstützt explicit-modules Scope', async () => {
     const report = await runCommand(
       {

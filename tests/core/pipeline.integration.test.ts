@@ -126,6 +126,38 @@ describe('pipeline integration', () => {
     }
   });
 
+
+  it('pipeline lint meldet semantische Fehler mit Exit-Code 4', () => {
+    const { workspaceRoot, mavenLogPath } = createFixtureWorkspace();
+    const pipelinePath = path.join(workspaceRoot, 'pipeline-invalid.json');
+    writeFileSync(
+      pipelinePath,
+      JSON.stringify(
+        {
+          schemaVersion: '1.0',
+          stages: [
+            { name: 'dup', scope: 'explicit-modules', modules: ['shared'], goals: ['verify'] },
+            { name: 'dup', scope: 'explicit-modules', goals: ['verify'] },
+          ],
+        },
+        null,
+        2
+      )
+    );
+
+    const result = runCli(
+      ['pipeline', 'lint', '--root', workspaceRoot, '--max-depth', '6', '--pipeline', pipelinePath, '--json'],
+      { GFOS_MVN_LOG: mavenLogPath }
+    );
+
+    try {
+      expect(result.status).toBe(4);
+      expect(result.stderr).toContain('PIPELINE_INVALID');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('pipeline run führt Stages sequentiell aus', () => {
     const { workspaceRoot, pipelinePath, mavenLogPath } = createFixtureWorkspace();
 

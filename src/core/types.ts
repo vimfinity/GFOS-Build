@@ -95,9 +95,16 @@ export interface PipelineStageReport {
   speedupFactor?: number;
 }
 
+export interface PipelineLintIssue {
+  path: string;
+  message: string;
+  severity: 'error' | 'warning';
+}
+
 export interface PipelineReport {
   action: 'lint' | 'plan' | 'run';
   stages: PipelineStageReport[];
+  lintIssues?: PipelineLintIssue[];
 }
 
 export interface ProfileScanReport {
@@ -118,6 +125,8 @@ export interface RunEvent {
     | 'module_started'
     | 'module_finished'
     | 'stage_finished'
+    | 'selection_explained'
+    | 'pipeline_lint_issue'
     | 'run_finished';
   timestamp: string;
   payload?: Record<string, string | number | boolean>;
@@ -134,6 +143,12 @@ export interface RunStats {
   maxParallelUsed: number;
   profileCount: number;
   discoveryDurationMs: number;
+}
+
+export interface SelectionExplanation {
+  repositoryPath: string;
+  selected: boolean;
+  reason: string;
 }
 
 export interface RunComparison {
@@ -159,4 +174,5 @@ export interface RunReport {
   events: RunEvent[];
   stats: RunStats;
   comparison?: RunComparison;
+  selectionExplanation?: SelectionExplanation[];
 }

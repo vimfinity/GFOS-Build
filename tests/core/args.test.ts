@@ -31,6 +31,7 @@ describe('parseArgs', () => {
       'web',
       '--exclude-module',
       'legacy',
+      '--explain-selection',
       '--profiles',
       '--profile-filter',
       'dev',
@@ -55,6 +56,7 @@ describe('parseArgs', () => {
     expect(parsed.modules).toEqual(['shared']);
     expect(parsed.includeModules).toEqual(['web']);
     expect(parsed.excludeModules).toEqual(['legacy']);
+    expect(parsed.explainSelection).toBe(true);
     expect(parsed.discoverProfiles).toBe(true);
     expect(parsed.profileFilter).toBe('dev');
     expect(parsed.failFast).toBe(false);

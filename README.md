@@ -111,6 +111,9 @@ bun run dev -- build --root "J:/dev/quellen" --scope explicit-modules --module s
 # Zusätzliche Include/Exclude Filter auf selektierte Module
 bun run dev -- build --root "J:/dev/quellen" --scope root-only --include-module web --exclude-module legacy --plan --json
 
+# Selektionsentscheidung transparent machen (für UI/Debug)
+bun run dev -- build --root "J:/dev/quellen" --scope explicit-modules --module "glob:*web*" --explain-selection --plan --json
+
 # Pipeline planen/ausführen
 bun run dev -- pipeline plan --root "J:/dev/quellen" --pipeline ./pipeline.json --json
 bun run dev -- pipeline run --root "J:/dev/quellen" --pipeline ./pipeline.json --json
@@ -208,3 +211,12 @@ Beispiel `pipeline.json`:
   - Windows: `%LOCALAPPDATA%\GFOS-Build\cache`
   - macOS: `~/Library/Caches/gfos-build`
   - Linux: `${XDG_CACHE_HOME:-~/.cache}/gfos-build`
+
+
+## Exit-Codes
+
+- `0`: Erfolg
+- `1`: allgemeiner Laufzeit-/Buildfehler
+- `2`: Usage-Fehler (z. B. unbekannter Command/ungültige Pipeline-Aktion)
+- `3`: Konfigurationsfehler
+- `4`: Pipeline-Validierungs-/Dateifehler

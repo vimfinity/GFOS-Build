@@ -2,6 +2,7 @@ import os from 'node:os';
 import { z } from 'zod';
 import { loadConfig } from '../config/config.js';
 import { BuildService } from '../core/build-service.js';
+import { AppError } from '../core/errors.js';
 import { RepositoryScanner } from '../core/repository-scanner.js';
 import {
   BuildPlan,
@@ -11,10 +12,12 @@ import {
   MavenRepository,
   ModuleGraph,
   PipelineDefinition,
+  PipelineLintIssue,
   PipelineReport,
   PipelineStageDefinition,
   RunEvent,
   RunReport,
+  SelectionExplanation,
 } from '../core/types.js';
 import { DiscoveryCache } from '../infrastructure/discovery-cache.js';
 import { RunHistory } from '../infrastructure/run-history.js';
@@ -62,6 +65,7 @@ export interface RunCommandInput {
   includeModules?: string[];
   excludeModules?: string[];
   configPath?: string;
+  explainSelection?: boolean;
 }
 
 interface ToolchainRule {
@@ -176,23 +180,50 @@ function selectModules(
   return modules.filter(module => selectors.some(selector => matchesSelector(module, selector)));
 }
 
+function explainSelection(
+  modules: MavenRepository[],
+  includeModules: string[],
+  excludeModules: string[]
+): SelectionExplanation[] {
+  const includes = includeModules.map(token => token.trim()).filter(Boolean);
+  const excludes = excludeModules.map(token => token.trim()).filter(Boolean);
+
+  return modules.map(module => {
+    const includeMatched = includes.length === 0 || includes.some(token => matchesSelector(module, token));
+    if (!includeMatched) {
+      return {
+        repositoryPath: module.path,
+        selected: false,
+        reason: includes.length > 0 ? 'excluded_by_include_filter' : 'excluded',
+      };
+    }
+
+    const excludeMatched = excludes.some(token => matchesSelector(module, token));
+    if (excludeMatched) {
+      return {
+        repositoryPath: module.path,
+        selected: false,
+        reason: 'excluded_by_exclude_filter',
+      };
+    }
+
+    return {
+      repositoryPath: module.path,
+      selected: true,
+      reason: includes.length > 0 ? 'selected_by_include_filter' : 'selected',
+    };
+  });
+}
+
 function applyModuleFilters(
   modules: MavenRepository[],
   includeModules: string[],
   excludeModules: string[]
 ): MavenRepository[] {
-  const includes = includeModules.map(token => token.trim()).filter(Boolean);
-  const excludes = excludeModules.map(token => token.trim()).filter(Boolean);
-
-  return modules.filter(module => {
-    const includeMatch = includes.length === 0 || includes.some(token => matchesSelector(module, token));
-    if (!includeMatch) {
-      return false;
-    }
-
-    const excluded = excludes.some(token => matchesSelector(module, token));
-    return !excluded;
-  });
+  return explainSelection(modules, includeModules, excludeModules)
+    .filter(decision => decision.selected)
+    .map(decision => modules.find(module => module.path === decision.repositoryPath))
+    .filter((module): module is MavenRepository => Boolean(module));
 }
 
 function createBuildPlan(
@@ -234,14 +265,20 @@ async function loadPipelineDefinition(pipelinePath: string): Promise<PipelineDef
     content = await fs.readFile(resolved, 'utf-8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(
-        `Pipeline-Datei nicht gefunden: ${resolved}. Lege eine pipeline.json an oder nutze --pipeline <path>.`
+      throw new AppError(
+        'PIPELINE_FILE_NOT_FOUND',
+        `Pipeline-Datei nicht gefunden: ${resolved}. Lege eine pipeline.json an oder nutze --pipeline <path>.`,
+        { path: resolved }
       );
     }
     throw error;
   }
 
-  return pipelineSchema.parse(JSON.parse(content) as unknown);
+  try {
+    return pipelineSchema.parse(JSON.parse(content) as unknown);
+  } catch (error) {
+    throw new AppError('PIPELINE_INVALID', `Ungültige Pipeline-Definition in ${resolved}: ${(error as Error).message}`);
+  }
 }
 
 function createReport(input: {
@@ -258,6 +295,7 @@ function createReport(input: {
   events: RunEvent[];
   maxParallelUsed: number;
   discoveryDurationMs: number;
+  selectionExplanation?: SelectionExplanation[];
 }): RunReport {
   const finishedAtMs = Date.now();
   const succeededCount = input.buildResults.filter(result => result.exitCode === 0).length;
@@ -278,9 +316,9 @@ function createReport(input: {
     discovered: input.discovered,
     moduleGraph: input.moduleGraph,
     profileScan: input.profileScan,
-    buildPlan: input.buildPlan,
+    ...(input.buildPlan ? { buildPlan: input.buildPlan } : {}),
     buildResults: input.buildResults,
-    pipeline: input.pipeline,
+    ...(input.pipeline ? { pipeline: input.pipeline } : {}),
     events: input.events,
     stats: {
       discoveredCount: input.discovered.length,
@@ -297,6 +335,7 @@ function createReport(input: {
       profileCount: input.profileScan.profiles.length,
       discoveryDurationMs: input.discoveryDurationMs,
     },
+    selectionExplanation: input.selectionExplanation,
   };
 }
 
@@ -445,6 +484,44 @@ function stageToPlan(
   return { selected, plan };
 }
 
+
+function lintPipelineDefinition(definition: PipelineDefinition, modules: MavenRepository[]): PipelineLintIssue[] {
+  const issues: PipelineLintIssue[] = [];
+  const seenNames = new Set<string>();
+
+  definition.stages.forEach((stage, index) => {
+    const basePath = `stages[${index}]`;
+
+    if (seenNames.has(stage.name)) {
+      issues.push({
+        path: `${basePath}.name`,
+        severity: 'error',
+        message: `Doppelter Stage-Name: ${stage.name}`,
+      });
+    }
+    seenNames.add(stage.name);
+
+    if ((stage.scope ?? 'root-only') === 'explicit-modules' && (!stage.modules || stage.modules.length === 0)) {
+      issues.push({
+        path: `${basePath}.modules`,
+        severity: 'error',
+        message: 'explicit-modules benötigt mindestens einen module selector.',
+      });
+    }
+
+    const selected = selectModules(modules, stage.scope ?? 'root-only', stage.modules ?? []);
+    if (selected.length === 0) {
+      issues.push({
+        path: `${basePath}.scope`,
+        severity: 'warning',
+        message: 'Stage selektiert aktuell keine Module.',
+      });
+    }
+  });
+
+  return issues;
+}
+
 async function discoverWithOptionalCache(input: {
   scanner: RepositoryScanner;
   cache: DiscoveryCache;
@@ -469,7 +546,7 @@ async function discoverWithOptionalCache(input: {
     includeHidden: input.includeHidden,
   });
 
-  const cached = await input.cache.read(cacheKey, input.cacheTtlSec * 1000);
+  const cached = await input.cache.read(cacheKey, input.cacheTtlSec * 1000, { roots: input.roots });
   if (cached) {
     emit(input.events, 'discovery_cache_hit', { key: cacheKey });
     return cached;
@@ -482,7 +559,7 @@ async function discoverWithOptionalCache(input: {
     includeHidden: input.includeHidden,
   });
 
-  await input.cache.write(cacheKey, graph);
+  await input.cache.write(cacheKey, graph, { roots: input.roots });
   return graph;
 }
 
@@ -515,6 +592,7 @@ export async function runCommand(
   const cacheTtlSec = input.scanCacheTtlSec ?? config.scan.cacheTtlSec;
   const includeModules = input.includeModules ?? [];
   const excludeModules = input.excludeModules ?? [];
+  const explainSelectionEnabled = input.explainSelection ?? false;
   const verbose = input.verbose ?? false;
   const javaHome = input.javaHome ?? config.build.javaHome;
   const toolchainRules: ToolchainRule[] = config.build.toolchains;
@@ -590,7 +668,7 @@ export async function runCommand(
 
   if (input.command === 'pipeline') {
     if (!input.pipelinePath) {
-      throw new Error('Für pipeline ist --pipeline <path> erforderlich.');
+      throw new AppError('USAGE_INVALID_PIPELINE_ACTION', 'Für pipeline ist --pipeline <path> erforderlich.');
     }
 
     const definition = await loadPipelineDefinition(input.pipelinePath);
@@ -607,6 +685,22 @@ export async function runCommand(
     };
 
     if (action === 'lint') {
+      const lintIssues = lintPipelineDefinition(definition, moduleGraph.modules);
+      pipeline.lintIssues = lintIssues;
+
+      for (const issue of lintIssues) {
+        emit(events, 'pipeline_lint_issue', {
+          path: issue.path,
+          severity: issue.severity,
+          message: issue.message,
+        });
+      }
+
+      const hasErrors = lintIssues.some(issue => issue.severity === 'error');
+      if (hasErrors) {
+        throw new AppError('PIPELINE_INVALID', 'Pipeline lint hat Fehler gefunden.', { issues: lintIssues.length });
+      }
+
       emit(events, 'run_finished', { mode: 'pipeline-lint' });
       return finalize(
         createReport({
@@ -734,11 +828,22 @@ export async function runCommand(
   const maxParallel = applyResourceLimits(requestedMaxParallel, resourceLimits);
   const scope = input.buildScope ?? 'root-only';
 
-  const selectedModules = applyModuleFilters(
-    selectModules(moduleGraph.modules, scope, input.modules ?? []),
-    includeModules,
-    excludeModules
-  );
+  const scopedModules = selectModules(moduleGraph.modules, scope, input.modules ?? []);
+  const selectionDecisions = explainSelection(scopedModules, includeModules, excludeModules);
+  const selectedModules = selectionDecisions
+    .filter(decision => decision.selected)
+    .map(decision => scopedModules.find(module => module.path === decision.repositoryPath))
+    .filter((module): module is MavenRepository => Boolean(module));
+
+  if (explainSelectionEnabled) {
+    for (const decision of selectionDecisions) {
+      emit(events, 'selection_explained', {
+        repository: decision.repositoryPath,
+        selected: decision.selected,
+        reason: decision.reason,
+      });
+    }
+  }
 
   const buildPlan = createBuildPlan(selectedModules, {
     goals,
@@ -773,6 +878,7 @@ export async function runCommand(
         events,
         maxParallelUsed,
         discoveryDurationMs,
+        selectionExplanation: explainSelectionEnabled ? selectionDecisions : undefined,
       })
     );
   }
@@ -811,6 +917,7 @@ export async function runCommand(
       events,
       maxParallelUsed,
       discoveryDurationMs,
+      selectionExplanation: explainSelectionEnabled ? selectionDecisions : undefined,
     })
   );
 }

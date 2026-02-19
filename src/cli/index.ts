@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createApplication } from '../application/app.js';
+import { AppError, ErrorCode } from '../core/errors.js';
 import { PipelineStageReport, RunReport } from '../core/types.js';
 import { CliUsageError, parseArgs } from './args.js';
 
@@ -32,6 +33,7 @@ Build options:
   --verbose              Forward Maven output to stderr (default: on for text, off for --json)
   --scope <mode>         root-only | explicit-modules | auto
   --module <selector>    Repeatable selector for explicit-modules
+  --explain-selection    Emit selection decisions in report/events
   --include-module <q>   Include filter for selected modules
   --exclude-module <q>   Exclude filter for selected modules
 
@@ -46,6 +48,23 @@ Examples:
   gfos-build pipeline lint --pipeline ./pipeline.json --json
   gfos-build pipeline plan --root "J:/dev/quellen" --pipeline ./pipeline.json --json
   gfos-build pipeline run --root "J:/dev/quellen" --pipeline ./pipeline.json --json`);
+}
+
+
+function mapExitCode(code: ErrorCode): number {
+  if (code === 'USAGE_INVALID_COMMAND' || code === 'USAGE_INVALID_PIPELINE_ACTION') {
+    return 2;
+  }
+
+  if (code === 'CONFIG_INVALID') {
+    return 3;
+  }
+
+  if (code === 'PIPELINE_INVALID' || code === 'PIPELINE_FILE_NOT_FOUND') {
+    return 4;
+  }
+
+  return 1;
 }
 
 function printPipelineStages(stages: PipelineStageReport[]): void {
@@ -139,6 +158,7 @@ async function main(): Promise<void> {
     modules: cliArgs.modules,
     includeModules: cliArgs.includeModules,
     excludeModules: cliArgs.excludeModules,
+    explainSelection: cliArgs.explainSelection,
     configPath: cliArgs.configPath,
   });
 
@@ -159,6 +179,15 @@ main().catch(error => {
     console.error(`[${error.code}] ${error.message}`);
     console.error('Nutze --help für eine vollständige Übersicht.');
     process.exitCode = 2;
+    return;
+  }
+
+  if (error instanceof AppError) {
+    console.error(`[${error.code}] ${error.message}`);
+    if (error.details) {
+      console.error('Details:', JSON.stringify(error.details));
+    }
+    process.exitCode = mapExitCode(error.code);
     return;
   }
 

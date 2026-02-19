@@ -220,4 +220,34 @@ describe('CLI Phase-1 integration', () => {
     expect(result.stderr).toContain('Unbekannter Befehl');
   });
 
+  it('liefert Exit-Code 3 bei ungültiger Konfiguration', () => {
+    const { workspaceRoot } = createFixtureWorkspace();
+    const configPath = path.join(workspaceRoot, 'gfos-build.config.json');
+    writeFileSync(configPath, '{ invalid json');
+
+    const result = runCli(['scan', '--config', configPath, '--json']);
+
+    try {
+      expect(result.status).toBe(3);
+      expect(result.stderr).toContain('CONFIG_INVALID');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('liefert Exit-Code 4 bei ungültiger Pipeline-Definition', () => {
+    const { workspaceRoot } = createFixtureWorkspace();
+    const pipelinePath = path.join(workspaceRoot, 'pipeline.json');
+    writeFileSync(pipelinePath, JSON.stringify({ schemaVersion: '1.0', stages: [{ name: 'broken', scope: 'explicit-modules', goals: ['verify'] }] }));
+
+    const result = runCli(['pipeline', 'lint', '--root', workspaceRoot, '--pipeline', pipelinePath, '--json']);
+
+    try {
+      expect(result.status).toBe(4);
+      expect(result.stderr).toContain('PIPELINE_INVALID');
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
 });

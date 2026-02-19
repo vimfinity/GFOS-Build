@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { AppError } from '../core/errors.js';
 
 const toolchainRuleSchema = z
   .object({
@@ -65,6 +66,6 @@ export async function loadConfig(configPath?: string): Promise<AppConfig> {
       return configSchema.parse({});
     }
 
-    throw new Error(`Ungültige Konfiguration in ${resolvedConfigPath}: ${(error as Error).message}`);
+    throw new AppError('CONFIG_INVALID', `Ungültige Konfiguration in ${resolvedConfigPath}: ${(error as Error).message}`, { path: resolvedConfigPath });
   }
 }
