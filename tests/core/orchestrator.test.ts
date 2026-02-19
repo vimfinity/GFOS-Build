@@ -146,6 +146,34 @@ describe('runCommand', () => {
     expect(report.buildResults).toHaveLength(1);
   });
 
+  it('reportet Build-Dauermetriken in stats', async () => {
+    const buildService = {
+      buildRepository: async (repository: MavenRepository, _options: BuildOptions) => {
+        if (repository.path.endsWith('/shared')) {
+          return { repository, exitCode: 0, durationMs: 120 };
+        }
+        return { repository, exitCode: 1, durationMs: 80 };
+      },
+    };
+
+    const report = await runCommand(
+      {
+        command: 'build',
+        roots: ['/repos'],
+        goals: ['verify'],
+        mavenExecutable: 'mvn',
+        buildScope: 'root-only',
+      },
+      createScanner() as never,
+      buildService as never,
+      createCache() as never
+    );
+
+    expect(report.stats.totalBuildDurationMs).toBe(200);
+    expect(report.stats.failedBuildDurationMs).toBe(80);
+  });
+
+
   it('nutzt parallele Ausführung bei maxParallel > 1', async () => {
     const report = await runCommand(
       {

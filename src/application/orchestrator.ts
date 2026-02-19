@@ -184,6 +184,10 @@ function createReport(input: {
   const finishedAtMs = Date.now();
   const succeededCount = input.buildResults.filter(result => result.exitCode === 0).length;
   const failedCount = input.buildResults.filter(result => result.exitCode !== 0).length;
+  const totalBuildDurationMs = input.buildResults.reduce((sum, result) => sum + result.durationMs, 0);
+  const failedBuildDurationMs = input.buildResults
+    .filter(result => result.exitCode !== 0)
+    .reduce((sum, result) => sum + result.durationMs, 0);
 
   return {
     schemaVersion: '1.0',
@@ -208,6 +212,8 @@ function createReport(input: {
       builtCount: input.buildResults.length,
       succeededCount,
       failedCount,
+      totalBuildDurationMs,
+      failedBuildDurationMs,
       maxParallelUsed: Math.max(1, input.maxParallelUsed),
       profileCount: input.profileScan.profiles.length,
     },

@@ -114,6 +114,8 @@ export interface RunStats {
   builtCount: number;
   succeededCount: number;
   failedCount: number;
+  totalBuildDurationMs: number;
+  failedBuildDurationMs: number;
   maxParallelUsed: number;
   profileCount: number;
 }
