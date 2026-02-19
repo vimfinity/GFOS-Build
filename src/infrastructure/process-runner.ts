@@ -16,8 +16,16 @@ export class NodeProcessRunner implements ProcessRunner {
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
         cwd,
-        stdio: 'inherit',
+        stdio: ['ignore', 'pipe', 'pipe'],
         shell: process.platform === 'win32',
+      });
+
+      child.stdout?.on('data', chunk => {
+        process.stderr.write(chunk);
+      });
+
+      child.stderr?.on('data', chunk => {
+        process.stderr.write(chunk);
       });
 
       child.on('error', reject);

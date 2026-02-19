@@ -19,7 +19,7 @@ function createFixtureWorkspace(): { workspaceRoot: string; mavenMockPath: strin
 
   writeFileSync(
     mavenMockPath,
-    '#!/usr/bin/env bash\nset -euo pipefail\necho "${PWD}|$*" >> "${GFOS_MVN_LOG}"\nexit 0\n'
+    '#!/usr/bin/env bash\nset -euo pipefail\necho "${PWD}|$*" >> "${GFOS_MVN_LOG}"\necho "[mvn-stdout] building ${PWD}"\necho "[mvn-stderr] building ${PWD}" 1>&2\nexit 0\n'
   );
   chmodSync(mavenMockPath, 0o755);
 
@@ -129,6 +129,8 @@ describe('CLI Phase-1 integration', () => {
       expect(report.stats.failedCount).toBe(0);
       expect(report.stats.totalBuildDurationMs).toBeGreaterThanOrEqual(0);
       expect(report.stats.failedBuildDurationMs).toBe(0);
+      expect(result.stderr).toContain('[mvn-stdout]');
+      expect(result.stderr).toContain('[mvn-stderr]');
 
       const mavenRuns = readFileSync(mavenLogPath, 'utf-8')
         .trim()
@@ -142,4 +144,33 @@ describe('CLI Phase-1 integration', () => {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
   });
+
+  it('liefert bei leerem Scan für build --plan weiterhin build-plan statt scan', () => {
+    const result = runCli([
+      'build',
+      '--root',
+      'Z:/__does_not_exist__',
+      '--scope',
+      'explicit-modules',
+      '--module',
+      'web',
+      '--plan',
+      '--json',
+    ]);
+
+    expect(result.status).toBe(0);
+    const report = JSON.parse(result.stdout) as {
+      command: string;
+      mode: string;
+      buildPlan?: { repositories: Array<{ path: string }>; scope: string };
+      discovered: unknown[];
+    };
+
+    expect(report.command).toBe('build');
+    expect(report.mode).toBe('build-plan');
+    expect(report.discovered).toHaveLength(0);
+    expect(report.buildPlan?.scope).toBe('explicit-modules');
+    expect(report.buildPlan?.repositories).toHaveLength(0);
+  });
+
 });

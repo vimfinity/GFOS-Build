@@ -433,7 +433,7 @@ export async function runCommand(
     profiles,
   };
 
-  if (input.command === 'scan' || moduleGraph.modules.length === 0) {
+  if (input.command === 'scan') {
     emit(events, 'run_finished', { mode: 'scan' });
     return createReport({
       command: input.command,
