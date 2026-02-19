@@ -25,8 +25,7 @@
     "check:all": "bun run check && bun run binary:build:native && bun run binary:smoke && bun run binary:build:win",
     "binary:build:native": "bun build --compile src/cli/index.ts --outfile release/gfos-build",
     "binary:build:win": "bun build --compile --target=bun-windows-x64-modern src/cli/index.ts --outfile release/gfos-build.exe",
-    "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
-    "ui:readiness:pack": "bun run scripts/generate-ui-readiness-pack.ts"
+    "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json"
   },
   "dependencies": {
     "zod": "^3.24.0"

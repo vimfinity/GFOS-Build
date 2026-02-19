@@ -39,8 +39,6 @@ Wir bauen ein Standalone-Binary via Bun-Compile:
 ```bash
 bun run binary:build  # baut immer Windows-Binary (gfos-build.exe)
 
-# UI readiness fixtures (RunReport snapshots für UI/Docs)
-bun run ui:readiness:pack
 ```
 
 Danach liegt ein Windows-Artefakt in `release/gfos-build.exe`, das direkt auf dem Zielsystem ausführbar ist.
@@ -62,6 +60,19 @@ Für lokale Smoke-Tests auf Nicht-Windows-Systemen gibt es zusätzlich:
 4. **Zielsystem-Test ohne Runtime**
    - Binary-Artefakt kopieren
    - `gfos-build.exe scan --root <dein-path> --json` ausführen
+
+## Dokumentation lokal nutzen
+
+Aktuell gibt es **keine** veröffentlichte Online-Doku-Plattform im Repo.
+Die gültige Doku liegt als Markdown unter `docs/` und wird direkt im Repo gepflegt:
+
+- `docs/ARCHITECTURE.md`
+- `docs/TECH_DECISIONS.md`
+- `docs/NEXT_STEPS.md`
+- `docs/TESTING_AND_RELEASE.md`
+
+Zum lokalen Lesen reicht jeder Editor (z. B. VS Code Markdown Preview).
+
 
 ## Installation & Development
 
@@ -155,7 +166,6 @@ Mehr technische Hintergründe: [`docs/TECH_DECISIONS.md`](docs/TECH_DECISIONS.md
 
 Architektur-Blueprint (inkl. UI-vs-CLI Strategie): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Konkrete Priorisierung der nächsten Umsetzungsschritte: [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md).
-UI-Readiness-Artefakte und Frontend-Referenz: [`docs/UI_READINESS_PACK.md`](docs/UI_READINESS_PACK.md).
 
 
 ## Run-Report (versioniert)
