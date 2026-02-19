@@ -72,3 +72,10 @@ Ein Feature ist nur dann „fertig“, wenn:
 - [ ] Fehlerfälle mit deterministischem Exit-Code + Nachricht
 
 Diese Liste sollte bei jedem größeren Feature-PR geprüft werden.
+
+
+## 8) Online-Doku Betrieb
+
+- Online-Doku wird über `mkdocs.yml` strukturiert und per GitHub Pages Workflow (`.github/workflows/docs.yml`) veröffentlicht.
+- Änderungen an CLI-Flags, Report-Contracts oder Pipelines müssen in denselben PR auch die Doku aktualisieren.
+- Docs-Build läuft mit `mkdocs build --strict` in CI, damit fehlerhafte Links/Navigation früh auffallen.

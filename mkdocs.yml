@@ -1,0 +1,31 @@
+site_name: GFOS Build Docs
+site_description: Performance-orientierte Build-Orchestrierung
+site_url: https://vimfinity.github.io/GFOS-Build/
+repo_url: https://github.com/vimfinity/GFOS-Build
+repo_name: vimfinity/GFOS-Build
+
+theme:
+  name: material
+  language: de
+  features:
+    - navigation.instant
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Start: README.md
+  - Architektur: docs/ARCHITECTURE.md
+  - Entwicklerleitfaden: docs/DEVELOPER_GUIDE.md
+  - Testing & Release: docs/TESTING_AND_RELEASE.md
+  - Tech Decisions: docs/TECH_DECISIONS.md
+  - Next Steps: docs/NEXT_STEPS.md
+  - Product Backlog: docs/PRODUCT_BACKLOG.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
