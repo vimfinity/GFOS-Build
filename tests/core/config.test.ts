@@ -14,6 +14,8 @@ describe('loadConfig', () => {
     expect(config.roots).toEqual(['.']);
     expect(config.scan.maxDepth).toBe(4);
     expect(config.build.failFast).toBe(true);
+    expect(config.build.maxParallel).toBe(1);
+    expect(config.scan.cacheEnabled).toBe(false);
 
     rmSync(dir, { recursive: true, force: true });
   });
@@ -26,8 +28,8 @@ describe('loadConfig', () => {
       configPath,
       JSON.stringify({
         roots: ['J:/dev/quellen'],
-        scan: { maxDepth: 6, includeHidden: true },
-        build: { goals: ['clean', 'verify'], mavenExecutable: 'mvnw', failFast: false },
+        scan: { maxDepth: 6, includeHidden: true, cacheEnabled: true, cacheTtlSec: 900 },
+        build: { goals: ['clean', 'verify'], mavenExecutable: 'mvnw', failFast: false, maxParallel: 4 },
       })
     );
 
@@ -39,6 +41,9 @@ describe('loadConfig', () => {
     expect(config.build.goals).toEqual(['clean', 'verify']);
     expect(config.build.mavenExecutable).toBe('mvnw');
     expect(config.build.failFast).toBe(false);
+    expect(config.build.maxParallel).toBe(4);
+    expect(config.scan.cacheEnabled).toBe(true);
+    expect(config.scan.cacheTtlSec).toBe(900);
 
     rmSync(dir, { recursive: true, force: true });
   });

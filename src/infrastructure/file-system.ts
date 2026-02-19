@@ -4,6 +4,7 @@ import path from 'node:path';
 export interface FileSystem {
   readDir(targetPath: string): Promise<Dirent[]>;
   exists(targetPath: string): Promise<boolean>;
+  readFile(targetPath: string): Promise<string>;
 }
 
 export class NodeFileSystem implements FileSystem {
@@ -18,6 +19,10 @@ export class NodeFileSystem implements FileSystem {
     } catch {
       return false;
     }
+  }
+
+  async readFile(targetPath: string): Promise<string> {
+    return fs.readFile(targetPath, 'utf-8');
   }
 }
 

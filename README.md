@@ -71,10 +71,26 @@ bun run check
 
 ```bash
 # Repository Discovery
-bun run dev -- scan --root "J:/dev/quellen" --max-depth 4
+bun run dev -- scan --root "J:/dev/quellen" --max-depth 4 --scan-cache
 
-# Build ausführen
-bun run dev -- build --root "J:/dev/quellen" --goals "clean install"
+# Profile Discovery (inkl. Submodule)
+bun run dev -- scan --root "J:/dev/quellen" --profiles --profile-filter dev --json
+
+# Build ausführen (parallel vorbereitet)
+bun run dev -- build --root "J:/dev/quellen" --goals "clean install" --max-parallel 4
+
+# Build-Plan ohne Ausführung (Phase 1 Planungslogik)
+bun run dev -- build --root "J:/dev/quellen/2025/web" --scope root-only --plan --json
+
+# Explizite Modul-Selektion (BuildScope)
+bun run dev -- build --root "J:/dev/quellen" --scope explicit-modules --module shared --module web --json
+
+# Zusätzliche Include/Exclude Filter auf selektierte Module
+bun run dev -- build --root "J:/dev/quellen" --scope root-only --include-module web --exclude-module legacy --plan --json
+
+# Pipeline planen/ausführen
+bun run dev -- pipeline plan --root "J:/dev/quellen" --pipeline ./pipeline.json --json
+bun run dev -- pipeline run --root "J:/dev/quellen" --pipeline ./pipeline.json --json
 
 # JSON-Ausgabe für Integrationen
 bun run dev -- scan --root "J:/dev/quellen" --json
@@ -90,8 +106,8 @@ Beispiel:
 ```json
 {
   "roots": ["J:/dev/quellen"],
-  "scan": { "maxDepth": 4, "includeHidden": false },
-  "build": { "goals": ["clean", "install"], "mavenExecutable": "mvn", "failFast": true }
+  "scan": { "maxDepth": 4, "includeHidden": false, "cacheEnabled": true, "cacheTtlSec": 300 },
+  "build": { "goals": ["clean", "install"], "mavenExecutable": "mvn", "failFast": true, "maxParallel": 4 }
 }
 ```
 
@@ -108,3 +124,31 @@ CLI-Parameter überschreiben die Config.
 Mehr technische Hintergründe: [`docs/TECH_DECISIONS.md`](docs/TECH_DECISIONS.md).
 
 Architektur-Blueprint (inkl. UI-vs-CLI Strategie): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Konkrete Priorisierung der nächsten Umsetzungsschritte: [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md).
+
+
+## Run-Report (versioniert)
+
+Die JSON-Ausgabe liefert ab Phase 1 einen versionierten Report (`schemaVersion: "1.0"`) inkl.
+- Laufzeitmetadaten (`startedAt`, `finishedAt`, `durationMs`),
+- optionalem `buildPlan` für `build --plan`,
+- Modulgraph (`moduleGraph`) für Root/Submodule-Beziehungen,
+- Event-Liste (`events`) als Contract für interaktive Oberflächen,
+- optionalem Profile-Report (`profileScan`) für Maven-Profile über Module/Submodule,
+- aggregierten Kennzahlen unter `stats` (discovered/planned/built/succeeded/failed/maxParallelUsed/profileCount).
+
+
+## Pipeline-Format (Phase 2 MVP)
+
+Beispiel `pipeline.json`:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "mavenExecutable": "mvn",
+  "stages": [
+    { "name": "shared", "scope": "explicit-modules", "modules": ["shared"], "goals": ["clean", "install"] },
+    { "name": "web", "scope": "root-only", "goals": ["verify"] }
+  ]
+}
+```

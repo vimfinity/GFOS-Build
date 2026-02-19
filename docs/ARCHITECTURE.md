@@ -64,3 +64,9 @@ Aber als Standard für ein wachsendes Produkt ist Shared Logic klar überlegen.
 3. Adapter in `infrastructure` ergänzen
 4. CLI/UI als dünne Entry-Layer halten
 5. Contract-Tests + Binary-Smoke beibehalten
+
+## Contract-Strategie für CLI und spätere UI
+
+- Finale Ergebnisse laufen über **versionierte JSON-Reports** (stabiler Integrationsvertrag).
+- Für interaktive Frontends kommt ergänzend ein **Event-Stream** (Progress-Events) hinzu.
+- Beide Adapter (CLI/UI) konsumieren dieselben Application-Use-Cases und Contracts.

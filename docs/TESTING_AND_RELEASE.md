@@ -30,3 +30,11 @@ Empfehlung vor Rollout:
    - `gfos-build.exe scan --root <workspace-root> --json`
 4. Danach Build-Test:
    - `gfos-build.exe build --root <workspace-root> --goals "clean install"`
+
+
+## 3b. CLI-Integrationstests mit synthetischen Workspaces
+- Integrationstests erzeugen zur Laufzeit temporäre Maven-Workspace-Strukturen (inkl. verschachtelter Module) und führen die CLI dagegen aus.
+- Für Build-Tests wird ein Mock-Maven-Executable genutzt, damit das Verhalten reproduzierbar ohne echte Maven-Installation geprüft wird.
+- Validiert werden dabei insbesondere:
+  - `build --plan` führt **keinen** Maven-Prozess aus,
+  - `build --json` liefert konsistente Stats und Report-Felder (`schemaVersion`, `mode`, `stats`).

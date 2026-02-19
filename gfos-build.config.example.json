@@ -2,11 +2,14 @@
   "roots": ["J:/dev/quellen"],
   "scan": {
     "maxDepth": 4,
-    "includeHidden": false
+    "includeHidden": false,
+    "cacheEnabled": true,
+    "cacheTtlSec": 300
   },
   "build": {
     "goals": ["clean", "install"],
     "mavenExecutable": "mvn",
-    "failFast": true
+    "failFast": true,
+    "maxParallel": 4
   }
 }

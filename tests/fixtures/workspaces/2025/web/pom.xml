@@ -1,1 +1,7 @@
-<project><modelVersion>4.0.0</modelVersion></project>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <profiles>
+    <profile><id>web-dev</id></profile>
+    <profile><id>web-prod</id></profile>
+  </profiles>
+</project>

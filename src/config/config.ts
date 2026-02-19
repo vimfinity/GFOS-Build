@@ -8,15 +8,18 @@ const configSchema = z.object({
     .object({
       maxDepth: z.number().int().min(0).max(12).default(4),
       includeHidden: z.boolean().default(false),
+      cacheEnabled: z.boolean().default(false),
+      cacheTtlSec: z.number().int().min(10).max(86400).default(300),
     })
-    .default({ maxDepth: 4, includeHidden: false }),
+    .default({ maxDepth: 4, includeHidden: false, cacheEnabled: false, cacheTtlSec: 300 }),
   build: z
     .object({
       goals: z.array(z.string().min(1)).min(1).default(['clean', 'install']),
       mavenExecutable: z.string().min(1).default('mvn'),
       failFast: z.boolean().default(true),
+      maxParallel: z.number().int().min(1).max(32).default(1),
     })
-    .default({ goals: ['clean', 'install'], mavenExecutable: 'mvn', failFast: true }),
+    .default({ goals: ['clean', 'install'], mavenExecutable: 'mvn', failFast: true, maxParallel: 1 }),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

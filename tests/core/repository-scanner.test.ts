@@ -3,7 +3,10 @@ import { FileSystem } from '../../src/infrastructure/file-system.js';
 import { RepositoryScanner } from '../../src/core/repository-scanner.js';
 
 class InMemoryFileSystem implements FileSystem {
-  constructor(private readonly tree: Record<string, { dirs?: string[]; files?: string[] }>) {}
+  constructor(
+    private readonly tree: Record<string, { dirs?: string[]; files?: string[] }>,
+    private readonly fileContent: Record<string, string> = {}
+  ) {}
 
   async readDir(targetPath: string) {
     const node = this.tree[targetPath];
@@ -36,10 +39,18 @@ class InMemoryFileSystem implements FileSystem {
     const file = targetPath.slice(separatorIndex + 1);
     return this.tree[parent]?.files?.includes(file) ?? false;
   }
+
+  async readFile(targetPath: string): Promise<string> {
+    const value = this.fileContent[targetPath];
+    if (!value) {
+      throw new Error(`Missing file: ${targetPath}`);
+    }
+    return value;
+  }
 }
 
 describe('RepositoryScanner', () => {
-  it('findet nur Maven-Repositories und überspringt Untermodule', async () => {
+  it('scan liefert Root-Module für Builds', async () => {
     const fs = new InMemoryFileSystem({
       '/root': { dirs: ['2025', 'docs'] },
       '/root/2025': { dirs: ['web', 'shared'] },
@@ -53,6 +64,44 @@ describe('RepositoryScanner', () => {
     const repos = await scanner.scan({ rootPaths: ['/root'], maxDepth: 4, includeHidden: false });
 
     expect(repos.map(repo => repo.path)).toEqual(['/root/2025/shared', '/root/2025/web']);
+  });
+
+  it('scanGraph liefert verschachtelte Module inkl parentPath', async () => {
+    const fs = new InMemoryFileSystem({
+      '/root': { dirs: ['2025'] },
+      '/root/2025': { dirs: ['web'] },
+      '/root/2025/web': { dirs: ['module-a'], files: ['pom.xml'] },
+      '/root/2025/web/module-a': { files: ['pom.xml'] },
+    });
+
+    const scanner = new RepositoryScanner(fs);
+    const graph = await scanner.scanGraph({ rootPaths: ['/root'], maxDepth: 4, includeHidden: false });
+
+    expect(graph.modules).toHaveLength(2);
+    const sub = graph.modules.find(module => module.name === 'module-a');
+    expect(sub?.parentPath).toBe('/root/2025/web');
+    expect(graph.rootModules.map(module => module.path)).toEqual(['/root/2025/web']);
+  });
+
+  it('scanProfiles findet Profile in Modulen und filtert nach Name', async () => {
+    const fs = new InMemoryFileSystem(
+      {
+        '/root': { dirs: ['shared'] },
+        '/root/shared': { files: ['pom.xml'] },
+      },
+      {
+        '/root/shared/pom.xml': `<project><profiles><profile><id>dev</id></profile><profile><id>prod</id></profile></profiles></project>`,
+      }
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const graph = await scanner.scanGraph({ rootPaths: ['/root'], maxDepth: 2, includeHidden: false });
+
+    const all = await scanner.scanProfiles(graph.modules);
+    const filtered = await scanner.scanProfiles(graph.modules, 'pro');
+
+    expect(all.map(profile => profile.id)).toEqual(['dev', 'prod']);
+    expect(filtered.map(profile => profile.id)).toEqual(['prod']);
   });
 
   it('respektiert maxDepth', async () => {

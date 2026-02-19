@@ -1,1 +1,6 @@
-<project><modelVersion>4.0.0</modelVersion></project>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <profiles>
+    <profile><id>module-a-ci</id></profile>
+  </profiles>
+</project>

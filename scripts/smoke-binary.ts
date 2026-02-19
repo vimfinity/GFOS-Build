@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const binaryName = process.platform === 'win32' ? 'gfos-build.exe' : 'gfos-build';
 const binaryPath = path.resolve('release', binaryName);
@@ -11,31 +12,151 @@ if (!existsSync(binaryPath)) {
   process.exit(1);
 }
 
-const run = spawnSync(binaryPath, ['scan', '--root', fixtureRoot, '--max-depth', '4', '--json'], {
-  encoding: 'utf-8',
-});
+function runAndParse(args: string[], env?: NodeJS.ProcessEnv): Record<string, unknown> {
+  const run = spawnSync(binaryPath, args, {
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      ...env,
+    },
+  });
 
-if (run.status !== 0) {
-  console.error(run.stdout);
-  console.error(run.stderr);
-  process.exit(run.status ?? 1);
+  if (run.status !== 0) {
+    console.error(run.stdout);
+    console.error(run.stderr);
+    process.exit(run.status ?? 1);
+  }
+
+  const output = run.stdout.trim();
+  try {
+    return JSON.parse(output) as Record<string, unknown>;
+  } catch {
+    console.error(`Invalid JSON output from binary: ${output}`);
+    process.exit(1);
+  }
 }
 
-const output = run.stdout.trim();
-let parsed: unknown;
+const scanReport = runAndParse(['scan', '--root', fixtureRoot, '--max-depth', '4', '--json']);
+const discovered = (scanReport.discovered as Array<{ path: string }> | undefined) ?? [];
 
-try {
-  parsed = JSON.parse(output);
-} catch {
-  console.error(`Invalid JSON output from binary: ${output}`);
+if (scanReport.schemaVersion !== '1.0') {
+  console.error(`Expected schemaVersion 1.0, got ${String(scanReport.schemaVersion)}`);
   process.exit(1);
 }
 
-const discovered = (parsed as { discovered?: Array<{ path: string }> }).discovered ?? [];
-
-if (!Array.isArray(discovered) || discovered.length !== 2) {
-  console.error(`Expected exactly 2 repositories, got ${discovered.length}`);
+if (!Array.isArray(discovered) || discovered.length !== 3) {
+  console.error(`Expected exactly 3 modules, got ${discovered.length}`);
   process.exit(1);
 }
 
+const graph = scanReport.moduleGraph as { rootModules?: unknown[] } | undefined;
+if (!graph || !Array.isArray(graph.rootModules) || graph.rootModules.length !== 2) {
+  console.error('Expected moduleGraph.rootModules to include 2 roots');
+  process.exit(1);
+}
+
+const profileReport = runAndParse([
+  'scan',
+  '--root',
+  fixtureRoot,
+  '--max-depth',
+  '4',
+  '--profiles',
+  '--profile-filter',
+  'dev',
+  '--json',
+]);
+const profileScan = profileReport.profileScan as { profiles?: Array<{ id?: string }> } | undefined;
+if (!profileScan || !Array.isArray(profileScan.profiles) || profileScan.profiles.length < 2) {
+  console.error('Expected profile scan to return at least 2 profiles');
+  process.exit(1);
+}
+
+
+const planReport = runAndParse([
+  'build',
+  '--root',
+  fixtureRoot,
+  '--max-depth',
+  '4',
+  '--goals',
+  'clean verify',
+  '--scope',
+  'root-only',
+  '--max-parallel',
+  '3',
+  '--plan',
+  '--json',
+]);
+
+if (planReport.mode !== 'build-plan') {
+  console.error(`Expected build-plan mode, got ${String(planReport.mode)}`);
+  process.exit(1);
+}
+
+const buildPlan = planReport.buildPlan as { repositories?: unknown[]; scope?: string; strategy?: string; maxParallel?: number } | undefined;
+if (!buildPlan || !Array.isArray(buildPlan.repositories) || buildPlan.repositories.length !== 2) {
+  console.error('Expected build plan with exactly 2 repositories');
+  process.exit(1);
+}
+if (buildPlan.scope !== 'root-only') {
+  console.error(`Expected build scope root-only, got ${String(buildPlan.scope)}`);
+  process.exit(1);
+}
+
+if (buildPlan.strategy !== 'parallel' || buildPlan.maxParallel !== 3) {
+  console.error(`Expected parallel plan with maxParallel=3, got strategy=${String(buildPlan.strategy)} maxParallel=${String(buildPlan.maxParallel)}`);
+  process.exit(1);
+}
+
+const tmp = mkdtempSync(path.join(tmpdir(), 'gfos-build-smoke-'));
+const pipelinePath = path.join(tmp, 'pipeline.json');
+const mockMvnPath = path.join(tmp, 'mvn-mock.sh');
+const mockLogPath = path.join(tmp, 'mvn.log');
+
+writeFileSync(
+  mockMvnPath,
+  '#!/usr/bin/env bash\nset -euo pipefail\necho "${PWD}|$*" >> "${GFOS_MVN_LOG}"\nexit 0\n'
+);
+chmodSync(mockMvnPath, 0o755);
+
+writeFileSync(
+  pipelinePath,
+  JSON.stringify(
+    {
+      schemaVersion: '1.0',
+      mavenExecutable: mockMvnPath,
+      stages: [
+        { name: 'shared', scope: 'explicit-modules', modules: ['shared'], goals: ['clean'] },
+        { name: 'roots', scope: 'root-only', goals: ['verify'], maxParallel: 2 },
+      ],
+    },
+    null,
+    2
+  )
+);
+
+const pipelineReport = runAndParse(
+  ['pipeline', 'plan', '--root', fixtureRoot, '--max-depth', '4', '--pipeline', pipelinePath, '--json'],
+  { GFOS_MVN_LOG: mockLogPath }
+);
+
+if (pipelineReport.mode !== 'pipeline-plan') {
+  console.error(`Expected pipeline-plan mode, got ${String(pipelineReport.mode)}`);
+  process.exit(1);
+}
+
+const pipeline = pipelineReport.pipeline as { stages?: unknown[] } | undefined;
+if (!pipeline || !Array.isArray(pipeline.stages) || pipeline.stages.length !== 2) {
+  console.error('Expected pipeline report with 2 stages');
+  process.exit(1);
+}
+
+const pipelineStages = pipeline.stages as Array<{ plan?: { maxParallel?: number } }>;
+if ((pipelineStages[1]?.plan?.maxParallel ?? 0) !== 2) {
+  console.error('Expected second pipeline stage maxParallel=2');
+  process.exit(1);
+}
+
+rmSync(tmp, { recursive: true, force: true });
 console.log('Binary smoke test passed.');

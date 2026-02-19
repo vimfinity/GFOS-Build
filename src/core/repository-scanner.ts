@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { z } from 'zod';
 import { FileSystem, resolvePath } from '../infrastructure/file-system.js';
-import { MavenRepository, ScanOptions } from './types.js';
+import { MavenProfile, MavenRepository, ModuleGraph, ScanOptions } from './types.js';
 
 const scanOptionsSchema = z.object({
   rootPaths: z.array(z.string().min(1)).min(1),
@@ -14,10 +14,54 @@ interface QueueItem {
   depth: number;
 }
 
+function buildModuleGraph(modules: MavenRepository[]): ModuleGraph {
+  const sorted = [...modules].sort((a, b) => a.path.localeCompare(b.path));
+  const modulePaths = new Set(sorted.map(module => module.path));
+
+  const modulesWithParent = sorted.map(module => {
+    const relativeSegments = module.path.split(path.sep).filter(Boolean);
+    let parentPath: string | undefined;
+
+    for (let i = relativeSegments.length - 1; i > 0; i -= 1) {
+      const candidate = `${path.isAbsolute(module.path) ? path.sep : ''}${relativeSegments
+        .slice(0, i)
+        .join(path.sep)}`;
+      if (modulePaths.has(candidate)) {
+        parentPath = candidate;
+        break;
+      }
+    }
+
+    return {
+      ...module,
+      parentPath,
+    };
+  });
+
+  return {
+    modules: modulesWithParent,
+    rootModules: modulesWithParent.filter(module => !module.parentPath),
+  };
+}
+
+function parseProfilesFromPom(content: string): string[] {
+  const profileBlocks = content.match(/<profile\b[\s\S]*?<\/profile>/g) ?? [];
+  const ids: string[] = [];
+
+  for (const block of profileBlocks) {
+    const match = block.match(/<id>\s*([^<\s][^<]*)\s*<\/id>/);
+    if (match?.[1]) {
+      ids.push(match[1].trim());
+    }
+  }
+
+  return [...new Set(ids)].sort();
+}
+
 export class RepositoryScanner {
   constructor(private readonly fileSystem: FileSystem) {}
 
-  async scan(options: ScanOptions): Promise<MavenRepository[]> {
+  async scanGraph(options: ScanOptions): Promise<ModuleGraph> {
     const parsedOptions = scanOptionsSchema.parse(options);
     const normalizedRoots = parsedOptions.rootPaths.map(root => resolvePath(root));
 
@@ -45,7 +89,6 @@ export class RepositoryScanner {
             pomPath,
             depth: current.depth,
           });
-          continue;
         }
 
         if (current.depth >= parsedOptions.maxDepth) {
@@ -70,6 +113,42 @@ export class RepositoryScanner {
       }
     }
 
-    return [...repositories.values()].sort((a, b) => a.path.localeCompare(b.path));
+    return buildModuleGraph([...repositories.values()]);
+  }
+
+  async scanProfiles(modules: MavenRepository[], profileFilter?: string): Promise<MavenProfile[]> {
+    const normalizedFilter = profileFilter?.trim().toLowerCase();
+    const profiles: MavenProfile[] = [];
+
+    for (const module of modules) {
+      let content = '';
+      try {
+        content = await this.fileSystem.readFile(module.pomPath);
+      } catch {
+        continue;
+      }
+
+      const ids = parseProfilesFromPom(content);
+      for (const id of ids) {
+        if (normalizedFilter && !id.toLowerCase().includes(normalizedFilter)) {
+          continue;
+        }
+
+        profiles.push({
+          id,
+          modulePath: module.path,
+          pomPath: module.pomPath,
+        });
+      }
+    }
+
+    return profiles.sort((a, b) =>
+      a.id === b.id ? a.modulePath.localeCompare(b.modulePath) : a.id.localeCompare(b.id)
+    );
+  }
+
+  async scan(options: ScanOptions): Promise<MavenRepository[]> {
+    const graph = await this.scanGraph(options);
+    return graph.rootModules;
   }
 }
