@@ -131,8 +131,6 @@ Mehr technische Hintergründe: [`docs/TECH_DECISIONS.md`](docs/TECH_DECISIONS.md
 
 Architektur-Blueprint (inkl. UI-vs-CLI Strategie): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Konkrete Priorisierung der nächsten Umsetzungsschritte: [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md).
-Ausführlicher Entwicklungsleitfaden für kommende Features & UI-Fähigkeit: [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md).
-Online-Doku und priorisierter Produkt-Backlog: [`docs/PRODUCT_BACKLOG.md`](docs/PRODUCT_BACKLOG.md).
 
 
 ## Run-Report (versioniert)
