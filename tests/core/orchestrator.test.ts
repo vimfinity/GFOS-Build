@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { runCommand } from '../../src/application/orchestrator.js';
 import { BuildOptions, MavenProfile, MavenRepository, ModuleGraph } from '../../src/core/types.js';
 
@@ -48,7 +51,13 @@ function createBuildService(delays?: Record<string, number>) {
       if (delay > 0) {
         await new Promise(resolve => setTimeout(resolve, delay));
       }
-      return { repository, exitCode: 0, durationMs: delay || 1000 };
+      return {
+        repository,
+        exitCode: 0,
+        durationMs: delay || 1000,
+        mavenExecutable: _options.mavenExecutable,
+        javaHome: _options.javaHome,
+      };
     },
   };
 }
@@ -150,9 +159,21 @@ describe('runCommand', () => {
     const buildService = {
       buildRepository: async (repository: MavenRepository, _options: BuildOptions) => {
         if (repository.path.endsWith('/shared')) {
-          return { repository, exitCode: 0, durationMs: 120 };
+          return {
+            repository,
+            exitCode: 0,
+            durationMs: 120,
+            mavenExecutable: _options.mavenExecutable,
+            javaHome: _options.javaHome,
+          };
         }
-        return { repository, exitCode: 1, durationMs: 80 };
+        return {
+          repository,
+          exitCode: 1,
+          durationMs: 80,
+          mavenExecutable: _options.mavenExecutable,
+          javaHome: _options.javaHome,
+        };
       },
     };
 
@@ -171,6 +192,100 @@ describe('runCommand', () => {
 
     expect(report.stats.totalBuildDurationMs).toBe(200);
     expect(report.stats.failedBuildDurationMs).toBe(80);
+  });
+
+
+
+  it('wendet javaHome/maven Toolchain-Regeln pro Modul an', async () => {
+    const seen: Array<{ path: string; javaHome?: string; mavenExecutable: string }> = [];
+    const buildService = {
+      buildRepository: async (repository: MavenRepository, options: BuildOptions) => {
+        seen.push({
+          path: repository.path,
+          javaHome: options.javaHome,
+          mavenExecutable: options.mavenExecutable,
+        });
+
+        return {
+          repository,
+          exitCode: 0,
+          durationMs: 50,
+          mavenExecutable: options.mavenExecutable,
+          javaHome: options.javaHome,
+        };
+      },
+    };
+
+    const report = await runCommand(
+      {
+        command: 'build',
+        roots: ['/repos'],
+        goals: ['verify'],
+        mavenExecutable: 'mvn-default',
+        javaHome: 'J:/dev/java/jdk21',
+        buildScope: 'root-only',
+      },
+      createScanner() as never,
+      buildService as never,
+      createCache() as never
+    );
+
+    expect(report.mode).toBe('build-run');
+    expect(seen).toHaveLength(2);
+    expect(seen.every(entry => entry.javaHome === 'J:/dev/java/jdk21')).toBe(true);
+    expect(seen.every(entry => entry.mavenExecutable === 'mvn-default')).toBe(true);
+  });
+
+
+
+  it('wendet Toolchain-Regeln aus Config pro Modul an', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-toolchain-'));
+    const configPath = path.join(tempDir, 'gfos-build.config.json');
+
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        roots: ['/repos'],
+        build: {
+          goals: ['verify'],
+          mavenExecutable: 'mvn-default',
+          javaHome: 'J:/dev/java/jdk21',
+          toolchains: [{ selector: 'web', javaHome: 'J:/dev/java/jdk18' }],
+          failFast: true,
+          maxParallel: 1,
+        },
+      })
+    );
+
+    const seen: Array<{ path: string; javaHome?: string }> = [];
+    const buildService = {
+      buildRepository: async (repository: MavenRepository, options: BuildOptions) => {
+        seen.push({ path: repository.path, javaHome: options.javaHome });
+        return {
+          repository,
+          exitCode: 0,
+          durationMs: 10,
+          mavenExecutable: options.mavenExecutable,
+          javaHome: options.javaHome,
+        };
+      },
+    };
+
+    try {
+      await runCommand(
+        { command: 'build', configPath, buildScope: 'root-only' },
+        createScanner() as never,
+        buildService as never,
+        createCache() as never
+      );
+
+      const shared = seen.find(entry => entry.path === '/repos/shared');
+      const web = seen.find(entry => entry.path === '/repos/web');
+      expect(shared?.javaHome).toBe('J:/dev/java/jdk21');
+      expect(web?.javaHome).toBe('J:/dev/java/jdk18');
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
 

@@ -15,6 +15,7 @@ describe('loadConfig', () => {
     expect(config.scan.maxDepth).toBe(4);
     expect(config.build.failFast).toBe(true);
     expect(config.build.maxParallel).toBe(1);
+    expect(config.build.toolchains).toEqual([]);
     expect(config.scan.cacheEnabled).toBe(false);
 
     rmSync(dir, { recursive: true, force: true });
@@ -29,7 +30,17 @@ describe('loadConfig', () => {
       JSON.stringify({
         roots: ['J:/dev/quellen'],
         scan: { maxDepth: 6, includeHidden: true, cacheEnabled: true, cacheTtlSec: 900 },
-        build: { goals: ['clean', 'verify'], mavenExecutable: 'mvnw', failFast: false, maxParallel: 4 },
+        build: {
+          goals: ['clean', 'verify'],
+          mavenExecutable: 'mvnw',
+          javaHome: 'J:/dev/java/jdk21',
+          toolchains: [
+            { selector: 'legacy', javaHome: 'J:/dev/java/jdk11' },
+            { selector: 'web', mavenExecutable: 'J:/dev/maven/mvn3/bin/mvn.cmd' }
+          ],
+          failFast: false,
+          maxParallel: 4
+        },
       })
     );
 
@@ -40,6 +51,8 @@ describe('loadConfig', () => {
     expect(config.scan.includeHidden).toBe(true);
     expect(config.build.goals).toEqual(['clean', 'verify']);
     expect(config.build.mavenExecutable).toBe('mvnw');
+    expect(config.build.javaHome).toBe('J:/dev/java/jdk21');
+    expect(config.build.toolchains).toHaveLength(2);
     expect(config.build.failFast).toBe(false);
     expect(config.build.maxParallel).toBe(4);
     expect(config.scan.cacheEnabled).toBe(true);

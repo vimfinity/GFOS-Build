@@ -8,7 +8,12 @@
   },
   "build": {
     "goals": ["clean", "install"],
-    "mavenExecutable": "mvn",
+    "mavenExecutable": "J:/dev/maven/mvn3/bin/mvn.cmd",
+    "javaHome": "J:/dev/java/jdk21",
+    "toolchains": [
+      { "selector": "legacy", "javaHome": "J:/dev/java/jdk11" },
+      { "selector": "web", "javaHome": "J:/dev/java/jdk18", "mavenExecutable": "J:/dev/maven/mvn3/bin/mvn.cmd" }
+    ],
     "failFast": true,
     "maxParallel": 4
   }

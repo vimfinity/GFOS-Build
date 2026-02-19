@@ -111,3 +111,24 @@ ZIP auf Netzlaufwerk ist als Start praktikabel, aber mit Risiken:
 - Build-Scope (`root-only`/`explicit-modules`/`auto`) ist über CLI wählbar.
 - Pipeline-MVP kann mindestens `shared -> hg -> web` reproduzierbar ausführen.
 - Run-Reports sind versioniert und für spätere UI auswertbar.
+
+
+## Backlog-Update (aktueller Stand)
+
+Erledigt in der aktuellen Basis:
+- Modulgraph-Discovery + BuildScope (`root-only` / `explicit-modules` / `auto`)
+- Pipeline Plan/Run + Run-Reports + Events
+- Discovery-Cache + Dauer-Metriken
+- JDK/Maven Toolchain-Basis (`javaHome`, `mavenExecutable`, modulbezogene Toolchain-Regeln)
+
+Neu priorisiert für die nächsten Iterationen:
+1. **Build Queue + Resource Limits (P0)**
+2. **Run-Report v1.1 + JSON Schema (P0)**
+3. **Persistente Run-Historie + Vergleich (P0)**
+4. **Failure Taxonomy + Error Codes (P1)**
+5. **Deterministische Modul-Selektion v2 (P1)**
+6. **Incremental Discovery + Performance Audit (P1)**
+7. **Pipeline UX Hardening inkl. `pipeline lint` (P2)**
+8. **UI Integration Readiness Pack (P2)**
+
+Hinweis: Eine Online-Doku-Plattform (z. B. Next.js/Fumadocs) wird bewusst nach Stabilisierung der Kernfeatures umgesetzt.

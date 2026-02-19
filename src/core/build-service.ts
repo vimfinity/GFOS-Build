@@ -10,12 +10,15 @@ export class BuildService {
   ): Promise<BuildResult> {
     const result = await this.processRunner.run(options.mavenExecutable, options.goals, repository.path, {
       verbose: options.verbose,
+      javaHome: options.javaHome,
     });
 
     return {
       repository,
       exitCode: result.exitCode,
       durationMs: result.durationMs,
+      mavenExecutable: options.mavenExecutable,
+      javaHome: options.javaHome,
     };
   }
 

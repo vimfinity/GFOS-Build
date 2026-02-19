@@ -17,6 +17,7 @@ const argsSchema = z.object({
   profileFilter: z.string().min(1).optional(),
   goals: z.array(z.string()).min(1).optional(),
   mavenExecutable: z.string().min(1).optional(),
+  javaHome: z.string().min(1).optional(),
   failFast: z.boolean().optional(),
   maxParallel: z.number().int().min(1).max(32).optional(),
   verbose: z.boolean().optional(),
@@ -169,6 +170,12 @@ export function parseArgs(rawArgs: string[]): CliArgs {
       const value = commandInfo.options[i + 1];
       if (value && !isFlag(value)) {
         parsed.mavenExecutable = value;
+      }
+      i += 1;
+    } else if (current === '--java-home') {
+      const value = commandInfo.options[i + 1];
+      if (value && !isFlag(value)) {
+        parsed.javaHome = value;
       }
       i += 1;
     } else if (current === '--no-fail-fast') {

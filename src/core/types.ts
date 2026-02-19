@@ -30,12 +30,15 @@ export interface BuildOptions {
   mavenExecutable: string;
   failFast: boolean;
   verbose: boolean;
+  javaHome?: string;
 }
 
 export interface BuildResult {
   repository: MavenRepository;
   exitCode: number;
   durationMs: number;
+  mavenExecutable: string;
+  javaHome?: string;
 }
 
 export type RunCommand = 'scan' | 'build' | 'pipeline';
@@ -51,6 +54,7 @@ export interface BuildPlan {
   failFast: boolean;
   goals: string[];
   mavenExecutable: string;
+  javaHome?: string;
   scope: BuildScope;
   maxParallel: number;
   repositories: PlannedBuildRepository[];
@@ -63,12 +67,14 @@ export interface PipelineStageDefinition {
   goals: string[];
   failFast?: boolean;
   maxParallel?: number;
+  javaHome?: string;
 }
 
 export interface PipelineDefinition {
   schemaVersion: '1.0';
   name?: string;
   mavenExecutable?: string;
+  javaHome?: string;
   stages: PipelineStageDefinition[];
 }
 

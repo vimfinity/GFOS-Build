@@ -79,6 +79,9 @@ bun run dev -- scan --root "J:/dev/quellen" --profiles --profile-filter dev --js
 # Build ausführen (parallel vorbereitet)
 bun run dev -- build --root "J:/dev/quellen" --goals "clean install" --max-parallel 4
 
+# JDK/Maven pro Nutzer explizit setzen
+bun run dev -- build --root "J:/dev/quellen" --mvn "J:/dev/maven/mvn3/bin/mvn.cmd" --java-home "J:/dev/java/jdk21" --goals "clean verify"
+
 # Striktes JSON ohne Build-Log-Ausgaben auf stdout (default)
 bun run dev -- build --root "J:/dev/quellen" --json > run.json
 
@@ -113,11 +116,29 @@ Beispiel:
 {
   "roots": ["J:/dev/quellen"],
   "scan": { "maxDepth": 4, "includeHidden": false, "cacheEnabled": true, "cacheTtlSec": 300 },
-  "build": { "goals": ["clean", "install"], "mavenExecutable": "mvn", "failFast": true, "maxParallel": 4 }
+  "build": {
+    "goals": ["clean", "install"],
+    "mavenExecutable": "J:/dev/maven/mvn3/bin/mvn.cmd",
+    "javaHome": "J:/dev/java/jdk21",
+    "toolchains": [
+      { "selector": "legacy", "javaHome": "J:/dev/java/jdk11" },
+      { "selector": "web", "javaHome": "J:/dev/java/jdk18" }
+    ],
+    "failFast": true,
+    "maxParallel": 4
+  }
 }
 ```
 
 CLI-Parameter überschreiben die Config.
+
+
+### JDK-/Maven-Strategie (neu)
+
+- Standardwerte kommen aus `build.mavenExecutable` und optional `build.javaHome`.
+- Über `build.toolchains` können pro Modulpfad/-name Selektionsregeln gesetzt werden (`selector`), z. B. für Legacy-Module mit JDK11.
+- CLI-Flags `--mvn` und `--java-home` haben immer Vorrang vor Toolchain-Regeln und Config-Defaults.
+- Bei gesetztem `javaHome` setzt GFOS Build `JAVA_HOME` und priorisiert `<JAVA_HOME>/bin` im Prozess-`PATH`.
 
 ## Nächste Ausbaustufen
 

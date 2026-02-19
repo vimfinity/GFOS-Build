@@ -25,6 +25,7 @@ Core options:
 Build options:
   --goals "clean install"
   --mvn <command>
+  --java-home <path>    Sets JAVA_HOME for Maven runs
   --no-fail-fast
   --max-parallel <n>     Parallel builds per plan/stage (1..32)
   --plan                 Only create build plan (no Maven execution)
@@ -41,6 +42,7 @@ Examples:
   gfos-build scan --root "J:/dev/quellen" --profiles --profile-filter dev --json
   gfos-build build --root "J:/dev/quellen/2025/web" --scope root-only --plan --json
   gfos-build build --root "J:/dev/quellen" --scope explicit-modules --module shared --include-module web --exclude-module legacy
+  gfos-build build --root "J:/dev/quellen" --mvn "J:/dev/maven/mvn3/bin/mvn.cmd" --java-home "J:/dev/java/jdk21" --json
   gfos-build pipeline plan --root "J:/dev/quellen" --pipeline ./pipeline.json --json
   gfos-build pipeline run --root "J:/dev/quellen" --pipeline ./pipeline.json --json`);
 }
@@ -123,6 +125,7 @@ async function main(): Promise<void> {
     includeHidden: cliArgs.includeHidden,
     goals: cliArgs.goals,
     mavenExecutable: cliArgs.mavenExecutable,
+    javaHome: cliArgs.javaHome,
     failFast: cliArgs.failFast,
     maxParallel: cliArgs.maxParallel,
     useScanCache: cliArgs.useScanCache,

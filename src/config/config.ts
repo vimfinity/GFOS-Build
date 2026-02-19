@@ -2,6 +2,16 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 
+const toolchainRuleSchema = z
+  .object({
+    selector: z.string().min(1),
+    javaHome: z.string().min(1).optional(),
+    mavenExecutable: z.string().min(1).optional(),
+  })
+  .refine(rule => Boolean(rule.javaHome) || Boolean(rule.mavenExecutable), {
+    message: 'Jede Toolchain-Regel benötigt javaHome oder mavenExecutable.',
+  });
+
 const configSchema = z.object({
   roots: z.array(z.string().min(1)).min(1).default(['.']),
   scan: z
@@ -16,10 +26,18 @@ const configSchema = z.object({
     .object({
       goals: z.array(z.string().min(1)).min(1).default(['clean', 'install']),
       mavenExecutable: z.string().min(1).default('mvn'),
+      javaHome: z.string().min(1).optional(),
+      toolchains: z.array(toolchainRuleSchema).default([]),
       failFast: z.boolean().default(true),
       maxParallel: z.number().int().min(1).max(32).default(1),
     })
-    .default({ goals: ['clean', 'install'], mavenExecutable: 'mvn', failFast: true, maxParallel: 1 }),
+    .default({
+      goals: ['clean', 'install'],
+      mavenExecutable: 'mvn',
+      toolchains: [],
+      failFast: true,
+      maxParallel: 1,
+    }),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

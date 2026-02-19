@@ -21,6 +21,8 @@ describe('parseArgs', () => {
       'clean verify',
       '--mvn',
       'mvnw',
+      '--java-home',
+      'J:/dev/java/jdk21',
       '--scope',
       'explicit-modules',
       '--module',
@@ -48,6 +50,7 @@ describe('parseArgs', () => {
     expect(parsed.maxDepth).toBe(5);
     expect(parsed.goals).toEqual(['clean', 'verify']);
     expect(parsed.mavenExecutable).toBe('mvnw');
+    expect(parsed.javaHome).toBe('J:/dev/java/jdk21');
     expect(parsed.buildScope).toBe('explicit-modules');
     expect(parsed.modules).toEqual(['shared']);
     expect(parsed.includeModules).toEqual(['web']);

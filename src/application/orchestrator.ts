@@ -22,6 +22,7 @@ const pipelineSchema = z.object({
   schemaVersion: z.literal('1.0'),
   name: z.string().min(1).optional(),
   mavenExecutable: z.string().min(1).optional(),
+  javaHome: z.string().min(1).optional(),
   stages: z
     .array(
       z.object({
@@ -31,6 +32,7 @@ const pipelineSchema = z.object({
         goals: z.array(z.string().min(1)).min(1),
         failFast: z.boolean().optional(),
         maxParallel: z.number().int().min(1).max(32).optional(),
+        javaHome: z.string().min(1).optional(),
       })
     )
     .min(1),
@@ -47,6 +49,7 @@ export interface RunCommandInput {
   mavenExecutable?: string;
   failFast?: boolean;
   maxParallel?: number;
+  javaHome?: string;
   verbose?: boolean;
   useScanCache?: boolean;
   scanCacheTtlSec?: number;
@@ -74,6 +77,58 @@ function emit(
 
 function containsToken(target: string, token: string): boolean {
   return target.toLowerCase().includes(token.trim().toLowerCase());
+}
+
+interface ToolchainRule {
+  selector: string;
+  javaHome?: string;
+  mavenExecutable?: string;
+}
+
+interface BuildRuntimeDefaults {
+  mavenExecutable: string;
+  javaHome?: string;
+  failFast: boolean;
+  verbose: boolean;
+}
+
+function resolveToolchainRule(
+  repository: MavenRepository,
+  rules: ToolchainRule[]
+): ToolchainRule | undefined {
+  return rules.find(rule =>
+    containsToken(repository.path, rule.selector) || containsToken(repository.name, rule.selector)
+  );
+}
+
+function createRuntimeOptions(
+  repository: MavenRepository,
+  goals: string[],
+  defaults: BuildRuntimeDefaults,
+  rules: ToolchainRule[],
+  overrides: { mavenExecutable?: string; javaHome?: string }
+): {
+  goals: string[];
+  mavenExecutable: string;
+  javaHome?: string;
+  failFast: boolean;
+  verbose: boolean;
+} {
+  const matchedRule = resolveToolchainRule(repository, rules);
+
+  return {
+    goals,
+    mavenExecutable:
+      overrides.mavenExecutable ??
+      matchedRule?.mavenExecutable ??
+      defaults.mavenExecutable,
+    javaHome:
+      overrides.javaHome ??
+      matchedRule?.javaHome ??
+      defaults.javaHome,
+    failFast: defaults.failFast,
+    verbose: defaults.verbose,
+  };
 }
 
 function selectModules(
@@ -128,6 +183,7 @@ function createBuildPlan(
     goals: string[];
     mavenExecutable: string;
     failFast: boolean;
+    javaHome?: string;
     scope: BuildScope;
     maxParallel: number;
   }
@@ -139,6 +195,7 @@ function createBuildPlan(
     failFast: options.failFast,
     goals: options.goals,
     mavenExecutable: options.mavenExecutable,
+    javaHome: options.javaHome,
     scope: options.scope,
     maxParallel: normalizedParallel,
     repositories: repositories.map(repository => ({
@@ -231,7 +288,11 @@ async function executePlan(
   selectedModules: MavenRepository[],
   buildService: BuildService,
   events: RunEvent[],
-  verbose: boolean
+  runtime: {
+    defaults: BuildRuntimeDefaults;
+    rules: ToolchainRule[];
+    overrides: { mavenExecutable?: string; javaHome?: string };
+  }
 ): Promise<ExecutionOutcome> {
   const startedAtMs = Date.now();
   if (selectedModules.length === 0) {
@@ -241,13 +302,23 @@ async function executePlan(
   if (plan.maxParallel <= 1 || selectedModules.length === 1) {
     const results: BuildResult[] = [];
     for (const repository of selectedModules) {
-      emit(events, 'module_started', { repository: repository.path });
-      const result = await buildService.buildRepository(repository, {
-        goals: plan.goals,
-        mavenExecutable: plan.mavenExecutable,
-        failFast: plan.failFast,
-        verbose,
+      const moduleRuntime = createRuntimeOptions(
+        repository,
+        plan.goals,
+        {
+          ...runtime.defaults,
+          mavenExecutable: plan.mavenExecutable,
+          javaHome: plan.javaHome ?? runtime.defaults.javaHome,
+        },
+        runtime.rules,
+        runtime.overrides
+      );
+      emit(events, 'module_started', {
+        repository: repository.path,
+        mavenExecutable: moduleRuntime.mavenExecutable,
+        javaHome: moduleRuntime.javaHome ?? '',
       });
+      const result = await buildService.buildRepository(repository, moduleRuntime);
       results.push(result);
       emit(events, 'module_finished', {
         repository: repository.path,
@@ -289,13 +360,23 @@ async function executePlan(
         return;
       }
 
-      emit(events, 'module_started', { repository: repository.path });
-      const result = await buildService.buildRepository(repository, {
-        goals: plan.goals,
-        mavenExecutable: plan.mavenExecutable,
-        failFast: plan.failFast,
-        verbose,
+      const moduleRuntime = createRuntimeOptions(
+        repository,
+        plan.goals,
+        {
+          ...runtime.defaults,
+          mavenExecutable: plan.mavenExecutable,
+          javaHome: plan.javaHome ?? runtime.defaults.javaHome,
+        },
+        runtime.rules,
+        runtime.overrides
+      );
+      emit(events, 'module_started', {
+        repository: repository.path,
+        mavenExecutable: moduleRuntime.mavenExecutable,
+        javaHome: moduleRuntime.javaHome ?? '',
       });
+      const result = await buildService.buildRepository(repository, moduleRuntime);
 
       indexedResults.push({ index: currentIndex, result });
       emit(events, 'module_finished', {
@@ -322,7 +403,7 @@ async function executePlan(
 function stageToPlan(
   stage: PipelineStageDefinition,
   modules: MavenRepository[],
-  defaults: { mavenExecutable: string; failFast: boolean; maxParallel: number },
+  defaults: { mavenExecutable: string; javaHome?: string; failFast: boolean; maxParallel: number },
   includeModules: string[],
   excludeModules: string[]
 ): { selected: MavenRepository[]; plan: BuildPlan } {
@@ -333,6 +414,7 @@ function stageToPlan(
     goals: stage.goals,
     mavenExecutable: defaults.mavenExecutable,
     failFast: stage.failFast ?? defaults.failFast,
+    javaHome: stage.javaHome ?? defaults.javaHome,
     scope,
     maxParallel: stage.maxParallel ?? defaults.maxParallel,
   });
@@ -402,6 +484,8 @@ export async function runCommand(
   const includeModules = input.includeModules ?? [];
   const excludeModules = input.excludeModules ?? [];
   const verbose = input.verbose ?? false;
+  const javaHome = input.javaHome ?? config.build.javaHome;
+  const toolchainRules: ToolchainRule[] = config.build.toolchains;
 
   const moduleGraph = await discoverWithOptionalCache({
     scanner,
@@ -460,7 +544,8 @@ export async function runCommand(
 
     const definition = await loadPipelineDefinition(input.pipelinePath);
     const action = input.pipelineAction ?? 'plan';
-    const defaultMavenExecutable = definition.mavenExecutable ?? config.build.mavenExecutable;
+    const defaultMavenExecutable = input.mavenExecutable ?? definition.mavenExecutable ?? config.build.mavenExecutable;
+    const defaultJavaHome = input.javaHome ?? definition.javaHome ?? config.build.javaHome;
     const defaultFailFast = config.build.failFast;
     const defaultMaxParallel = input.maxParallel ?? config.build.maxParallel;
 
@@ -478,6 +563,7 @@ export async function runCommand(
         moduleGraph.modules,
         {
           mavenExecutable: defaultMavenExecutable,
+          javaHome: defaultJavaHome,
           failFast: defaultFailFast,
           maxParallel: defaultMaxParallel,
         },
@@ -508,7 +594,19 @@ export async function runCommand(
         continue;
       }
 
-      const stageOutcome = await executePlan(plan, selected, buildService, events, verbose);
+      const stageOutcome = await executePlan(plan, selected, buildService, events, {
+        defaults: {
+          mavenExecutable: defaultMavenExecutable,
+          javaHome: defaultJavaHome,
+          failFast: plan.failFast,
+          verbose,
+        },
+        rules: toolchainRules,
+        overrides: {
+          mavenExecutable: input.mavenExecutable,
+          javaHome: input.javaHome,
+        },
+      });
       const estimatedSequentialDurationMs = stageOutcome.results.reduce(
         (sum, result) => sum + result.durationMs,
         0
@@ -570,6 +668,7 @@ export async function runCommand(
   const buildPlan = createBuildPlan(selectedModules, {
     goals,
     mavenExecutable,
+    javaHome,
     failFast,
     scope,
     maxParallel,
@@ -599,7 +698,19 @@ export async function runCommand(
     });
   }
 
-  const buildOutcome = await executePlan(buildPlan, selectedModules, buildService, events, verbose);
+  const buildOutcome = await executePlan(buildPlan, selectedModules, buildService, events, {
+    defaults: {
+      mavenExecutable,
+      javaHome,
+      failFast,
+      verbose,
+    },
+    rules: toolchainRules,
+    overrides: {
+      mavenExecutable: input.mavenExecutable,
+      javaHome: input.javaHome,
+    },
+  });
 
   emit(events, 'run_finished', {
     mode: 'build-run',
