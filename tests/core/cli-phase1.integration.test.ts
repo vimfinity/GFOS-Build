@@ -32,6 +32,7 @@ function runCli(args: string[], env?: NodeJS.ProcessEnv) {
     cwd: path.resolve('.'),
     env: {
       ...process.env,
+      GFOS_DISABLE_RUN_HISTORY: '1',
       ...env,
     },
   });

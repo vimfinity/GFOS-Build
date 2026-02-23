@@ -5,6 +5,11 @@ import { randomUUID } from 'node:crypto';
 import { RunCommand, RunMode, RunReport } from '../core/types.js';
 
 function getHistoryDir(): string {
+  const override = process.env.GFOS_RUN_HISTORY_DIR?.trim();
+  if (override) {
+    return path.resolve(override);
+  }
+
   if (process.platform === 'win32') {
     const base = process.env.LOCALAPPDATA ?? process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Local');
     return path.join(base, 'GFOS-Build', 'runs');
@@ -24,8 +29,21 @@ export interface RunHistory {
   findLatest(command: RunCommand, mode: RunMode, excludeRunId: string): Promise<RunReport | null>;
 }
 
+export class NoopRunHistory implements RunHistory {
+  assignRunId(): string {
+    return randomUUID();
+  }
+
+  async write(_report: RunReport): Promise<void> {}
+
+  async findLatest(_command: RunCommand, _mode: RunMode, _excludeRunId: string): Promise<RunReport | null> {
+    return null;
+  }
+}
+
 export class NodeRunHistory implements RunHistory {
   private readonly dir = getHistoryDir();
+  private readonly maxLookupEntries = Number.parseInt(process.env.GFOS_RUN_HISTORY_MAX_LOOKUP ?? '200', 10);
 
   assignRunId(): string {
     return randomUUID();
@@ -39,7 +57,11 @@ export class NodeRunHistory implements RunHistory {
 
   async findLatest(command: RunCommand, mode: RunMode, excludeRunId: string): Promise<RunReport | null> {
     try {
-      const entries = (await fs.readdir(this.dir)).filter(name => name.endsWith('.json')).sort().reverse();
+      const entries = (await fs.readdir(this.dir))
+        .filter(name => name.endsWith('.json'))
+        .sort()
+        .reverse()
+        .slice(0, Number.isNaN(this.maxLookupEntries) ? 200 : Math.max(1, this.maxLookupEntries));
       for (const entry of entries) {
         const content = await fs.readFile(path.join(this.dir, entry), 'utf-8');
         const parsed = JSON.parse(content) as RunReport;
