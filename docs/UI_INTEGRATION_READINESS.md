@@ -16,6 +16,7 @@ Schema-Quelle: `assets/contracts/run-report.v1.1.schema.json`.
 
 Bis eine dedizierte Streaming-API existiert, gilt:
 - `events[]` im Report ist die referenzierte Event-Historie.
+- CLI kann Events zusätzlich als NDJSON ausgeben (`--events-ndjson`, Ausgabe nach `stderr`), sodass UI-Adapter früh integriert werden können ohne Report-Contract zu brechen.
 - Event-Typen mit UI-Relevanz:
   - `run_started`
   - `discovery_completed`

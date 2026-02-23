@@ -120,6 +120,9 @@ bun run dev -- pipeline run --root "J:/dev/quellen" --pipeline ./pipeline.json -
 
 # JSON-Ausgabe für Integrationen
 bun run dev -- scan --root "J:/dev/quellen" --json
+
+# Events als NDJSON auf stderr (UI-Adapter)
+bun run dev -- build --root "J:/dev/quellen" --plan --json --events-ndjson > run.json
 ```
 
 ## Konfiguration

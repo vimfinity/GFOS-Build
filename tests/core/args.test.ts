@@ -44,6 +44,7 @@ describe('parseArgs', () => {
       '600',
       '--plan',
       '--json',
+      '--events-ndjson',
     ]);
 
     expect(parsed.command).toBe('build');
@@ -66,6 +67,7 @@ describe('parseArgs', () => {
     expect(parsed.scanCacheTtlSec).toBe(600);
     expect(parsed.planOnly).toBe(true);
     expect(parsed.outputJson).toBe(true);
+    expect(parsed.eventsNdjson).toBe(true);
   });
 
 

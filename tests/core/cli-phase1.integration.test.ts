@@ -221,6 +221,42 @@ describe('CLI Phase-1 integration', () => {
     expect(result.stderr).toContain('Unbekannter Befehl');
   });
 
+
+  it('gibt Events als NDJSON auf stderr aus ohne JSON auf stdout zu brechen', () => {
+    const { workspaceRoot, mavenMockPath, mavenLogPath } = createFixtureWorkspace();
+
+    const result = runCli(
+      [
+        'build',
+        '--root',
+        workspaceRoot,
+        '--max-depth',
+        '6',
+        '--goals',
+        'clean verify',
+        '--mvn',
+        mavenMockPath,
+        '--plan',
+        '--json',
+        '--events-ndjson',
+      ],
+      { GFOS_MVN_LOG: mavenLogPath }
+    );
+
+    try {
+      expect(result.status).toBe(0);
+      expect(() => JSON.parse(result.stdout)).not.toThrow();
+      const lines = result.stderr
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+      expect(lines.length).toBeGreaterThan(0);
+      expect(() => JSON.parse(lines[0] as string)).not.toThrow();
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('liefert Exit-Code 3 bei ungültiger Konfiguration', () => {
     const { workspaceRoot } = createFixtureWorkspace();
     const configPath = path.join(workspaceRoot, 'gfos-build.config.json');

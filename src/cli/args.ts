@@ -26,6 +26,7 @@ const argsSchema = z.object({
   planOnly: z.boolean().optional(),
   configPath: z.string().min(1).optional(),
   outputJson: z.boolean(),
+  eventsNdjson: z.boolean().optional(),
 });
 
 export type CliArgs = z.infer<typeof argsSchema>;
@@ -204,6 +205,8 @@ export function parseArgs(rawArgs: string[]): CliArgs {
       i += 1;
     } else if (current === '--json') {
       parsed.outputJson = true;
+    } else if (current === '--events-ndjson') {
+      parsed.eventsNdjson = true;
     }
   }
 

@@ -22,6 +22,7 @@ Core options:
   --profile-filter <q>   Optional profile id filter
   --config <path>        Config file path (default: gfos-build.config.json)
   --json                 Output machine-readable JSON
+  --events-ndjson        Emit events as NDJSON to stderr (for UI adapters)
 
 Build options:
   --goals "clean install"
@@ -166,6 +167,12 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(report, null, 2));
   } else {
     printTextSummary(report);
+  }
+
+  if (cliArgs.eventsNdjson) {
+    for (const event of report.events) {
+      console.error(JSON.stringify(event));
+    }
   }
 
   const failedBuild = report.buildResults.find(result => result.exitCode !== 0);
