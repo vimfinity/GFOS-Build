@@ -169,6 +169,7 @@ Mehr technische Hintergründe: [`docs/TECH_DECISIONS.md`](docs/TECH_DECISIONS.md
 
 Architektur-Blueprint (inkl. UI-vs-CLI Strategie): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Konkrete Priorisierung der nächsten Umsetzungsschritte: [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md).
+UI-Integrationsübergabe (Events/Flows/Checklist): [`docs/UI_INTEGRATION_READINESS.md`](docs/UI_INTEGRATION_READINESS.md).
 
 
 ## Run-Report (versioniert)

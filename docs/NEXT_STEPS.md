@@ -131,3 +131,6 @@ Nächste priorisierte Sprints:
 6. **UI-Integration Readiness (P2)**: Event-Stream-Dokumentation + Referenzflows (ohne Frontend-Feature-Duplizierung)
 
 Hinweis: Eine Online-Doku-Plattform (z. B. Next.js/Fumadocs) bleibt bewusst nach Stabilisierung der Kernfeatures.
+
+
+Referenz für den UI-Start ohne Fachlogik-Duplizierung: `docs/UI_INTEGRATION_READINESS.md`.

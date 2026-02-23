@@ -295,6 +295,9 @@ function createReport(input: {
   events: RunEvent[];
   maxParallelUsed: number;
   discoveryDurationMs: number;
+  discoveryCacheHits: number;
+  discoveryCacheMisses: number;
+  discoveryRoots: import('../core/types.js').DiscoveryRootMetric[];
   selectionExplanation?: SelectionExplanation[];
 }): RunReport {
   const finishedAtMs = Date.now();
@@ -334,6 +337,13 @@ function createReport(input: {
       maxParallelUsed: Math.max(1, input.maxParallelUsed),
       profileCount: input.profileScan.profiles.length,
       discoveryDurationMs: input.discoveryDurationMs,
+      discoveryCacheHitRate:
+        input.discoveryCacheHits + input.discoveryCacheMisses > 0
+          ? Number((input.discoveryCacheHits / (input.discoveryCacheHits + input.discoveryCacheMisses)).toFixed(2))
+          : 0,
+      discoveryCacheHits: input.discoveryCacheHits,
+      discoveryCacheMisses: input.discoveryCacheMisses,
+      discoveryRoots: input.discoveryRoots,
     },
     selectionExplanation: input.selectionExplanation,
   };
@@ -496,7 +506,7 @@ function lintPipelineDefinition(definition: PipelineDefinition, modules: MavenRe
       issues.push({
         path: `${basePath}.name`,
         severity: 'error',
-        message: `Doppelter Stage-Name: ${stage.name}`,
+        message: `Doppelter Stage-Name '${stage.name}'. Verwende pro Stage einen eindeutigen Namen (z. B. '${stage.name}-${index + 1}').`,
       });
     }
     seenNames.add(stage.name);
@@ -505,7 +515,7 @@ function lintPipelineDefinition(definition: PipelineDefinition, modules: MavenRe
       issues.push({
         path: `${basePath}.modules`,
         severity: 'error',
-        message: 'explicit-modules benötigt mindestens einen module selector.',
+        message: `Scope explicit-modules benötigt mindestens einen Selector in ${basePath}.modules (z. B. ["shared"] oder ["glob:*web*"]).`,
       });
     }
 
@@ -514,12 +524,51 @@ function lintPipelineDefinition(definition: PipelineDefinition, modules: MavenRe
       issues.push({
         path: `${basePath}.scope`,
         severity: 'warning',
-        message: 'Stage selektiert aktuell keine Module.',
+        message: `Stage '${stage.name}' selektiert aktuell keine Module. Prüfe scope/modules/include/exclude Filter.`,
       });
     }
   });
 
   return issues;
+}
+
+
+async function scanGraphWithMetrics(scanner: RepositoryScanner, options: {
+  roots: string[];
+  maxDepth: number;
+  includeHidden: boolean;
+}): Promise<{ graph: ModuleGraph; rootMetrics: import('../core/types.js').DiscoveryRootMetric[] }> {
+  const scannerWithMetrics = scanner as RepositoryScanner & {
+    scanGraphWithMetrics?: (input: { rootPaths: string[]; maxDepth: number; includeHidden: boolean }) => Promise<{
+      graph: ModuleGraph;
+      rootMetrics: import('../core/types.js').DiscoveryRootMetric[];
+    }>;
+  };
+
+  if (scannerWithMetrics.scanGraphWithMetrics) {
+    return scannerWithMetrics.scanGraphWithMetrics({
+      rootPaths: options.roots,
+      maxDepth: options.maxDepth,
+      includeHidden: options.includeHidden,
+    });
+  }
+
+  const graph = await scanner.scanGraph({
+    rootPaths: options.roots,
+    maxDepth: options.maxDepth,
+    includeHidden: options.includeHidden,
+  });
+
+  return {
+    graph,
+    rootMetrics: options.roots.map(rootPath => ({
+      rootPath,
+      durationMs: 0,
+      directoriesVisited: 0,
+      modulesFound: graph.modules.filter(module => module.path.startsWith(rootPath)).length,
+      cacheHit: false,
+    })),
+  };
 }
 
 async function discoverWithOptionalCache(input: {
@@ -531,13 +580,14 @@ async function discoverWithOptionalCache(input: {
   maxDepth: number;
   includeHidden: boolean;
   events: RunEvent[];
-}): Promise<ModuleGraph> {
+}): Promise<{ graph: ModuleGraph; rootMetrics: import('../core/types.js').DiscoveryRootMetric[]; cacheHit: boolean }> {
   if (!input.useScanCache) {
-    return input.scanner.scanGraph({
-      rootPaths: input.roots,
+    const scanned = await scanGraphWithMetrics(input.scanner, {
+      roots: input.roots,
       maxDepth: input.maxDepth,
       includeHidden: input.includeHidden,
     });
+    return { graph: scanned.graph, rootMetrics: scanned.rootMetrics, cacheHit: false };
   }
 
   const cacheKey = input.cache.createKey({
@@ -549,18 +599,28 @@ async function discoverWithOptionalCache(input: {
   const cached = await input.cache.read(cacheKey, input.cacheTtlSec * 1000, { roots: input.roots });
   if (cached) {
     emit(input.events, 'discovery_cache_hit', { key: cacheKey });
-    return cached;
+    return {
+      graph: cached,
+      cacheHit: true,
+      rootMetrics: input.roots.map(rootPath => ({
+        rootPath,
+        durationMs: 0,
+        directoriesVisited: 0,
+        modulesFound: cached.modules.filter(module => module.path.startsWith(rootPath)).length,
+        cacheHit: true,
+      })),
+    };
   }
 
   emit(input.events, 'discovery_cache_miss', { key: cacheKey });
-  const graph = await input.scanner.scanGraph({
-    rootPaths: input.roots,
+  const scanned = await scanGraphWithMetrics(input.scanner, {
+    roots: input.roots,
     maxDepth: input.maxDepth,
     includeHidden: input.includeHidden,
   });
 
-  await input.cache.write(cacheKey, graph, { roots: input.roots });
-  return graph;
+  await input.cache.write(cacheKey, scanned.graph, { roots: input.roots });
+  return { graph: scanned.graph, rootMetrics: scanned.rootMetrics, cacheHit: false };
 }
 
 
@@ -599,7 +659,7 @@ export async function runCommand(
   const resourceLimits = config.build.resourceLimits;
 
   const discoveryStartedAtMs = Date.now();
-  const moduleGraph = await discoverWithOptionalCache({
+  const discoveryResult = await discoverWithOptionalCache({
     scanner,
     cache,
     useScanCache,
@@ -610,6 +670,10 @@ export async function runCommand(
     events,
   });
   const discoveryDurationMs = Date.now() - discoveryStartedAtMs;
+  const moduleGraph = discoveryResult.graph;
+  const discoveryRoots = discoveryResult.rootMetrics;
+  const discoveryCacheHits = discoveryResult.cacheHit ? 1 : 0;
+  const discoveryCacheMisses = discoveryResult.cacheHit ? 0 : 1;
 
   emit(events, 'discovery_completed', {
     modules: moduleGraph.modules.length,
@@ -662,6 +726,9 @@ export async function runCommand(
         events,
         maxParallelUsed,
         discoveryDurationMs,
+        discoveryCacheHits,
+        discoveryCacheMisses,
+        discoveryRoots,
       })
     );
   }
@@ -716,6 +783,9 @@ export async function runCommand(
           events,
           maxParallelUsed,
           discoveryDurationMs,
+          discoveryCacheHits,
+          discoveryCacheMisses,
+          discoveryRoots,
         })
       );
     }
@@ -817,6 +887,9 @@ export async function runCommand(
         events,
         maxParallelUsed,
         discoveryDurationMs,
+        discoveryCacheHits,
+        discoveryCacheMisses,
+        discoveryRoots,
       })
     );
   }
@@ -878,6 +951,9 @@ export async function runCommand(
         events,
         maxParallelUsed,
         discoveryDurationMs,
+        discoveryCacheHits,
+        discoveryCacheMisses,
+        discoveryRoots,
         selectionExplanation: explainSelectionEnabled ? selectionDecisions : undefined,
       })
     );
@@ -917,6 +993,9 @@ export async function runCommand(
       events,
       maxParallelUsed,
       discoveryDurationMs,
+      discoveryCacheHits,
+      discoveryCacheMisses,
+      discoveryRoots,
       selectionExplanation: explainSelectionEnabled ? selectionDecisions : undefined,
     })
   );

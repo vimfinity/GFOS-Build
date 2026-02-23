@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { z } from 'zod';
 import { FileSystem, resolvePath } from '../infrastructure/file-system.js';
-import { MavenProfile, MavenRepository, ModuleGraph, ScanOptions } from './types.js';
+import { DiscoveryRootMetric, MavenProfile, MavenRepository, ModuleGraph, ScanOptions } from './types.js';
 
 const scanOptionsSchema = z.object({
   rootPaths: z.array(z.string().min(1)).min(1),
@@ -13,6 +13,13 @@ interface QueueItem {
   directory: string;
   depth: number;
 }
+
+
+export interface ScanGraphResult {
+  graph: ModuleGraph;
+  rootMetrics: DiscoveryRootMetric[];
+}
+
 
 function buildModuleGraph(modules: MavenRepository[]): ModuleGraph {
   const sorted = [...modules]
@@ -92,14 +99,31 @@ export class RepositoryScanner {
   constructor(private readonly fileSystem: FileSystem) {}
 
   async scanGraph(options: ScanOptions): Promise<ModuleGraph> {
+    const result = await this.scanGraphWithMetrics(options);
+    return result.graph;
+  }
+
+  async scanGraphWithMetrics(options: ScanOptions): Promise<ScanGraphResult> {
     const parsedOptions = scanOptionsSchema.parse(options);
     const normalizedRoots = parsedOptions.rootPaths.map(root => resolvePath(root));
 
     const repositories = new Map<string, MavenRepository>();
+    const rootMetrics: DiscoveryRootMetric[] = [];
 
     for (const rootPath of normalizedRoots) {
+      const rootStartedAt = Date.now();
+      let directoriesVisited = 0;
+      let modulesFound = 0;
+
       const rootExists = await this.fileSystem.exists(rootPath);
       if (!rootExists) {
+        rootMetrics.push({
+          rootPath,
+          durationMs: Date.now() - rootStartedAt,
+          directoriesVisited: 0,
+          modulesFound: 0,
+          cacheHit: false,
+        });
         continue;
       }
 
@@ -111,6 +135,7 @@ export class RepositoryScanner {
           continue;
         }
 
+        directoriesVisited += 1;
         const pomPath = path.join(current.directory, 'pom.xml');
         if (await this.fileSystem.exists(pomPath)) {
           repositories.set(current.directory, {
@@ -119,6 +144,7 @@ export class RepositoryScanner {
             pomPath,
             depth: current.depth,
           });
+          modulesFound += 1;
         }
 
         if (current.depth >= parsedOptions.maxDepth) {
@@ -141,9 +167,20 @@ export class RepositoryScanner {
           });
         }
       }
+
+      rootMetrics.push({
+        rootPath,
+        durationMs: Date.now() - rootStartedAt,
+        directoriesVisited,
+        modulesFound,
+        cacheHit: false,
+      });
     }
 
-    return buildModuleGraph([...repositories.values()]);
+    return {
+      graph: buildModuleGraph([...repositories.values()]),
+      rootMetrics,
+    };
   }
 
   async scanProfiles(modules: MavenRepository[], profileFilter?: string): Promise<MavenProfile[]> {

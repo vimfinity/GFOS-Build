@@ -132,6 +132,14 @@ export interface RunEvent {
   payload?: Record<string, string | number | boolean>;
 }
 
+export interface DiscoveryRootMetric {
+  rootPath: string;
+  durationMs: number;
+  directoriesVisited: number;
+  modulesFound: number;
+  cacheHit: boolean;
+}
+
 export interface RunStats {
   discoveredCount: number;
   plannedCount: number;
@@ -143,6 +151,10 @@ export interface RunStats {
   maxParallelUsed: number;
   profileCount: number;
   discoveryDurationMs: number;
+  discoveryCacheHitRate: number;
+  discoveryCacheHits: number;
+  discoveryCacheMisses: number;
+  discoveryRoots: DiscoveryRootMetric[];
 }
 
 export interface SelectionExplanation {

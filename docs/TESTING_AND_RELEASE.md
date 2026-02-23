@@ -16,7 +16,7 @@ Das Zielsystem hat weder npm, Node.js noch Bun. Deshalb muss GFOS Build als ausf
 
 ## 3. Binary Smoke-Test
 - `bun run binary:smoke`
-- Führt das echte Binary gegen Fixture-Repositories aus und validiert JSON-Output.
+- Führt das echte Binary gegen Fixture-Repositories aus und validiert JSON-Output **inkl. Schema-Validierung** gegen `assets/contracts/run-report.v1.1.schema.json`.
 
 ## 4. CI Plattformabdeckung
 - Windows Build/Smoke in GitHub Actions (Zielplattform).

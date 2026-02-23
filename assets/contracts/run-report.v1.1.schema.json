@@ -79,7 +79,11 @@
         "failedBuildDurationMs",
         "maxParallelUsed",
         "profileCount",
-        "discoveryDurationMs"
+        "discoveryDurationMs",
+        "discoveryCacheHitRate",
+        "discoveryCacheHits",
+        "discoveryCacheMisses",
+        "discoveryRoots"
       ],
       "additionalProperties": false,
       "properties": {
@@ -122,6 +126,53 @@
         "discoveryDurationMs": {
           "type": "number",
           "minimum": 0
+        },
+        "discoveryCacheHitRate": {
+          "type": "number",
+          "minimum": 0
+        },
+        "discoveryCacheHits": {
+          "type": "number",
+          "minimum": 0
+        },
+        "discoveryCacheMisses": {
+          "type": "number",
+          "minimum": 0
+        },
+        "discoveryRoots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "rootPath",
+              "durationMs",
+              "directoriesVisited",
+              "modulesFound",
+              "cacheHit"
+            ],
+            "properties": {
+              "rootPath": {
+                "type": "string",
+                "minLength": 1
+              },
+              "durationMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "directoriesVisited": {
+                "type": "number",
+                "minimum": 0
+              },
+              "modulesFound": {
+                "type": "number",
+                "minimum": 0
+              },
+              "cacheHit": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
         }
       }
     },
