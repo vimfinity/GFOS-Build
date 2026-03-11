@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet, Link } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
-import { healthQuery } from '@/api/queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { healthQuery, configQuery, useSaveConfig } from '@/api/queries';
+import { OnboardingDialog } from '@/components/OnboardingDialog';
 import { LayoutDashboard, Workflow, FolderSearch, Hammer, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -49,6 +50,24 @@ function HealthDot() {
 }
 
 function RootLayout() {
+  const queryClient = useQueryClient();
+  const { data: configData } = useQuery(configQuery);
+  const saveConfig = useSaveConfig();
+
+  // Show onboarding whenever config has no roots configured (regardless of route)
+  const needsOnboarding = configData !== undefined && Object.keys(configData.config.roots).length === 0;
+
+  async function handleOnboardingComplete(config: {
+    roots: Record<string, string>;
+    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
+    jdkRegistry: Record<string, string>;
+  }) {
+    await saveConfig.mutateAsync(config);
+    void queryClient.invalidateQueries({ queryKey: ['config'] });
+    void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+    void queryClient.invalidateQueries({ queryKey: ['scan'] });
+  }
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
       {/* Top header */}
@@ -62,7 +81,7 @@ function RootLayout() {
         {/* Vertical divider */}
         <div className="w-px h-5 bg-border mr-2 shrink-0" />
 
-        {/* Nav tabs — flush with header bottom via h-full + after: pseudo-element */}
+        {/* Nav tabs */}
         <nav className="flex items-center h-full gap-0.5">
           {NAV_TABS.map((tab) => (
             <NavTab key={tab.to} {...tab} />
@@ -80,6 +99,14 @@ function RootLayout() {
       <main className="flex-1 overflow-auto min-w-0">
         <Outlet />
       </main>
+
+      {/* Global onboarding wizard — shown whenever no roots are configured */}
+      {needsOnboarding && (
+        <OnboardingDialog
+          open={true}
+          onComplete={(config) => void handleOnboardingComplete(config)}
+        />
+      )}
     </div>
   );
 }

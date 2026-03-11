@@ -4,7 +4,7 @@ import { buildStatsQuery, buildsQuery, pipelinesQuery, useRunPipeline } from '@/
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { SkeletonCard, SkeletonRows } from '@/components/ui/skeleton';
+import { SkeletonRows } from '@/components/ui/skeleton';
 import { formatDuration, timeAgo, cn } from '@/lib/utils';
 import { useState } from 'react';
 import { BarChart3, CheckCircle2, Timer, Loader2, Play, ExternalLink } from 'lucide-react';
@@ -20,12 +20,14 @@ function StatCard({
   sub,
   icon: Icon,
   iconClass,
+  loading,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   icon: React.ElementType;
   iconClass: string;
+  loading?: boolean;
 }) {
   return (
     <Card>
@@ -35,8 +37,14 @@ function StatCard({
           <Icon size={15} className={iconClass} />
         </div>
         <div>
-          <span className="text-2xl font-bold text-foreground tabular-nums tracking-tight">{value}</span>
-          {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+          {loading ? (
+            <div className="h-8 w-16 rounded-md bg-border/60 animate-pulse" />
+          ) : (
+            <span className="text-2xl font-bold text-foreground tabular-nums tracking-tight">
+              {value}
+            </span>
+          )}
+          {sub && !loading && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
         </div>
       </CardContent>
     </Card>
@@ -56,7 +64,7 @@ function StatusDot({ status }: { status: string }) {
 
 function Dashboard() {
   const navigate = useNavigate();
-  const { data: stats } = useQuery(buildStatsQuery);
+  const { data: stats, isLoading: statsLoading } = useQuery(buildStatsQuery);
   const { data: builds } = useQuery(buildsQuery({ limit: 15 }));
   const { data: pipelines } = useQuery(pipelinesQuery);
   const runPipeline = useRunPipeline();
@@ -86,44 +94,36 @@ function Dashboard() {
 
   return (
     <div className="p-6 flex flex-col gap-6 max-w-6xl mx-auto">
-      {/* Stat cards row */}
+      {/* Stat cards — always rendered, number shows "—" while first fetch is in flight */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {!stats ? (
-          <>
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-          </>
-        ) : (
-          <>
-            <StatCard
-              label="Total Builds"
-              value={stats.totalBuilds}
-              icon={BarChart3}
-              iconClass="text-primary"
-            />
-            <StatCard
-              label="Success Rate"
-              value={successRate != null ? `${successRate}%` : '—'}
-              sub={stats.totalBuilds > 0 ? `${stats.successCount} of ${stats.totalBuilds} builds` : undefined}
-              icon={CheckCircle2}
-              iconClass="text-success"
-            />
-            <StatCard
-              label="Avg Duration"
-              value={stats.avgDurationMs ? formatDuration(stats.avgDurationMs) : '—'}
-              icon={Timer}
-              iconClass="text-warning"
-            />
-            <StatCard
-              label="Active Jobs"
-              value={activeBuilds.length}
-              icon={Loader2}
-              iconClass={activeBuilds.length > 0 ? 'text-warning animate-spin' : 'text-muted-foreground'}
-            />
-          </>
-        )}
+        <StatCard
+          label="Total Builds"
+          value={stats?.totalBuilds ?? 0}
+          icon={BarChart3}
+          iconClass="text-primary"
+          loading={statsLoading}
+        />
+        <StatCard
+          label="Success Rate"
+          value={successRate != null ? `${successRate}%` : stats ? '—' : '—'}
+          sub={stats && stats.totalBuilds > 0 ? `${stats.successCount} of ${stats.totalBuilds} builds` : undefined}
+          icon={CheckCircle2}
+          iconClass="text-success"
+          loading={statsLoading}
+        />
+        <StatCard
+          label="Avg Duration"
+          value={stats?.avgDurationMs ? formatDuration(stats.avgDurationMs) : '—'}
+          icon={Timer}
+          iconClass="text-warning"
+          loading={statsLoading}
+        />
+        <StatCard
+          label="Active Jobs"
+          value={activeBuilds.length}
+          icon={Loader2}
+          iconClass={activeBuilds.length > 0 ? 'text-warning animate-spin' : 'text-muted-foreground'}
+        />
       </div>
 
       {/* Active builds */}
@@ -176,7 +176,12 @@ function Dashboard() {
                 <SkeletonRows count={4} />
               </div>
             ) : recentBuilds.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground italic">No builds recorded yet</div>
+              <div className="p-8 text-center flex flex-col gap-1.5">
+                <span className="text-sm text-muted-foreground">No builds recorded yet</span>
+                <span className="text-xs text-muted-foreground/60">
+                  Run a pipeline or build a project to see results here
+                </span>
+              </div>
             ) : (
               <div className="divide-y divide-border/50">
                 {recentBuilds.map((b) => (

@@ -341,8 +341,26 @@ function ProjectsView() {
           {projects.length === 0 ? (
             <>
               <AlertCircle size={32} className="text-border" />
-              <p className="text-sm">No projects found in configured roots.</p>
-              <p className="text-xs">Make sure roots are set up in settings, then click Refresh.</p>
+              {configData && Object.keys(configData.config.roots).length === 0 ? (
+                <>
+                  <p className="text-sm">No project roots configured.</p>
+                  <p className="text-xs text-center max-w-xs">
+                    The onboarding wizard should appear automatically. If not, navigate to{' '}
+                    <span className="text-primary">Pipelines</span> and it will open there.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm">No projects found in configured roots.</p>
+                  <p className="text-xs text-center max-w-xs">
+                    Check that your roots contain Maven <code>pom.xml</code> or npm{' '}
+                    <code>package.json</code> files within {configData?.config.scan.maxDepth ?? 4} directory levels.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => void handleRefresh()}>
+                    <RefreshCw size={13} /> Scan now
+                  </Button>
+                </>
+              )}
             </>
           ) : (
             <>

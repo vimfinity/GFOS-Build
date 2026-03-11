@@ -1,9 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { pipelinesQuery, configQuery, useRunPipeline, useCreatePipeline, useUpdatePipeline, useDeletePipeline, useSaveConfig } from '@/api/queries';
+import { pipelinesQuery, useRunPipeline, useCreatePipeline, useUpdatePipeline, useDeletePipeline } from '@/api/queries';
 import { PipelineCard } from '@/components/PipelineCard';
 import { PipelineDialog, type PipelineFormData } from '@/components/PipelineDialog';
-import { OnboardingDialog } from '@/components/OnboardingDialog';
 import { Button } from '@/components/ui/button';
 import { SkeletonCard } from '@/components/ui/skeleton';
 import { useState } from 'react';
@@ -18,18 +17,14 @@ function PipelinesView() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: pipelines } = useQuery(pipelinesQuery);
-  const { data: configData } = useQuery(configQuery);
   const runPipeline = useRunPipeline();
   const createPipeline = useCreatePipeline();
   const updatePipeline = useUpdatePipeline();
   const deletePipeline = useDeletePipeline();
-  const saveConfig = useSaveConfig();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<PipelineListItem | null>(null);
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
-
-  const needsOnboarding = configData && Object.keys(configData.config.roots).length === 0;
 
   async function handleRun(name: string) {
     setRunningPipelines((s) => new Set(s).add(name));
@@ -77,16 +72,6 @@ function PipelinesView() {
 
     void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
     setEditTarget(null);
-  }
-
-  async function handleOnboardingComplete(config: {
-    roots: Record<string, string>;
-    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
-    jdkRegistry: Record<string, string>;
-  }) {
-    await saveConfig.mutateAsync(config);
-    void queryClient.invalidateQueries({ queryKey: ['config'] });
-    void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
   }
 
   return (
@@ -156,13 +141,6 @@ function PipelinesView() {
         onSave={(data) => void handleSave(data)}
         mode={editTarget ? 'edit' : 'create'}
       />
-
-      {needsOnboarding && (
-        <OnboardingDialog
-          open={true}
-          onComplete={(config) => void handleOnboardingComplete(config)}
-        />
-      )}
     </div>
   );
 }
