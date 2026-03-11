@@ -1,0 +1,341 @@
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { WebSocketServer, WebSocket } from 'ws';
+import type { AppConfig } from '../../config/schema.js';
+import type { AppDatabase } from '../../infrastructure/database.js';
+import type { CachedScanner } from '../../application/scanner.js';
+import type { BuildRunner } from '../../application/build-runner.js';
+import type { PipelineRunner } from '../../application/pipeline-runner.js';
+import type { FileSystem } from '../../infrastructure/file-system.js';
+import { resolvePipeline, resolveStepPath } from '../../config/resolver.js';
+import { resolveJavaHome } from '../../core/jdk-resolver.js';
+import type { BuildStep } from '../../core/types.js';
+
+const VERSION = '2.0.0';
+
+interface ActiveJob {
+  controller: AbortController;
+}
+
+export interface ServeOptions {
+  port: number;
+  config: AppConfig;
+  configPath: string;
+  db: AppDatabase;
+  scanner: CachedScanner;
+  buildRunner: BuildRunner;
+  pipelineRunner: PipelineRunner;
+  fs: FileSystem;
+}
+
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
+
+function notFound(): Response {
+  return json({ error: 'Not found' }, 404);
+}
+
+function badRequest(message: string): Response {
+  return json({ error: message }, 400);
+}
+
+export async function runServe(options: ServeOptions): Promise<void> {
+  const { config, db, scanner, buildRunner, pipelineRunner } = options;
+  const activeJobs = new Map<string, ActiveJob>();
+  const startTime = Date.now();
+
+  // Manual pub/sub replacing Bun's built-in server.publish / ws.subscribe
+  const subscriptions = new Map<string, Set<WebSocket>>();
+
+  function broadcast(channel: string, msg: string): void {
+    const subs = subscriptions.get(channel);
+    if (!subs) return;
+    for (const ws of subs) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+    }
+  }
+
+  function startJob(runner: () => AsyncGenerator<unknown>): string {
+    const jobId = randomUUID();
+    const controller = new AbortController();
+    activeJobs.set(jobId, { controller });
+
+    void (async () => {
+      try {
+        for await (const event of runner()) {
+          broadcast(jobId, JSON.stringify({ type: 'event', jobId, event }));
+        }
+        broadcast(jobId, JSON.stringify({ type: 'done', jobId }));
+      } catch (err) {
+        broadcast(jobId, JSON.stringify({ type: 'error', jobId, message: String(err) }));
+      } finally {
+        activeJobs.delete(jobId);
+      }
+    })();
+
+    return jobId;
+  }
+
+  async function handleRequest(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    const { pathname } = url;
+
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
+
+    // GET /api/health
+    if (req.method === 'GET' && pathname === '/api/health') {
+      return json({ version: VERSION, uptime: Math.floor((Date.now() - startTime) / 1000), platform: process.platform });
+    }
+
+    // GET /api/config
+    if (req.method === 'GET' && pathname === '/api/config') {
+      return json({ config, configPath: options.configPath });
+    }
+
+    // GET /api/pipelines
+    if (req.method === 'GET' && pathname === '/api/pipelines') {
+      const lastRuns = db.getLastRunsByPipeline();
+      const pipelines = Object.entries(config.pipelines).map(([name, pipelineConfig]) => {
+        const resolved = resolvePipeline(name, pipelineConfig, config);
+        return {
+          name,
+          description: resolved.description,
+          failFast: resolved.failFast,
+          steps: resolved.steps.map((s) => ({
+            label: s.label,
+            path: s.path,
+            goals: s.goals,
+            flags: s.flags,
+            mavenExecutable: s.mavenExecutable,
+            javaVersion: s.javaVersion,
+            javaHome: s.javaHome,
+          })),
+          lastRun: lastRuns[name] ?? null,
+        };
+      });
+      return json(pipelines);
+    }
+
+    // GET /api/scan
+    if (req.method === 'GET' && pathname === '/api/scan') {
+      const noCache = url.searchParams.get('noCache') === 'true';
+      const scanOptions = {
+        roots: config.roots,
+        maxDepth: config.scan.maxDepth,
+        includeHidden: config.scan.includeHidden,
+        exclude: config.scan.exclude,
+      };
+      const projects: unknown[] = [];
+      for await (const event of scanner.scan(scanOptions, undefined, noCache)) {
+        if (event.type === 'scan:done') {
+          return json({ projects: event.projects, durationMs: event.durationMs, fromCache: event.fromCache });
+        }
+      }
+      return json({ projects, durationMs: 0, fromCache: false });
+    }
+
+    // POST /api/scan/refresh
+    if (req.method === 'POST' && pathname === '/api/scan/refresh') {
+      const scanOptions = {
+        roots: config.roots,
+        maxDepth: config.scan.maxDepth,
+        includeHidden: config.scan.includeHidden,
+        exclude: config.scan.exclude,
+      };
+      const jobId = startJob(async function* () {
+        for await (const event of scanner.scan(scanOptions, undefined, true)) {
+          yield event;
+        }
+      });
+      return json({ jobId });
+    }
+
+    // GET /api/builds
+    if (req.method === 'GET' && pathname === '/api/builds') {
+      const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50', 10), 500);
+      const pipeline = url.searchParams.get('pipeline') ?? undefined;
+      const project = url.searchParams.get('project') ?? undefined;
+      const rows = db.getRecentBuilds({ limit, pipeline, project });
+      return json(rows);
+    }
+
+    // GET /api/builds/stats
+    if (req.method === 'GET' && pathname === '/api/builds/stats') {
+      return json(db.getBuildStats());
+    }
+
+    // POST /api/pipeline/:name/run
+    const pipelineRunMatch = pathname.match(/^\/api\/pipeline\/([^/]+)\/run$/);
+    if (req.method === 'POST' && pipelineRunMatch) {
+      const pipelineName = decodeURIComponent(pipelineRunMatch[1]!);
+      const pipelineConfig = config.pipelines[pipelineName];
+      if (!pipelineConfig) return json({ error: `Pipeline "${pipelineName}" not found` }, 404);
+
+      let body: { from?: string; dryRun?: boolean } = {};
+      try { body = (await req.json()) as typeof body; } catch { /* no body */ }
+
+      const pipeline = resolvePipeline(pipelineName, pipelineConfig, config);
+      let fromIndex = 0;
+      if (body.from) {
+        const n = parseInt(body.from, 10);
+        fromIndex = isNaN(n) ? 0 : Math.max(0, n - 1);
+      }
+
+      const jobId = startJob(async function* () {
+        for await (const event of pipelineRunner.run(pipeline, fromIndex)) {
+          yield event;
+        }
+      });
+      return json({ jobId });
+    }
+
+    // POST /api/build
+    if (req.method === 'POST' && pathname === '/api/build') {
+      let body: { path?: string; goals?: string[]; flags?: string[]; java?: string; maven?: string } = {};
+      try { body = (await req.json()) as typeof body; } catch { /* no body */ }
+      if (!body.path) return badRequest('path is required');
+
+      const resolvedPath = resolveStepPath(body.path, config.roots);
+      const goals = body.goals ?? config.maven.defaultGoals;
+      const flags = body.flags ?? config.maven.defaultFlags;
+      const mavenExecutable = body.maven ?? config.maven.executable;
+      const javaHome = resolveJavaHome(config, body.java);
+
+      const step: BuildStep = {
+        path: resolvedPath,
+        goals,
+        flags,
+        buildSystem: 'maven',
+        label: path.basename(resolvedPath),
+        mavenExecutable,
+        javaVersion: body.java,
+        javaHome,
+      };
+
+      const jobId = startJob(async function* () {
+        for await (const event of buildRunner.run(step, 0, 1)) {
+          yield event;
+        }
+      });
+      return json({ jobId });
+    }
+
+    // DELETE /api/jobs/:id
+    const jobMatch = pathname.match(/^\/api\/jobs\/([^/]+)$/);
+    if (req.method === 'DELETE' && jobMatch) {
+      const jobId = jobMatch[1]!;
+      const job = activeJobs.get(jobId);
+      if (!job) return json({ error: 'Job not found' }, 404);
+      job.controller.abort();
+      activeJobs.delete(jobId);
+      return json({ cancelled: true });
+    }
+
+    // GET /api/jobs (list active)
+    if (req.method === 'GET' && pathname === '/api/jobs') {
+      return json({ jobs: [...activeJobs.keys()] });
+    }
+
+    return notFound();
+  }
+
+  // Node.js HTTP server bridging web-standard Request/Response
+  const httpServer = http.createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const body = Buffer.concat(chunks);
+
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (typeof value === 'string') headers[key] = value;
+    }
+
+    const webReq = new Request(`http://127.0.0.1${req.url ?? '/'}`, {
+      method: req.method,
+      headers,
+      body: body.length > 0 ? body : undefined,
+    });
+
+    let webRes: Response;
+    try {
+      webRes = await handleRequest(webReq);
+    } catch (err) {
+      webRes = json({ error: String(err) }, 500);
+    }
+
+    res.writeHead(webRes.status, Object.fromEntries(webRes.headers));
+    const arrayBuf = await webRes.arrayBuffer();
+    res.end(Buffer.from(arrayBuf));
+  });
+
+  // WebSocket server (upgrade handled separately)
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    const url = new URL(req.url!, 'http://127.0.0.1');
+    if (url.pathname === '/api/ws') {
+      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws));
+    } else {
+      socket.destroy();
+    }
+  });
+
+  wss.on('connection', (ws: WebSocket) => {
+    const joined = new Set<string>();
+
+    ws.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(String(raw)) as { type: string; jobId?: string };
+        if (msg.type === 'subscribe' && msg.jobId) {
+          if (!subscriptions.has(msg.jobId)) subscriptions.set(msg.jobId, new Set());
+          subscriptions.get(msg.jobId)!.add(ws);
+          joined.add(msg.jobId);
+        } else if (msg.type === 'unsubscribe' && msg.jobId) {
+          subscriptions.get(msg.jobId)?.delete(ws);
+          joined.delete(msg.jobId);
+        }
+      } catch {
+        // ignore malformed messages
+      }
+    });
+
+    ws.on('close', () => {
+      for (const ch of joined) {
+        const set = subscriptions.get(ch);
+        if (set) {
+          set.delete(ws);
+          if (set.size === 0) subscriptions.delete(ch);
+        }
+      }
+    });
+  });
+
+  // Start listening
+  await new Promise<void>((resolve, reject) => {
+    httpServer.listen(options.port, '127.0.0.1', () => resolve());
+    httpServer.on('error', reject);
+  });
+
+  const addr = httpServer.address() as AddressInfo;
+
+  // Signal readiness -- Electron reads this line to discover the port
+  process.stdout.write(`READY:${addr.port}\n`);
+
+  // Keep running until parent kills us
+  await new Promise<void>((resolve) => {
+    process.on('SIGINT', () => { httpServer.close(); wss.close(); resolve(); });
+    process.on('SIGTERM', () => { httpServer.close(); wss.close(); resolve(); });
+  });
+}

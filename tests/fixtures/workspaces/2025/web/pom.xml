@@ -1,1 +1,15 @@
-<project><modelVersion>4.0.0</modelVersion></project>
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.gfos</groupId>
+  <artifactId>web</artifactId>
+  <version>2025.0.0</version>
+  <packaging>pom</packaging>
+  <modules>
+    <module>xtimeweb</module>
+    <module>kunden</module>
+  </modules>
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+  </properties>
+</project>

@@ -1,89 +1,168 @@
 #!/usr/bin/env node
-import { createApplication } from '../application/app.js';
-import { RunSummary } from '../core/types.js';
-import { parseArgs } from './args.js';
 
-function printHelp(): void {
-  console.log(`GFOS Build Foundation CLI
+import { parseArgs } from './args.js';
+import { loadConfig } from '../config/loader.js';
+import { getDbPath } from '../config/paths.js';
+import { NodeFileSystem } from '../infrastructure/file-system.js';
+import { NodeProcessRunner } from '../infrastructure/process-runner.js';
+import { AppDatabase } from '../infrastructure/database.js';
+import { RepositoryScanner } from '../core/repository-scanner.js';
+import { BuildExecutor } from '../core/build-executor.js';
+import { NpmExecutor } from '../core/npm-executor.js';
+import { CachedScanner } from '../application/scanner.js';
+import { BuildRunner } from '../application/build-runner.js';
+import { PipelineRunner } from '../application/pipeline-runner.js';
+import { runConfigInit } from './commands/config-init.js';
+import { runConfigShow } from './commands/config-show.js';
+import { runScan } from './commands/scan.js';
+import { runBuild } from './commands/build.js';
+import { runPipelineRun } from './commands/pipeline-run.js';
+import { runPipelineList } from './commands/pipeline-list.js';
+import { runServe } from './commands/serve.js';
+
+const VERSION = '1.0.0';
+
+const HELP_TEXT = `
+gfos-build v${VERSION} — Maven build orchestration CLI
 
 Usage:
-  gfos-build scan [options]
-  gfos-build build [options]
+  gfos-build build <path> [options]          Run a single Maven build
+  gfos-build pipeline run <name> [options]   Execute a saved pipeline
+  gfos-build pipeline list                   List configured pipelines
+  gfos-build scan [path] [options]           Discover Maven projects
+  gfos-build config init                     Setup wizard
+  gfos-build config show                     Print current config
+  gfos-build version                         Show version
+  gfos-build help [command]                  Show help
 
-Core options:
-  --root <path>          One root path (repeatable)
-  --max-depth <n>        Maximum traversal depth
-  --include-hidden       Include hidden folders
-  --config <path>        Config file path (default: gfos-build.config.json)
-  --json                 Output machine-readable JSON
+Global options:
+  --config <path>   Override config file location
+  --json            Emit output as newline-delimited JSON
 
-Build options:
-  --goals "clean install"
-  --mvn <command>
-  --no-fail-fast
+build options:
+  --goals <str>     Maven goals (e.g. "clean install")
+  --flags <str>     Maven flags (e.g. "-DskipTests -T 2C")
+  --maven <exec>    Override mvn executable
+  --java <version>  Override JAVA_HOME via configured jdkRegistry
+  --dry-run         Print command without executing
 
-Examples:
-  gfos-build scan --root "J:/dev/quellen" --root "J:/dev/legacy" --max-depth 4
-  gfos-build build --root "J:/dev/quellen" --goals "clean verify" --mvn mvn`);
-}
+pipeline run options:
+  --from <id>       Start from step (1-based index or label)
+  --continue        Resume from last failed step
+  --dry-run         Print steps without executing
 
-function printTextSummary(command: 'scan' | 'build', summary: RunSummary): void {
-  if (summary.discovered.length === 0) {
-    console.log('Keine buildbaren Maven-Repositories gefunden.');
-    return;
-  }
-
-  console.log(`Gefundene Repositories (${summary.discovered.length}):`);
-  for (const repository of summary.discovered) {
-    console.log(`- ${repository.name}: ${repository.path}`);
-  }
-
-  if (command === 'scan') {
-    return;
-  }
-
-  console.log('\nBuild-Ergebnisse:');
-  for (const result of summary.buildResults) {
-    const status = result.exitCode === 0 ? 'OK' : 'FEHLER';
-    console.log(`- ${result.repository.name}: ${status} (${Math.round(result.durationMs / 1000)}s)`);
-  }
-}
+scan options:
+  --depth <n>       Override maxDepth
+  --no-cache        Force fresh scan
+`;
 
 async function main(): Promise<void> {
-  if (process.argv.includes('--help') || process.argv.includes('-h')) {
-    printHelp();
+  const parsed = parseArgs(process.argv);
+  const { command, global } = parsed;
+
+  if (command.name === 'help') {
+    console.log(HELP_TEXT);
     return;
   }
 
-  const cliArgs = parseArgs(process.argv.slice(2));
-  const application = createApplication();
-
-  const summary = await application.run(
-    {
-      command: cliArgs.command,
-      roots: cliArgs.roots,
-      maxDepth: cliArgs.maxDepth,
-      includeHidden: cliArgs.includeHidden,
-      goals: cliArgs.goals,
-      mavenExecutable: cliArgs.mavenExecutable,
-      failFast: cliArgs.failFast,
-      configPath: cliArgs.configPath,
-    }
-  );
-
-  if (cliArgs.outputJson) {
-    console.log(JSON.stringify(summary, null, 2));
-  } else {
-    printTextSummary(cliArgs.command, summary);
+  if (command.name === 'version') {
+    console.log(`gfos-build v${VERSION}`);
+    return;
   }
 
-  const failedBuild = summary.buildResults.find(result => result.exitCode !== 0);
-  if (failedBuild) {
-    process.exitCode = 1;
+  if (command.name === 'config:init') {
+    await runConfigInit();
+    return;
+  }
+
+  // All other commands require a config
+  const configResult = loadConfig(global.config);
+  if (!configResult.found) {
+    console.log('No config file found.\n');
+    console.log('Run "gfos-build config init" to create one.');
+    await runConfigInit();
+    return;
+  }
+
+  const { config, configPath } = configResult;
+
+  if (command.name === 'config:show') {
+    runConfigShow(config, configPath);
+    return;
+  }
+
+  // Commands that need infrastructure
+  const fileSystem = new NodeFileSystem();
+  const processRunner = new NodeProcessRunner();
+  const db = new AppDatabase(getDbPath());
+
+  try {
+    const scanner = new CachedScanner(new RepositoryScanner(fileSystem), db);
+    const executor = new BuildExecutor(processRunner);
+    const npmExecutor = new NpmExecutor(processRunner);
+    const buildRunner = new BuildRunner(executor, npmExecutor, fileSystem);
+    const pipelineRunner = new PipelineRunner(buildRunner, db);
+
+    switch (command.name) {
+      case 'scan':
+        await runScan(scanner, config, {
+          path: command.path,
+          depth: command.depth,
+          noCache: command.noCache,
+          json: global.json,
+        });
+        break;
+
+      case 'build': {
+        const success = await runBuild(buildRunner, db, fileSystem, config, {
+          path: command.path,
+          goals: command.goals,
+          flags: command.flags,
+          maven: command.maven,
+          java: command.java,
+          dryRun: command.dryRun,
+          json: global.json,
+        });
+        if (!success) process.exitCode = 1;
+        break;
+      }
+
+      case 'pipeline:run': {
+        const success = await runPipelineRun(pipelineRunner, fileSystem, config, {
+          pipelineName: command.pipelineName,
+          from: command.from,
+          continue: command.continue,
+          dryRun: command.dryRun,
+          json: global.json,
+        });
+        if (!success) process.exitCode = 1;
+        break;
+      }
+
+      case 'pipeline:list':
+        runPipelineList(config, global.json);
+        break;
+
+      case 'serve': {
+        await runServe({
+          port: command.port,
+          config,
+          configPath,
+          db,
+          scanner: scanner,
+          buildRunner,
+          pipelineRunner,
+          fs: fileSystem,
+        });
+        break;
+      }
+    }
+  } finally {
+    db.close();
   }
 }
 
-main().catch(error => {
-  console.error('Unerwarteter Fehler:', error);
+main().catch((err) => {
+  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
   process.exitCode = 1;
 });

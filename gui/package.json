@@ -1,0 +1,39 @@
+{
+  "name": "gfos-build-gui",
+  "version": "2.0.0",
+  "description": "GFOS Build — Desktop GUI",
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "package": "electron-vite build && node scripts/package-win.mjs",
+    "package:win": "electron-vite build && node scripts/package-win.mjs"
+  },
+  "dependencies": {
+    "@base-ui-components/react": "^1.0.0-rc.0",
+    "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-router": "^1.95.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-virtuoso": "^4.12.3",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "^19.0.5",
+    "@tailwindcss/vite": "^4.0.0",
+    "@tanstack/router-plugin": "^1.95.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

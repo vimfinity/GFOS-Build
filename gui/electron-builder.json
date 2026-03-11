@@ -1,0 +1,38 @@
+{
+  "appId": "de.gfos.build",
+  "productName": "GFOS Build",
+  "asar": true,
+  "directories": {
+    "output": "../release/gui"
+  },
+  "files": [
+    "out/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "../dist/server",
+      "to": "server"
+    },
+    {
+      "from": "../node_modules/better-sqlite3",
+      "to": "node_modules/better-sqlite3"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "dir",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "../assets/icon.ico",
+    "sign": null
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  },
+  "forceCodeSigning": false
+}

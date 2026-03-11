@@ -1,85 +1,266 @@
-import { describe, expect, it } from 'vitest';
-import { FileSystem } from '../../src/infrastructure/file-system.js';
+import { describe, it, expect } from 'vitest';
+import path from 'node:path';
 import { RepositoryScanner } from '../../src/core/repository-scanner.js';
+import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
+import type { ScanEvent, ScanOptions } from '../../src/core/types.js';
 
+// In-memory filesystem for testing
 class InMemoryFileSystem implements FileSystem {
-  constructor(private readonly tree: Record<string, { dirs?: string[]; files?: string[] }>) {}
+  private files = new Map<string, string>();
+  private directories = new Map<string, DirEntry[]>();
 
-  async readDir(targetPath: string) {
-    const node = this.tree[targetPath];
-    if (!node) {
-      return [];
-    }
-
-    return (node.dirs ?? []).map(
-      name =>
-        ({
-          name,
-          isDirectory: () => true,
-          isFile: () => false,
-          isBlockDevice: () => false,
-          isCharacterDevice: () => false,
-          isFIFO: () => false,
-          isSocket: () => false,
-          isSymbolicLink: () => false,
-        }) as unknown as import('node:fs').Dirent
-    );
+  addFile(p: string, content: string): void {
+    this.files.set(path.normalize(p), content);
   }
 
-  async exists(targetPath: string) {
-    if (this.tree[targetPath]) {
-      return true;
-    }
-
-    const separatorIndex = targetPath.lastIndexOf('/');
-    const parent = targetPath.slice(0, separatorIndex);
-    const file = targetPath.slice(separatorIndex + 1);
-    return this.tree[parent]?.files?.includes(file) ?? false;
+  addDirectory(p: string, entries: DirEntry[]): void {
+    this.directories.set(path.normalize(p), entries);
   }
+
+  async exists(p: string): Promise<boolean> {
+    const norm = path.normalize(p);
+    return this.files.has(norm) || this.directories.has(norm);
+  }
+
+  async readDir(p: string): Promise<DirEntry[]> {
+    return this.directories.get(path.normalize(p)) ?? [];
+  }
+
+  async readFile(p: string): Promise<string> {
+    const content = this.files.get(path.normalize(p));
+    if (content === undefined) throw new Error(`File not found: ${p}`);
+    return content;
+  }
+
+  async writeFile(): Promise<void> {}
+  async mkdir(): Promise<void> {}
+}
+
+function dirEntry(name: string, isDir: boolean): DirEntry {
+  return { name, isDirectory: () => isDir };
+}
+
+async function collectEvents(scanner: RepositoryScanner, options: ScanOptions): Promise<ScanEvent[]> {
+  const events: ScanEvent[] = [];
+  for await (const event of scanner.scan(options)) {
+    events.push(event);
+  }
+  return events;
 }
 
 describe('RepositoryScanner', () => {
-  it('findet nur Maven-Repositories und überspringt Untermodule', async () => {
-    const fs = new InMemoryFileSystem({
-      '/root': { dirs: ['2025', 'docs'] },
-      '/root/2025': { dirs: ['web', 'shared'] },
-      '/root/2025/web': { dirs: ['module-a'], files: ['pom.xml'] },
-      '/root/2025/web/module-a': { files: ['pom.xml'] },
-      '/root/2025/shared': { files: ['pom.xml'] },
-      '/root/docs': { files: ['readme.txt'] },
-    });
+  it('discovers a Maven project at root level', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/2025/shared');
+
+    fs.addDirectory(path.resolve('/workspaces/2025'), [dirEntry('shared', true)]);
+    fs.addDirectory(rootPath, []);
+    fs.addFile(path.join(rootPath, 'pom.xml'), '<project><artifactId>shared</artifactId><packaging>pom</packaging><modules><module>core</module></modules></project>');
 
     const scanner = new RepositoryScanner(fs);
-    const repos = await scanner.scan({ rootPaths: ['/root'], maxDepth: 4, includeHidden: false });
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      maxDepth: 4,
+      includeHidden: false,
+      exclude: [],
+    });
 
-    expect(repos.map(repo => repo.path)).toEqual(['/root/2025/shared', '/root/2025/web']);
+    const found = events.filter((e) => e.type === 'repo:found');
+    expect(found).toHaveLength(1);
+    expect(found[0]!.type === 'repo:found' && found[0]!.project.name).toBe('shared');
+
+    const done = events.find((e) => e.type === 'scan:done');
+    expect(done).toBeDefined();
+    if (done?.type === 'scan:done') {
+      expect(done.projects).toHaveLength(1);
+      expect(done.fromCache).toBe(false);
+    }
   });
 
-  it('respektiert maxDepth', async () => {
-    const fs = new InMemoryFileSystem({
-      '/root': { dirs: ['level1'] },
-      '/root/level1': { dirs: ['level2'] },
-      '/root/level1/level2': { files: ['pom.xml'] },
-    });
+  it('does not descend into directories with pom.xml (submodule skipping)', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces');
+
+    fs.addDirectory(rootPath, [dirEntry('parent', true)]);
+    fs.addDirectory(path.join(rootPath, 'parent'), [dirEntry('child', true)]);
+    fs.addFile(path.join(rootPath, 'parent', 'pom.xml'), '<project><artifactId>parent</artifactId><modules><module>child</module></modules></project>');
+    fs.addFile(path.join(rootPath, 'parent', 'child', 'pom.xml'), '<project><artifactId>child</artifactId></project>');
 
     const scanner = new RepositoryScanner(fs);
-    const repos = await scanner.scan({ rootPaths: ['/root'], maxDepth: 1, includeHidden: false });
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      maxDepth: 4,
+      includeHidden: false,
+      exclude: [],
+    });
 
-    expect(repos).toHaveLength(0);
+    const found = events.filter((e) => e.type === 'repo:found');
+    expect(found).toHaveLength(1);
+    expect(found[0]!.type === 'repo:found' && found[0]!.project.name).toBe('parent');
   });
 
-  it('kann mehrere Roots zusammenführen und hidden Ordner ignorieren', async () => {
-    const fs = new InMemoryFileSystem({
-      '/a': { dirs: ['.cache', 'repo-a'] },
-      '/a/.cache': { files: ['pom.xml'] },
-      '/a/repo-a': { files: ['pom.xml'] },
-      '/b': { dirs: ['repo-b'] },
-      '/b/repo-b': { files: ['pom.xml'] },
-    });
+  it('skips hidden directories by default', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces');
+
+    fs.addDirectory(rootPath, [dirEntry('.hidden', true), dirEntry('visible', true)]);
+    fs.addDirectory(path.join(rootPath, '.hidden'), []);
+    fs.addDirectory(path.join(rootPath, 'visible'), []);
+    fs.addFile(path.join(rootPath, '.hidden', 'pom.xml'), '<project><artifactId>hidden</artifactId></project>');
+    fs.addFile(path.join(rootPath, 'visible', 'pom.xml'), '<project><artifactId>visible</artifactId></project>');
 
     const scanner = new RepositoryScanner(fs);
-    const repos = await scanner.scan({ rootPaths: ['/a', '/b'], maxDepth: 2, includeHidden: false });
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      maxDepth: 4,
+      includeHidden: false,
+      exclude: [],
+    });
 
-    expect(repos.map(repo => repo.path)).toEqual(['/a/repo-a', '/b/repo-b']);
+    const found = events.filter((e) => e.type === 'repo:found');
+    expect(found).toHaveLength(1);
+    expect(found[0]!.type === 'repo:found' && found[0]!.project.name).toBe('visible');
+  });
+
+  it('includes hidden directories when includeHidden is true', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces');
+
+    fs.addDirectory(rootPath, [dirEntry('.hidden', true), dirEntry('visible', true)]);
+    fs.addDirectory(path.join(rootPath, '.hidden'), []);
+    fs.addDirectory(path.join(rootPath, 'visible'), []);
+    fs.addFile(path.join(rootPath, '.hidden', 'pom.xml'), '<project><artifactId>hidden</artifactId></project>');
+    fs.addFile(path.join(rootPath, 'visible', 'pom.xml'), '<project><artifactId>visible</artifactId></project>');
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      maxDepth: 4,
+      includeHidden: true,
+      exclude: [],
+    });
+
+    const found = events.filter((e) => e.type === 'repo:found');
+    expect(found).toHaveLength(2);
+  });
+
+  it('respects exclude list', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces');
+
+    fs.addDirectory(rootPath, [dirEntry('keep', true), dirEntry('skip', true)]);
+    fs.addDirectory(path.join(rootPath, 'keep'), []);
+    fs.addDirectory(path.join(rootPath, 'skip'), []);
+    fs.addFile(path.join(rootPath, 'keep', 'pom.xml'), '<project><artifactId>keep</artifactId></project>');
+    fs.addFile(path.join(rootPath, 'skip', 'pom.xml'), '<project><artifactId>skip</artifactId></project>');
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      maxDepth: 4,
+      includeHidden: false,
+      exclude: ['skip'],
+    });
+
+    const found = events.filter((e) => e.type === 'repo:found');
+    expect(found).toHaveLength(1);
+    expect(found[0]!.type === 'repo:found' && found[0]!.project.name).toBe('keep');
+  });
+
+  it('respects maxDepth', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces');
+
+    fs.addDirectory(rootPath, [dirEntry('level1', true)]);
+    fs.addDirectory(path.join(rootPath, 'level1'), [dirEntry('level2', true)]);
+    fs.addDirectory(path.join(rootPath, 'level1', 'level2'), []);
+    fs.addFile(
+      path.join(rootPath, 'level1', 'level2', 'pom.xml'),
+      '<project><artifactId>deep</artifactId></project>'
+    );
+
+    const scanner = new RepositoryScanner(fs);
+
+    // maxDepth 1 should not find it (root = depth 0, level1 = depth 1, level2 = depth 2)
+    const shallow = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      maxDepth: 1,
+      includeHidden: false,
+      exclude: [],
+    });
+    expect(shallow.filter((e) => e.type === 'repo:found')).toHaveLength(0);
+
+    // maxDepth 2 should find it
+    const deep = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      maxDepth: 2,
+      includeHidden: false,
+      exclude: [],
+    });
+    expect(deep.filter((e) => e.type === 'repo:found')).toHaveLength(1);
+  });
+
+  it('detects .mvn/maven.config', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/shared');
+
+    fs.addDirectory(rootPath, []);
+    fs.addFile(path.join(rootPath, 'pom.xml'), '<project><artifactId>shared</artifactId></project>');
+    fs.addFile(path.join(rootPath, '.mvn', 'maven.config'), '-T0.8C --show-version');
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      maxDepth: 4,
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.filter((e) => e.type === 'repo:found');
+    expect(found).toHaveLength(1);
+    if (found[0]!.type === 'repo:found') {
+      expect(found[0]!.project.maven?.hasMvnConfig).toBe(true);
+      expect(found[0]!.project.maven?.mvnConfigContent).toBe('-T0.8C --show-version');
+    }
+  });
+
+  it('scans multiple roots', async () => {
+    const fs = new InMemoryFileSystem();
+    const root1 = path.resolve('/workspaces/root1');
+    const root2 = path.resolve('/workspaces/root2');
+
+    fs.addDirectory(root1, []);
+    fs.addFile(path.join(root1, 'pom.xml'), '<project><artifactId>proj1</artifactId></project>');
+    fs.addDirectory(root2, []);
+    fs.addFile(path.join(root2, 'pom.xml'), '<project><artifactId>proj2</artifactId></project>');
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { r1: root1, r2: root2 },
+      maxDepth: 4,
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.filter((e) => e.type === 'repo:found');
+    expect(found).toHaveLength(2);
+  });
+
+  it('skips non-existent roots gracefully', async () => {
+    const fs = new InMemoryFileSystem();
+    const scanner = new RepositoryScanner(fs);
+
+    const events = await collectEvents(scanner, {
+      roots: { test: path.resolve('/nonexistent') },
+      maxDepth: 4,
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const done = events.find((e) => e.type === 'scan:done');
+    expect(done).toBeDefined();
+    if (done?.type === 'scan:done') {
+      expect(done.projects).toHaveLength(0);
+    }
   });
 });
