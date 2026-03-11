@@ -10,12 +10,24 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PipelinesIndexRouteImport } from './routes/pipelines/index'
+import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as BuildsIndexRouteImport } from './routes/builds/index'
 import { Route as BuildsJobIdRouteImport } from './routes/builds/$jobId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PipelinesIndexRoute = PipelinesIndexRouteImport.update({
+  id: '/pipelines/',
+  path: '/pipelines/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
+  id: '/projects/',
+  path: '/projects/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BuildsIndexRoute = BuildsIndexRouteImport.update({
@@ -31,30 +43,38 @@ const BuildsJobIdRoute = BuildsJobIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/pipelines/': typeof PipelinesIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds/': typeof BuildsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/pipelines': typeof PipelinesIndexRoute
+  '/projects': typeof ProjectsIndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds': typeof BuildsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/pipelines/': typeof PipelinesIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds/': typeof BuildsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/builds/$jobId' | '/builds/'
+  fullPaths: '/' | '/pipelines/' | '/projects/' | '/builds/$jobId' | '/builds/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/builds/$jobId' | '/builds'
-  id: '__root__' | '/' | '/builds/$jobId' | '/builds/'
+  to: '/' | '/pipelines' | '/projects' | '/builds/$jobId' | '/builds'
+  id: '__root__' | '/' | '/pipelines/' | '/projects/' | '/builds/$jobId' | '/builds/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PipelinesIndexRoute: typeof PipelinesIndexRoute
+  ProjectsIndexRoute: typeof ProjectsIndexRoute
   BuildsJobIdRoute: typeof BuildsJobIdRoute
   BuildsIndexRoute: typeof BuildsIndexRoute
 }
@@ -66,6 +86,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pipelines/': {
+      id: '/pipelines/'
+      path: '/pipelines'
+      fullPath: '/pipelines/'
+      preLoaderRoute: typeof PipelinesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects/': {
+      id: '/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof ProjectsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/builds/': {
@@ -87,6 +121,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PipelinesIndexRoute: PipelinesIndexRoute,
+  ProjectsIndexRoute: ProjectsIndexRoute,
   BuildsJobIdRoute: BuildsJobIdRoute,
   BuildsIndexRoute: BuildsIndexRoute,
 }

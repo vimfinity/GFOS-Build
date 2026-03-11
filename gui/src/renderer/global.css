@@ -31,6 +31,9 @@
 
   /* Translucent backdrop blur for popovers / menus */
   --backdrop-blur-popover: 20px;
+
+  /* Monospace font stack */
+  --font-mono: "Geist Mono", "Cascadia Code", "Cascadia Mono", Consolas, "Courier New", monospace;
 }
 
 @layer base {

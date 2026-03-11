@@ -1,35 +1,74 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { pipelinesQuery, configQuery, useRunPipeline, useCreatePipeline, useUpdatePipeline, useDeletePipeline, useSaveConfig } from '@/api/queries';
-import { PipelineCard } from '@/components/PipelineCard';
-import { PipelineDialog, type PipelineFormData } from '@/components/PipelineDialog';
-import { OnboardingDialog } from '@/components/OnboardingDialog';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
+import { buildStatsQuery, buildsQuery, pipelinesQuery, useRunPipeline } from '@/api/queries';
+import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { SkeletonCard, SkeletonRows } from '@/components/ui/skeleton';
+import { formatDuration, timeAgo, cn } from '@/lib/utils';
 import { useState } from 'react';
-import { Plus, Loader2 } from 'lucide-react';
-import type { PipelineListItem } from '@shared/api';
+import { BarChart3, CheckCircle2, Timer, Loader2, Play, ExternalLink } from 'lucide-react';
+import type { BuildRunRowApi, PipelineListItem } from '@shared/api';
 
 export const Route = createFileRoute('/')({
-  component: PipelinesView,
+  component: Dashboard,
 });
 
-function PipelinesView() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { data: pipelines, isLoading } = useQuery(pipelinesQuery);
-  const { data: configData } = useQuery(configQuery);
-  const runPipeline = useRunPipeline();
-  const createPipeline = useCreatePipeline();
-  const updatePipeline = useUpdatePipeline();
-  const deletePipeline = useDeletePipeline();
-  const saveConfig = useSaveConfig();
+function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  iconClass,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ElementType;
+  iconClass: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-5 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground">{label}</span>
+          <Icon size={15} className={iconClass} />
+        </div>
+        <div>
+          <span className="text-2xl font-bold text-foreground tabular-nums tracking-tight">{value}</span>
+          {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<PipelineListItem | null>(null);
+function StatusDot({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    success: 'bg-success',
+    failed: 'bg-destructive',
+    running: 'bg-warning animate-pulse',
+  };
+  return (
+    <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', colors[status] ?? 'bg-muted-foreground')} />
+  );
+}
+
+function Dashboard() {
+  const navigate = useNavigate();
+  const { data: stats } = useQuery(buildStatsQuery);
+  const { data: builds } = useQuery(buildsQuery({ limit: 15 }));
+  const { data: pipelines } = useQuery(pipelinesQuery);
+  const runPipeline = useRunPipeline();
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
 
-  // Show onboarding when config has no roots
-  const needsOnboarding = configData && Object.keys(configData.config.roots).length === 0;
+  const activeBuilds = builds?.filter((b) => b.status === 'running') ?? [];
+  const recentBuilds = builds?.filter((b) => b.status !== 'running').slice(0, 8) ?? [];
+
+  const successRate =
+    stats && stats.totalBuilds > 0
+      ? Math.round((stats.successCount / stats.totalBuilds) * 100)
+      : null;
 
   async function handleRun(name: string) {
     setRunningPipelines((s) => new Set(s).add(name));
@@ -45,122 +84,200 @@ function PipelinesView() {
     }
   }
 
-  function handleEdit(pipeline: PipelineListItem) {
-    setEditTarget(pipeline);
-    setDialogOpen(true);
-  }
-
-  async function handleDelete(name: string) {
-    await deletePipeline.mutateAsync(name);
-    void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
-  }
-
-  async function handleSave(data: PipelineFormData) {
-    const payload = {
-      description: data.description || undefined,
-      failFast: data.failFast,
-      steps: data.steps.map((s) => ({
-        path: s.path,
-        label: s.label || undefined,
-        goals: s.goals.split(/\s+/).filter(Boolean),
-        flags: s.flags.split(/\s+/).filter(Boolean),
-        javaVersion: s.javaVersion || undefined,
-        buildSystem: s.buildSystem as 'maven' | 'npm',
-      })),
-    };
-
-    if (editTarget) {
-      await updatePipeline.mutateAsync({ name: data.name, pipeline: payload });
-    } else {
-      await createPipeline.mutateAsync({ name: data.name, pipeline: payload });
-    }
-
-    void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
-    setEditTarget(null);
-  }
-
-  async function handleOnboardingComplete(config: {
-    roots: Record<string, string>;
-    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
-    jdkRegistry: Record<string, string>;
-  }) {
-    await saveConfig.mutateAsync(config);
-    void queryClient.invalidateQueries({ queryKey: ['config'] });
-    void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
-  }
-
   return (
-    <div className="p-6 flex flex-col gap-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">Pipelines</h1>
-          <p className="text-xs text-muted-foreground">
-            {pipelines?.length ?? 0} pipeline{(pipelines?.length ?? 0) !== 1 ? 's' : ''} configured
-          </p>
-        </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditTarget(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus size={14} /> Create pipeline
-        </Button>
+    <div className="p-6 flex flex-col gap-6 max-w-6xl mx-auto">
+      {/* Stat cards row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {!stats ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Builds"
+              value={stats.totalBuilds}
+              icon={BarChart3}
+              iconClass="text-primary"
+            />
+            <StatCard
+              label="Success Rate"
+              value={successRate != null ? `${successRate}%` : '—'}
+              sub={stats.totalBuilds > 0 ? `${stats.successCount} of ${stats.totalBuilds} builds` : undefined}
+              icon={CheckCircle2}
+              iconClass="text-success"
+            />
+            <StatCard
+              label="Avg Duration"
+              value={stats.avgDurationMs ? formatDuration(stats.avgDurationMs) : '—'}
+              icon={Timer}
+              iconClass="text-warning"
+            />
+            <StatCard
+              label="Active Jobs"
+              value={activeBuilds.length}
+              icon={Loader2}
+              iconClass={activeBuilds.length > 0 ? 'text-warning animate-spin' : 'text-muted-foreground'}
+            />
+          </>
+        )}
       </div>
 
-      {/* Pipeline cards */}
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-muted-foreground text-sm p-4">
-          <Loader2 size={14} className="animate-spin" />
-          <span>Loading pipelines...</span>
-        </div>
-      ) : !pipelines?.length ? (
-        <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-          <p className="text-sm">No pipelines configured yet.</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setEditTarget(null);
-              setDialogOpen(true);
-            }}
-          >
-            <Plus size={14} /> Create your first pipeline
-          </Button>
-        </div>
-      ) : (
-        <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
-          {pipelines.map((p) => (
-            <PipelineCard
-              key={p.name}
-              pipeline={p}
-              onRun={handleRun}
-              onEdit={() => handleEdit(p)}
-              onDelete={() => void handleDelete(p.name)}
-              isRunning={runningPipelines.has(p.name)}
-            />
-          ))}
-        </div>
+      {/* Active builds */}
+      {activeBuilds.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Running now ({activeBuilds.length})
+          </h2>
+          <div className="grid gap-2 grid-cols-1 lg:grid-cols-2">
+            {activeBuilds.map((b) => (
+              <Link key={b.id} to="/builds/$jobId" params={{ jobId: String(b.id) }} className="block">
+                <Card className="hover:border-primary/40 transition-colors cursor-pointer">
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <Loader2 size={14} className="text-warning animate-spin shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate block">
+                        {b.pipeline_name ?? 'ad-hoc build'}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono truncate block">
+                        {b.project_name}
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                      {timeAgo(b.started_at)}
+                    </span>
+                    <ExternalLink size={12} className="text-muted-foreground shrink-0" />
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
-      {/* Pipeline create/edit dialog */}
-      <PipelineDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        initialData={editTarget ?? undefined}
-        onSave={(data) => void handleSave(data)}
-        mode={editTarget ? 'edit' : 'create'}
-      />
+      {/* Two-column lower section */}
+      <div className="flex gap-5">
+        {/* Recent Builds */}
+        <section className="flex flex-col gap-3 flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Recent Builds
+            </h2>
+            <Link to="/builds" className="text-xs text-primary hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="rounded-lg border border-border overflow-hidden bg-card">
+            {!builds ? (
+              <div className="p-4">
+                <SkeletonRows count={4} />
+              </div>
+            ) : recentBuilds.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground italic">No builds recorded yet</div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {recentBuilds.map((b) => (
+                  <RecentBuildRow key={b.id} build={b} />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
-      {/* Onboarding dialog */}
-      {needsOnboarding && (
-        <OnboardingDialog
-          open={true}
-          onComplete={(config) => void handleOnboardingComplete(config)}
-        />
-      )}
+        {/* Quick Run */}
+        <section className="flex flex-col gap-3 w-72 shrink-0">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Quick Run
+            </h2>
+            <Link to="/pipelines" className="text-xs text-primary hover:underline">
+              Manage →
+            </Link>
+          </div>
+          <div className="rounded-lg border border-border overflow-hidden bg-card">
+            {!pipelines ? (
+              <div className="p-4">
+                <SkeletonRows count={3} />
+              </div>
+            ) : pipelines.length === 0 ? (
+              <div className="p-6 text-center flex flex-col gap-2">
+                <span className="text-sm text-muted-foreground italic">No pipelines yet</span>
+                <Link to="/pipelines" className="text-xs text-primary hover:underline">
+                  Create one →
+                </Link>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {pipelines.slice(0, 7).map((p) => (
+                  <QuickRunRow
+                    key={p.name}
+                    pipeline={p}
+                    isRunning={runningPipelines.has(p.name)}
+                    onRun={handleRun}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function RecentBuildRow({ build }: { build: BuildRunRowApi }) {
+  return (
+    <Link
+      to="/builds"
+      className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/30 transition-colors"
+    >
+      <StatusBadge status={build.status} />
+      <div className="flex-1 min-w-0">
+        <span className="text-xs text-foreground/80 truncate block">
+          {build.pipeline_name ?? <span className="italic text-muted-foreground">ad-hoc</span>}
+        </span>
+        <span className="text-[10px] font-mono text-muted-foreground truncate block">
+          {build.project_name}
+        </span>
+      </div>
+      <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums">
+        {timeAgo(build.started_at)}
+      </span>
+    </Link>
+  );
+}
+
+function QuickRunRow({
+  pipeline,
+  isRunning,
+  onRun,
+}: {
+  pipeline: PipelineListItem;
+  isRunning: boolean;
+  onRun: (name: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5">
+      <div className="flex-1 min-w-0">
+        <span className="text-xs font-medium text-foreground truncate block">{pipeline.name}</span>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[10px] text-muted-foreground">
+            {pipeline.steps.length} step{pipeline.steps.length !== 1 ? 's' : ''}
+          </span>
+          {pipeline.lastRun && <StatusDot status={pipeline.lastRun.status} />}
+        </div>
+      </div>
+      <Button
+        size="sm"
+        className="h-7 px-2.5 text-xs shrink-0"
+        onClick={() => onRun(pipeline.name)}
+        disabled={isRunning}
+      >
+        {isRunning ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+      </Button>
     </div>
   );
 }

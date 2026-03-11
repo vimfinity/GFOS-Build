@@ -76,6 +76,13 @@ export interface StartJobResponse {
   jobId: string;
 }
 
+/** GET /api/scan */
+export interface ScanResponse {
+  projects: import('./types').Project[];
+  durationMs: number;
+  fromCache: boolean;
+}
+
 /** WebSocket message envelope sent from server → client */
 export interface WsEnvelope {
   type: 'event' | 'done' | 'error';

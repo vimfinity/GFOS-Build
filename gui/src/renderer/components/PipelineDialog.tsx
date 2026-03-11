@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Trash2, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen } from 'lucide-react';
 import type { PipelineStep } from '@shared/api';
 
 interface StepFormData {
@@ -42,6 +43,164 @@ interface PipelineDialogProps {
   initialData?: { name: string; description?: string; failFast: boolean; steps: PipelineStep[] };
   onSave: (data: PipelineFormData) => void;
   mode: 'create' | 'edit';
+}
+
+function BuildSystemToggle({ value, onChange }: { value: 'maven' | 'npm'; onChange: (v: 'maven' | 'npm') => void }) {
+  return (
+    <div className="flex rounded-md border border-border overflow-hidden shrink-0" style={{ width: 100 }}>
+      {(['maven', 'npm'] as const).map((sys) => (
+        <button
+          key={sys}
+          type="button"
+          onClick={() => onChange(sys)}
+          className={cn(
+            'flex-1 text-xs py-1.5 font-medium transition-colors',
+            value === sys
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+          )}
+        >
+          {sys === 'maven' ? 'Maven' : 'npm'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StepCard({
+  step,
+  index,
+  total,
+  onUpdate,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: {
+  step: StepFormData;
+  index: number;
+  total: number;
+  onUpdate: (field: keyof StepFormData, value: string | boolean) => void;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  async function browsePath() {
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      const dir = await window.electronAPI.openDirectory();
+      if (dir) onUpdate('path', dir);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-background/50">
+      {/* Step header */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-mono bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded shrink-0">
+          Step {index + 1}
+        </span>
+        <span className="flex-1 text-sm font-medium text-foreground/70 truncate select-none">
+          {step.label || <span className="italic text-muted-foreground/60">unlabelled</span>}
+        </span>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={index === 0}
+            className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+            title="Move up"
+          >
+            <ArrowUp size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={index === total - 1}
+            className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+            title="Move down"
+          >
+            <ArrowDown size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={total === 1}
+            className="p-1 rounded text-destructive/70 hover:text-destructive disabled:opacity-25 disabled:cursor-not-allowed transition-colors ml-1"
+            title="Remove step"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* Row 1: Label + Build system */}
+      <div className="flex gap-3 items-end">
+        <div className="flex-1 min-w-0">
+          <Input
+            label="Label"
+            placeholder="e.g. shared-core"
+            value={step.label}
+            onChange={(e) => onUpdate('label', e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1 shrink-0">
+          <span className="text-xs text-muted-foreground font-medium">Build system</span>
+          <BuildSystemToggle value={step.buildSystem} onChange={(v) => onUpdate('buildSystem', v)} />
+        </div>
+      </div>
+
+      {/* Row 2: Path + Browse */}
+      <div className="flex gap-2 items-end">
+        <div className="flex-1 min-w-0">
+          <Input
+            label="Project path"
+            placeholder="e.g. root-name:services/my-module or /absolute/path"
+            value={step.path}
+            onChange={(e) => onUpdate('path', e.target.value)}
+          />
+        </div>
+        {typeof window !== 'undefined' && window.electronAPI && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={() => void browsePath()}
+            title="Browse directory"
+          >
+            <FolderOpen size={14} />
+          </Button>
+        )}
+      </div>
+
+      {/* Row 3: Goals + Flags */}
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          label="Goals"
+          placeholder="e.g. clean install"
+          value={step.goals}
+          onChange={(e) => onUpdate('goals', e.target.value)}
+        />
+        <Input
+          label="Flags (optional)"
+          placeholder="e.g. -DskipTests -T4"
+          value={step.flags}
+          onChange={(e) => onUpdate('flags', e.target.value)}
+        />
+      </div>
+
+      {/* Row 4 (Maven only): Java version */}
+      {step.buildSystem === 'maven' && (
+        <div className="max-w-[200px]">
+          <Input
+            label="Java version (optional)"
+            placeholder="e.g. 17"
+            value={step.javaVersion}
+            onChange={(e) => onUpdate('javaVersion', e.target.value)}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }: PipelineDialogProps) {
@@ -95,13 +254,15 @@ export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogTitle>{mode === 'create' ? 'Create Pipeline' : `Edit "${name}"`}</DialogTitle>
         <DialogDescription>
-          {mode === 'create' ? 'Define a new build pipeline with ordered steps.' : 'Modify pipeline configuration.'}
+          {mode === 'create'
+            ? 'Define a build pipeline with one or more ordered steps.'
+            : 'Update this pipeline\'s steps and configuration.'}
         </DialogDescription>
 
-        <div className="flex flex-col gap-4 mt-4 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="flex flex-col gap-5 mt-4 max-h-[75vh] overflow-y-auto pr-1">
           {/* Pipeline metadata */}
           <div className="grid grid-cols-2 gap-3">
             <Input
@@ -113,83 +274,39 @@ export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }
             />
             <Input
               label="Description (optional)"
-              placeholder="Build all modules"
+              placeholder="What does this pipeline build?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none w-fit">
             <input
               type="checkbox"
               checked={failFast}
               onChange={(e) => setFailFast(e.target.checked)}
-              className="rounded border-input"
+              className="rounded border-input accent-primary"
             />
-            Fail fast (stop on first error)
+            <span className="text-muted-foreground">Fail fast</span>
+            <span className="text-xs text-muted-foreground/60">(stop pipeline on first step failure)</span>
           </label>
 
-          {/* Steps editor */}
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Steps</span>
+          {/* Steps */}
+          <div className="flex flex-col gap-3">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Steps ({steps.length})
+            </span>
             {steps.map((step, i) => (
-              <div key={i} className="flex gap-2 items-start p-3 rounded-lg border border-border bg-background">
-                <div className="flex flex-col gap-1 pt-1 shrink-0">
-                  <button
-                    onClick={() => moveStep(i, -1)}
-                    disabled={i === 0}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                  >
-                    <ArrowUp size={12} />
-                  </button>
-                  <GripVertical size={12} className="text-muted-foreground/40" />
-                  <button
-                    onClick={() => moveStep(i, 1)}
-                    disabled={i === steps.length - 1}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                  >
-                    <ArrowDown size={12} />
-                  </button>
-                </div>
-
-                <div className="flex-1 grid grid-cols-2 gap-2">
-                  <Input
-                    placeholder="Label"
-                    value={step.label}
-                    onChange={(e) => updateStep(i, 'label', e.target.value)}
-                  />
-                  <Input
-                    placeholder="Path (e.g. 2025/shared)"
-                    value={step.path}
-                    onChange={(e) => updateStep(i, 'path', e.target.value)}
-                  />
-                  <Input
-                    placeholder="Goals (e.g. clean install)"
-                    value={step.goals}
-                    onChange={(e) => updateStep(i, 'goals', e.target.value)}
-                  />
-                  <Input
-                    placeholder="Flags (e.g. -DskipTests)"
-                    value={step.flags}
-                    onChange={(e) => updateStep(i, 'flags', e.target.value)}
-                  />
-                  <Input
-                    placeholder="Java version (optional)"
-                    value={step.javaVersion}
-                    onChange={(e) => updateStep(i, 'javaVersion', e.target.value)}
-                  />
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeStep(i)}
-                  disabled={steps.length === 1}
-                  className="shrink-0 text-destructive"
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
+              <StepCard
+                key={i}
+                step={step}
+                index={i}
+                total={steps.length}
+                onUpdate={(field, value) => updateStep(i, field, value)}
+                onRemove={() => removeStep(i)}
+                onMoveUp={() => moveStep(i, -1)}
+                onMoveDown={() => moveStep(i, 1)}
+              />
             ))}
             <Button variant="outline" size="sm" onClick={addStep} className="self-start">
               <Plus size={14} /> Add step
@@ -198,11 +315,9 @@ export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }
         </div>
 
         <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button size="sm" onClick={handleSubmit} disabled={!canSave}>
-            {mode === 'create' ? 'Create' : 'Save changes'}
+            {mode === 'create' ? 'Create pipeline' : 'Save changes'}
           </Button>
         </div>
       </DialogContent>

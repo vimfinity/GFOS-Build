@@ -1,39 +1,79 @@
 import { createRootRoute, Outlet, Link } from '@tanstack/react-router';
-import { Workflow, Hammer } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { healthQuery } from '@/api/queries';
+import { LayoutDashboard, Workflow, FolderSearch, Hammer, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const Route = createRootRoute({
   component: RootLayout,
 });
 
-function NavTab({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+const NAV_TABS: Array<{ to: string; icon: React.ElementType; label: string; exact: boolean }> = [
+  { to: '/', icon: LayoutDashboard, label: 'Home', exact: true },
+  { to: '/pipelines', icon: Workflow, label: 'Pipelines', exact: false },
+  { to: '/projects', icon: FolderSearch, label: 'Projects', exact: false },
+  { to: '/builds', icon: Hammer, label: 'Builds', exact: false },
+];
+
+function NavTab({ to, icon: Icon, label, exact }: { to: string; icon: React.ElementType; label: string; exact: boolean }) {
   return (
     <Link
       to={to}
-      className={cn(
-        'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium',
-        'text-muted-foreground hover:text-foreground hover:bg-accent transition-colors',
-      )}
+      className="relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors text-muted-foreground hover:text-foreground"
       activeProps={{
-        className: 'text-primary bg-primary/10 hover:text-primary hover:bg-primary/10',
+        className: cn(
+          'relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors',
+          'text-foreground',
+          'after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-primary after:rounded-t-sm',
+        ),
       }}
-      activeOptions={{ exact: to === '/' }}
+      activeOptions={{ exact }}
     >
-      {icon}
+      <Icon size={15} />
       {label}
     </Link>
+  );
+}
+
+function HealthDot() {
+  const { data } = useQuery(healthQuery);
+  return (
+    <div
+      title={data ? `Server v${data.version} · uptime ${data.uptime}s` : 'Connecting to server…'}
+      className={cn(
+        'w-2 h-2 rounded-full flex-shrink-0 transition-colors',
+        data ? 'bg-success' : 'bg-border animate-pulse',
+      )}
+    />
   );
 }
 
 function RootLayout() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
-      {/* Top header bar */}
-      <header className="flex items-center gap-1 px-4 h-12 border-b border-border shrink-0 bg-card/50">
-        <nav className="flex items-center gap-1">
-          <NavTab to="/" icon={<Workflow size={16} />} label="Pipelines" />
-          <NavTab to="/builds" icon={<Hammer size={16} />} label="Builds" />
+      {/* Top header */}
+      <header className="flex items-center h-[52px] border-b border-border bg-card/40 shrink-0 px-4 gap-0">
+        {/* Brand */}
+        <div className="flex items-center gap-2 select-none mr-3 shrink-0">
+          <Wrench size={18} className="text-primary" strokeWidth={2.2} />
+          <span className="text-sm font-semibold tracking-tight text-foreground">GFOS Build</span>
+        </div>
+
+        {/* Vertical divider */}
+        <div className="w-px h-5 bg-border mr-2 shrink-0" />
+
+        {/* Nav tabs — flush with header bottom via h-full + after: pseudo-element */}
+        <nav className="flex items-center h-full gap-0.5">
+          {NAV_TABS.map((tab) => (
+            <NavTab key={tab.to} {...tab} />
+          ))}
         </nav>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Health indicator */}
+        <HealthDot />
       </header>
 
       {/* Main content */}
