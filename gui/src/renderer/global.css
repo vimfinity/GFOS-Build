@@ -1,34 +1,27 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* shadcn zinc dark — semantic color tokens */
-  --color-background: oklch(0.145 0 0);
-  --color-foreground: oklch(0.985 0 0);
-  --color-card: oklch(0.17 0 0);
-  --color-card-foreground: oklch(0.985 0 0);
-  --color-popover: oklch(0.17 0 0 / 0.78);
-  --color-popover-foreground: oklch(0.985 0 0);
-  --color-primary: oklch(0.62 0.19 270);
-  --color-primary-foreground: oklch(0.985 0 0);
-  --color-secondary: oklch(0.269 0 0);
-  --color-secondary-foreground: oklch(0.985 0 0);
-  --color-muted: oklch(0.269 0 0);
-  --color-muted-foreground: oklch(0.708 0 0);
-  --color-accent: oklch(0.269 0 0);
-  --color-accent-foreground: oklch(0.985 0 0);
-  --color-destructive: oklch(0.577 0.245 27.325);
-  --color-border: oklch(0.269 0 0);
-  --color-input: oklch(0.269 0 0);
-  --color-ring: oklch(0.62 0.19 270);
-  --color-success: oklch(0.723 0.191 149.58);
-  --color-warning: oklch(0.795 0.184 86.047);
-
-  /* Sidebar tokens */
-  --color-sidebar: oklch(0.155 0 0);
-  --color-sidebar-foreground: oklch(0.985 0 0);
-  --color-sidebar-border: oklch(0.269 0 0);
-  --color-sidebar-accent: oklch(0.269 0 0);
-  --color-sidebar-accent-foreground: oklch(0.985 0 0);
+  /* GFOS teal dark — hue-210 tinted backgrounds with #007d8f primary */
+  --color-primary: oklch(0.53 0.10 210);
+  --color-primary-foreground: oklch(0.98 0 0);
+  --color-background: oklch(0.16 0.012 210);
+  --color-foreground: oklch(0.94 0.005 210);
+  --color-card: oklch(0.21 0.014 210);
+  --color-card-foreground: oklch(0.94 0.005 210);
+  --color-popover: oklch(0.21 0.014 210 / 0.82);
+  --color-popover-foreground: oklch(0.94 0.005 210);
+  --color-secondary: oklch(0.28 0.018 210);
+  --color-secondary-foreground: oklch(0.94 0.005 210);
+  --color-muted: oklch(0.28 0.018 210);
+  --color-muted-foreground: oklch(0.60 0.020 210);
+  --color-accent: oklch(0.30 0.022 210);
+  --color-accent-foreground: oklch(0.94 0.005 210);
+  --color-destructive: oklch(0.60 0.22 27);
+  --color-success: oklch(0.72 0.19 150);
+  --color-warning: oklch(0.80 0.18 86);
+  --color-border: oklch(0.32 0.020 210);
+  --color-input: oklch(0.28 0.018 210);
+  --color-ring: oklch(0.53 0.10 210);
 
   /* Radius scale */
   --radius-sm: 0.25rem;
@@ -73,10 +66,10 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: oklch(0.37 0 0);
+    background: oklch(0.35 0.02 210);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.45 0 0);
+    background: oklch(0.42 0.025 210);
   }
 }

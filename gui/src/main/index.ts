@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import { spawnSidecar, type SidecarHandle } from './sidecar';
 
@@ -10,7 +10,7 @@ function createWindow(sidecarUrl: string): void {
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#09090b',
+    backgroundColor: '#1d2f32',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -20,6 +20,14 @@ function createWindow(sidecarUrl: string): void {
   });
 
   ipcMain.handle('get-sidecar-url', () => sidecarUrl);
+
+  ipcMain.handle('open-directory', async () => {
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory'],
+      title: 'Select workspace root',
+    });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL']);

@@ -8,5 +8,6 @@ interface ImportMeta {
 interface Window {
   electronAPI?: {
     getSidecarUrl: () => Promise<string>;
+    openDirectory: () => Promise<string | null>;
   };
 }

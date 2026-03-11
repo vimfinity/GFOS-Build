@@ -1,101 +1,165 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
-import { pipelinesQuery, buildsQuery, useRunPipeline } from '@/api/queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { pipelinesQuery, configQuery, useRunPipeline, useCreatePipeline, useUpdatePipeline, useDeletePipeline, useSaveConfig } from '@/api/queries';
 import { PipelineCard } from '@/components/PipelineCard';
-import { StatusBadge } from '@/components/ui/badge';
-import { formatDuration, timeAgo } from '@/lib/utils';
+import { PipelineDialog, type PipelineFormData } from '@/components/PipelineDialog';
+import { OnboardingDialog } from '@/components/OnboardingDialog';
+import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-import { Loader2, Cpu } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
+import type { PipelineListItem } from '@shared/api';
 
 export const Route = createFileRoute('/')({
-  component: Dashboard,
+  component: PipelinesView,
 });
 
-function Dashboard() {
+function PipelinesView() {
   const navigate = useNavigate();
-  const { data: pipelines, isLoading: plLoading } = useQuery(pipelinesQuery);
-  const { data: recentBuilds } = useQuery(buildsQuery({ limit: 8 }));
+  const queryClient = useQueryClient();
+  const { data: pipelines, isLoading } = useQuery(pipelinesQuery);
+  const { data: configData } = useQuery(configQuery);
   const runPipeline = useRunPipeline();
+  const createPipeline = useCreatePipeline();
+  const updatePipeline = useUpdatePipeline();
+  const deletePipeline = useDeletePipeline();
+  const saveConfig = useSaveConfig();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<PipelineListItem | null>(null);
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
+
+  // Show onboarding when config has no roots
+  const needsOnboarding = configData && Object.keys(configData.config.roots).length === 0;
 
   async function handleRun(name: string) {
     setRunningPipelines((s) => new Set(s).add(name));
     try {
       const { jobId } = await runPipeline.mutateAsync(name);
-      void navigate({ to: '/pipelines/$name', params: { name }, search: { jobId } });
+      void navigate({ to: '/builds/$jobId', params: { jobId } });
     } finally {
-      setRunningPipelines((s) => { const n = new Set(s); n.delete(name); return n; });
+      setRunningPipelines((s) => {
+        const n = new Set(s);
+        n.delete(name);
+        return n;
+      });
     }
+  }
+
+  function handleEdit(pipeline: PipelineListItem) {
+    setEditTarget(pipeline);
+    setDialogOpen(true);
+  }
+
+  async function handleDelete(name: string) {
+    await deletePipeline.mutateAsync(name);
+    void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+  }
+
+  async function handleSave(data: PipelineFormData) {
+    const payload = {
+      description: data.description || undefined,
+      failFast: data.failFast,
+      steps: data.steps.map((s) => ({
+        path: s.path,
+        label: s.label || undefined,
+        goals: s.goals.split(/\s+/).filter(Boolean),
+        flags: s.flags.split(/\s+/).filter(Boolean),
+        javaVersion: s.javaVersion || undefined,
+        buildSystem: s.buildSystem as 'maven' | 'npm',
+      })),
+    };
+
+    if (editTarget) {
+      await updatePipeline.mutateAsync({ name: data.name, pipeline: payload });
+    } else {
+      await createPipeline.mutateAsync({ name: data.name, pipeline: payload });
+    }
+
+    void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+    setEditTarget(null);
+  }
+
+  async function handleOnboardingComplete(config: {
+    roots: Record<string, string>;
+    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
+    jdkRegistry: Record<string, string>;
+  }) {
+    await saveConfig.mutateAsync(config);
+    void queryClient.invalidateQueries({ queryKey: ['config'] });
+    void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
   }
 
   return (
     <div className="p-6 flex flex-col gap-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Cpu size={20} className="text-primary" />
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">GFOS Build</h1>
-            <p className="text-xs text-muted-foreground">Build orchestration dashboard</p>
-          </div>
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">Pipelines</h1>
+          <p className="text-xs text-muted-foreground">
+            {pipelines?.length ?? 0} pipeline{(pipelines?.length ?? 0) !== 1 ? 's' : ''} configured
+          </p>
         </div>
+        <Button
+          size="sm"
+          onClick={() => {
+            setEditTarget(null);
+            setDialogOpen(true);
+          }}
+        >
+          <Plus size={14} /> Create pipeline
+        </Button>
       </div>
 
-      {/* Pipelines section */}
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Pipelines</h2>
-        {plLoading ? (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm p-4">
-            <Loader2 size={14} className="animate-spin" />
-            <span>Loading pipelines…</span>
-          </div>
-        ) : !pipelines?.length ? (
-          <p className="text-sm text-muted-foreground italic p-4 border border-border rounded-lg">
-            No pipelines configured. Edit your config file to add pipelines.
-          </p>
-        ) : (
-          <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
-            {pipelines.map((p) => (
-              <PipelineCard
-                key={p.name}
-                pipeline={p}
-                onRun={handleRun}
-                isRunning={runningPipelines.has(p.name)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Pipeline cards */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-sm p-4">
+          <Loader2 size={14} className="animate-spin" />
+          <span>Loading pipelines...</span>
+        </div>
+      ) : !pipelines?.length ? (
+        <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+          <p className="text-sm">No pipelines configured yet.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setEditTarget(null);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus size={14} /> Create your first pipeline
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+          {pipelines.map((p) => (
+            <PipelineCard
+              key={p.name}
+              pipeline={p}
+              onRun={handleRun}
+              onEdit={() => handleEdit(p)}
+              onDelete={() => void handleDelete(p.name)}
+              isRunning={runningPipelines.has(p.name)}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Recent builds */}
-      {recentBuilds && recentBuilds.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Recent builds</h2>
-          <div className="rounded-lg border border-border overflow-hidden">
-            <table className="w-full text-xs">
-              <thead className="bg-card text-muted-foreground border-b border-border">
-                <tr>
-                  <th className="text-left px-4 py-2 font-medium">Project</th>
-                  <th className="text-left px-4 py-2 font-medium">Pipeline</th>
-                  <th className="text-left px-4 py-2 font-medium">Duration</th>
-                  <th className="text-left px-4 py-2 font-medium">Status</th>
-                  <th className="text-right px-4 py-2 font-medium">Time</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/70">
-                {recentBuilds.map((b) => (
-                  <tr key={b.id} className="hover:bg-accent/30 transition-colors">
-                    <td className="px-4 py-2 font-mono text-foreground/80">{b.project_name}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{b.pipeline_name ?? <span className="italic">ad-hoc</span>}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{formatDuration(b.duration_ms)}</td>
-                    <td className="px-4 py-2"><StatusBadge status={b.status} /></td>
-                    <td className="px-4 py-2 text-muted-foreground/60 text-right">{timeAgo(b.started_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+      {/* Pipeline create/edit dialog */}
+      <PipelineDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        initialData={editTarget ?? undefined}
+        onSave={(data) => void handleSave(data)}
+        mode={editTarget ? 'edit' : 'create'}
+      />
+
+      {/* Onboarding dialog */}
+      {needsOnboarding && (
+        <OnboardingDialog
+          open={true}
+          onComplete={(config) => void handleOnboardingComplete(config)}
+        />
       )}
     </div>
   );

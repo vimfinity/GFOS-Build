@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { AppConfig } from '../../config/schema.js';
+import { configSchema, pipelineConfigSchema } from '../../config/schema.js';
 import type { AppDatabase } from '../../infrastructure/database.js';
 import type { CachedScanner } from '../../application/scanner.js';
 import type { BuildRunner } from '../../application/build-runner.js';
@@ -32,7 +34,7 @@ export interface ServeOptions {
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
@@ -52,9 +54,19 @@ function badRequest(message: string): Response {
 }
 
 export async function runServe(options: ServeOptions): Promise<void> {
-  const { config, db, scanner, buildRunner, pipelineRunner } = options;
+  const { db, scanner, buildRunner, pipelineRunner } = options;
+  let currentConfig = options.config;
   const activeJobs = new Map<string, ActiveJob>();
   const startTime = Date.now();
+
+  /** Write current config to disk and return the updated config object. */
+  function persistConfig(patch: Partial<AppConfig>): AppConfig {
+    const raw = JSON.parse(readFileSync(options.configPath, 'utf-8'));
+    const merged = { ...raw, ...patch };
+    writeFileSync(options.configPath, JSON.stringify(merged, null, 2) + '\n', 'utf-8');
+    currentConfig = configSchema.parse(merged);
+    return currentConfig;
+  }
 
   // Manual pub/sub replacing Bun's built-in server.publish / ws.subscribe
   const subscriptions = new Map<string, Set<WebSocket>>();
@@ -101,14 +113,14 @@ export async function runServe(options: ServeOptions): Promise<void> {
 
     // GET /api/config
     if (req.method === 'GET' && pathname === '/api/config') {
-      return json({ config, configPath: options.configPath });
+      return json({ config: currentConfig, configPath: options.configPath });
     }
 
     // GET /api/pipelines
     if (req.method === 'GET' && pathname === '/api/pipelines') {
       const lastRuns = db.getLastRunsByPipeline();
-      const pipelines = Object.entries(config.pipelines).map(([name, pipelineConfig]) => {
-        const resolved = resolvePipeline(name, pipelineConfig, config);
+      const pipelines = Object.entries(currentConfig.pipelines).map(([name, pipelineConfig]) => {
+        const resolved = resolvePipeline(name, pipelineConfig, currentConfig);
         return {
           name,
           description: resolved.description,
@@ -132,10 +144,10 @@ export async function runServe(options: ServeOptions): Promise<void> {
     if (req.method === 'GET' && pathname === '/api/scan') {
       const noCache = url.searchParams.get('noCache') === 'true';
       const scanOptions = {
-        roots: config.roots,
-        maxDepth: config.scan.maxDepth,
-        includeHidden: config.scan.includeHidden,
-        exclude: config.scan.exclude,
+        roots: currentConfig.roots,
+        maxDepth: currentConfig.scan.maxDepth,
+        includeHidden: currentConfig.scan.includeHidden,
+        exclude: currentConfig.scan.exclude,
       };
       const projects: unknown[] = [];
       for await (const event of scanner.scan(scanOptions, undefined, noCache)) {
@@ -149,10 +161,10 @@ export async function runServe(options: ServeOptions): Promise<void> {
     // POST /api/scan/refresh
     if (req.method === 'POST' && pathname === '/api/scan/refresh') {
       const scanOptions = {
-        roots: config.roots,
-        maxDepth: config.scan.maxDepth,
-        includeHidden: config.scan.includeHidden,
-        exclude: config.scan.exclude,
+        roots: currentConfig.roots,
+        maxDepth: currentConfig.scan.maxDepth,
+        includeHidden: currentConfig.scan.includeHidden,
+        exclude: currentConfig.scan.exclude,
       };
       const jobId = startJob(async function* () {
         for await (const event of scanner.scan(scanOptions, undefined, true)) {
@@ -180,13 +192,13 @@ export async function runServe(options: ServeOptions): Promise<void> {
     const pipelineRunMatch = pathname.match(/^\/api\/pipeline\/([^/]+)\/run$/);
     if (req.method === 'POST' && pipelineRunMatch) {
       const pipelineName = decodeURIComponent(pipelineRunMatch[1]!);
-      const pipelineConfig = config.pipelines[pipelineName];
+      const pipelineConfig = currentConfig.pipelines[pipelineName];
       if (!pipelineConfig) return json({ error: `Pipeline "${pipelineName}" not found` }, 404);
 
       let body: { from?: string; dryRun?: boolean } = {};
       try { body = (await req.json()) as typeof body; } catch { /* no body */ }
 
-      const pipeline = resolvePipeline(pipelineName, pipelineConfig, config);
+      const pipeline = resolvePipeline(pipelineName, pipelineConfig, currentConfig);
       let fromIndex = 0;
       if (body.from) {
         const n = parseInt(body.from, 10);
@@ -207,11 +219,11 @@ export async function runServe(options: ServeOptions): Promise<void> {
       try { body = (await req.json()) as typeof body; } catch { /* no body */ }
       if (!body.path) return badRequest('path is required');
 
-      const resolvedPath = resolveStepPath(body.path, config.roots);
-      const goals = body.goals ?? config.maven.defaultGoals;
-      const flags = body.flags ?? config.maven.defaultFlags;
-      const mavenExecutable = body.maven ?? config.maven.executable;
-      const javaHome = resolveJavaHome(config, body.java);
+      const resolvedPath = resolveStepPath(body.path, currentConfig.roots);
+      const goals = body.goals ?? currentConfig.maven.defaultGoals;
+      const flags = body.flags ?? currentConfig.maven.defaultFlags;
+      const mavenExecutable = body.maven ?? currentConfig.maven.executable;
+      const javaHome = resolveJavaHome(currentConfig, body.java);
 
       const step: BuildStep = {
         path: resolvedPath,
@@ -246,6 +258,51 @@ export async function runServe(options: ServeOptions): Promise<void> {
     // GET /api/jobs (list active)
     if (req.method === 'GET' && pathname === '/api/jobs') {
       return json({ jobs: [...activeJobs.keys()] });
+    }
+
+    // ── Pipeline CRUD ──────────────────────────────────────────────
+
+    // POST /api/pipelines — create a new pipeline
+    if (req.method === 'POST' && pathname === '/api/pipelines') {
+      const body = (await req.json()) as { name?: string; pipeline?: unknown };
+      if (!body.name) return badRequest('name is required');
+      if (currentConfig.pipelines[body.name]) return json({ error: 'Pipeline already exists' }, 409);
+      const parsed = pipelineConfigSchema.safeParse(body.pipeline);
+      if (!parsed.success) return badRequest(parsed.error.errors.map((e) => e.message).join(', '));
+      const newPipelines = { ...currentConfig.pipelines, [body.name]: parsed.data };
+      persistConfig({ pipelines: newPipelines });
+      return json({ ok: true, name: body.name }, 201);
+    }
+
+    // PUT /api/pipelines/:name — update an existing pipeline
+    const pipelineUpdateMatch = pathname.match(/^\/api\/pipelines\/([^/]+)$/);
+    if (req.method === 'PUT' && pipelineUpdateMatch) {
+      const name = decodeURIComponent(pipelineUpdateMatch[1]!);
+      if (!currentConfig.pipelines[name]) return json({ error: `Pipeline "${name}" not found` }, 404);
+      const body = (await req.json()) as { pipeline?: unknown };
+      const parsed = pipelineConfigSchema.safeParse(body.pipeline);
+      if (!parsed.success) return badRequest(parsed.error.errors.map((e) => e.message).join(', '));
+      const newPipelines = { ...currentConfig.pipelines, [name]: parsed.data };
+      persistConfig({ pipelines: newPipelines });
+      return json({ ok: true, name });
+    }
+
+    // DELETE /api/pipelines/:name — delete a pipeline
+    const pipelineDeleteMatch = pathname.match(/^\/api\/pipelines\/([^/]+)$/);
+    if (req.method === 'DELETE' && pipelineDeleteMatch) {
+      const name = decodeURIComponent(pipelineDeleteMatch[1]!);
+      if (!currentConfig.pipelines[name]) return json({ error: `Pipeline "${name}" not found` }, 404);
+      const newPipelines = { ...currentConfig.pipelines };
+      delete newPipelines[name];
+      persistConfig({ pipelines: newPipelines });
+      return json({ ok: true });
+    }
+
+    // POST /api/config — save partial config (e.g. roots from onboarding)
+    if (req.method === 'POST' && pathname === '/api/config') {
+      const body = (await req.json()) as Partial<AppConfig>;
+      persistConfig(body);
+      return json({ ok: true });
     }
 
     return notFound();

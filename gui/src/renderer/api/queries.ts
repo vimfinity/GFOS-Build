@@ -1,11 +1,17 @@
 import { queryOptions, useMutation } from '@tanstack/react-query';
-import { apiGet, apiPost, apiDelete } from './client';
-import type { HealthResponse, PipelineListItem, BuildRunRowApi, BuildStatsApi, StartJobResponse } from '@shared/api';
+import { apiGet, apiPost, apiPut, apiDelete } from './client';
+import type { HealthResponse, PipelineListItem, BuildRunRowApi, BuildStatsApi, StartJobResponse, ConfigResponse } from '@shared/api';
 
 export const healthQuery = queryOptions({
   queryKey: ['health'],
   queryFn: () => apiGet<HealthResponse>('/api/health'),
   refetchInterval: 30_000,
+});
+
+export const configQuery = queryOptions({
+  queryKey: ['config'],
+  queryFn: () => apiGet<ConfigResponse>('/api/config'),
+  staleTime: 10_000,
 });
 
 export const pipelinesQuery = queryOptions({
@@ -44,5 +50,32 @@ export function useRunPipeline() {
 export function useCancelJob() {
   return useMutation({
     mutationFn: (jobId: string) => apiDelete(`/api/jobs/${jobId}`),
+  });
+}
+
+export function useCreatePipeline() {
+  return useMutation({
+    mutationFn: (data: { name: string; pipeline: unknown }) =>
+      apiPost<{ ok: boolean; name: string }>('/api/pipelines', data),
+  });
+}
+
+export function useUpdatePipeline() {
+  return useMutation({
+    mutationFn: (data: { name: string; pipeline: unknown }) =>
+      apiPut<{ ok: boolean; name: string }>(`/api/pipelines/${encodeURIComponent(data.name)}`, { pipeline: data.pipeline }),
+  });
+}
+
+export function useDeletePipeline() {
+  return useMutation({
+    mutationFn: (name: string) => apiDelete(`/api/pipelines/${encodeURIComponent(name)}`),
+  });
+}
+
+export function useSaveConfig() {
+  return useMutation({
+    mutationFn: (patch: Record<string, unknown>) =>
+      apiPost<{ ok: boolean }>('/api/config', patch),
   });
 }

@@ -6,6 +6,19 @@ export interface HealthResponse {
   platform: string;
 }
 
+/** GET /api/config */
+export interface ConfigResponse {
+  config: {
+    roots: Record<string, string>;
+    pipelines: Record<string, unknown>;
+    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
+    npm: { executable: string; defaultBuildScript: string; defaultInstallArgs: string[] };
+    jdkRegistry: Record<string, string>;
+    scan: { maxDepth: number; includeHidden: boolean; exclude: string[] };
+  };
+  configPath: string;
+}
+
 /** A single step as returned by GET /api/pipelines */
 export interface PipelineStep {
   label: string;

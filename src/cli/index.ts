@@ -2,7 +2,7 @@
 
 import { parseArgs } from './args.js';
 import { loadConfig } from '../config/loader.js';
-import { getDbPath } from '../config/paths.js';
+import { getDbPath, getConfigPath } from '../config/paths.js';
 import { NodeFileSystem } from '../infrastructure/file-system.js';
 import { NodeProcessRunner } from '../infrastructure/process-runner.js';
 import { AppDatabase } from '../infrastructure/database.js';
@@ -18,7 +18,10 @@ import { runScan } from './commands/scan.js';
 import { runBuild } from './commands/build.js';
 import { runPipelineRun } from './commands/pipeline-run.js';
 import { runPipelineList } from './commands/pipeline-list.js';
-import { runServe } from './commands/serve.js';
+import { runServe } from './commands/serve.js';
+import { configSchema } from '../config/schema.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import nodePath from 'node:path';
 
 const VERSION = '1.0.0';
 
@@ -77,6 +80,38 @@ async function main(): Promise<void> {
 
   // All other commands require a config
   const configResult = loadConfig(global.config);
+
+  // Serve can start without a config — creates defaults so the GUI onboarding works
+  if (command.name === 'serve') {
+    let config: import('../config/schema.js').AppConfig;
+    let configPath: string;
+
+    if (configResult.found) {
+      config = configResult.config;
+      configPath = configResult.configPath;
+    } else {
+      configPath = getConfigPath();
+      mkdirSync(nodePath.dirname(configPath), { recursive: true });
+      config = configSchema.parse({});
+      writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    }
+
+    const fileSystem = new NodeFileSystem();
+    const processRunner = new NodeProcessRunner();
+    const db = new AppDatabase(getDbPath());
+    try {
+      const scanner = new CachedScanner(new RepositoryScanner(fileSystem), db);
+      const executor = new BuildExecutor(processRunner);
+      const npmExecutor = new NpmExecutor(processRunner);
+      const buildRunner = new BuildRunner(executor, npmExecutor, fileSystem);
+      const pipelineRunner = new PipelineRunner(buildRunner, db);
+      await runServe({ port: command.port, config, configPath, db, scanner, buildRunner, pipelineRunner, fs: fileSystem });
+    } finally {
+      db.close();
+    }
+    return;
+  }
+
   if (!configResult.found) {
     console.log('No config file found.\n');
     console.log('Run "gfos-build config init" to create one.');
@@ -142,20 +177,6 @@ async function main(): Promise<void> {
       case 'pipeline:list':
         runPipelineList(config, global.json);
         break;
-
-      case 'serve': {
-        await runServe({
-          port: command.port,
-          config,
-          configPath,
-          db,
-          scanner: scanner,
-          buildRunner,
-          pipelineRunner,
-          fs: fileSystem,
-        });
-        break;
-      }
     }
   } finally {
     db.close();
