@@ -33,6 +33,7 @@
     "binary:build:win": "bun build --compile --target=bun-windows-x64-modern src/cli/index.ts --outfile release/gfos-build.exe"
   },
   "dependencies": {
+    "@gfos-build/shared": "workspace:*",
     "better-sqlite3": "^11.7.0",
     "ws": "^8.18.0",
     "zod": "^3.24.0"

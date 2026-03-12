@@ -1,17 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { IPC, type ElectronBridge } from '@gfos-build/shared';
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  getSidecarUrl: (): Promise<string> =>
-    ipcRenderer.invoke('get-sidecar-url') as Promise<string>,
-  openDirectory: (): Promise<string | null> =>
-    ipcRenderer.invoke('open-directory') as Promise<string | null>,
-});
+const bridge: ElectronBridge = {
+  getSidecarUrl: () => ipcRenderer.invoke(IPC.GET_SIDECAR_URL) as Promise<string>,
+  openDirectory: () => ipcRenderer.invoke(IPC.OPEN_DIRECTORY) as Promise<string | null>,
+};
 
-declare global {
-  interface Window {
-    electronAPI: {
-      getSidecarUrl: () => Promise<string>;
-      openDirectory: () => Promise<string | null>;
-    };
-  }
-}
+contextBridge.exposeInMainWorld('electronAPI', bridge);

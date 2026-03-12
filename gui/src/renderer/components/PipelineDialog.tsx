@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen } from 'lucide-react';
 import type { PipelineStep } from '@shared/api';
+import { pickDirectory } from '@/api/bridge';
 
 interface StepFormData {
   label: string;
@@ -85,10 +86,8 @@ function StepCard({
   onMoveDown: () => void;
 }) {
   async function browsePath() {
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      const dir = await window.electronAPI.openDirectory();
-      if (dir) onUpdate('path', dir);
-    }
+    const dir = await pickDirectory();
+    if (dir) onUpdate('path', dir);
   }
 
   return (
@@ -158,8 +157,7 @@ function StepCard({
             onChange={(e) => onUpdate('path', e.target.value)}
           />
         </div>
-        {typeof window !== 'undefined' && window.electronAPI && (
-          <Button
+        <Button
             type="button"
             variant="outline"
             size="icon"
@@ -169,7 +167,6 @@ function StepCard({
           >
             <FolderOpen size={14} />
           </Button>
-        )}
       </div>
 
       {/* Row 3: Goals + Flags */}

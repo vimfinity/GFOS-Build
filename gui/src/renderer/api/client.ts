@@ -1,3 +1,5 @@
+import { SIDECAR_FALLBACK_PORT } from '@shared/sidecar';
+
 let _sidecarUrl: string | null = null;
 
 export async function getSidecarUrl(): Promise<string> {
@@ -8,7 +10,7 @@ export async function getSidecarUrl(): Promise<string> {
     return url;
   }
   // fallback for dev without Electron
-  _sidecarUrl = 'http://localhost:3847';
+  _sidecarUrl = `http://localhost:${SIDECAR_FALLBACK_PORT}`;
   return _sidecarUrl;
 }
 

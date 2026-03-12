@@ -75,6 +75,13 @@ export type ScanEvent =
   | { type: 'repo:found'; project: Project }
   | { type: 'scan:done'; projects: Project[]; durationMs: number; fromCache: boolean };
 
+export interface ScanOptions {
+  roots: Record<string, string>;
+  maxDepth: number;
+  includeHidden: boolean;
+  exclude: string[];
+}
+
 export type BuildEvent =
   | { type: 'step:start'; step: BuildStep; index: number; total: number; pipelineName?: string }
   | { type: 'step:output'; line: string; stream: 'stdout' | 'stderr' }

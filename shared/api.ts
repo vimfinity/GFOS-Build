@@ -1,4 +1,5 @@
 // REST API response types — must stay in sync with src/cli/commands/serve.ts
+import type { Project, BuildEvent, ScanEvent } from './types.js';
 
 export interface HealthResponse {
   version: string;
@@ -78,7 +79,7 @@ export interface StartJobResponse {
 
 /** GET /api/scan */
 export interface ScanResponse {
-  projects: import('./types').Project[];
+  projects: Project[];
   durationMs: number;
   fromCache: boolean;
 }
@@ -87,6 +88,6 @@ export interface ScanResponse {
 export interface WsEnvelope {
   type: 'event' | 'done' | 'error';
   jobId: string;
-  event?: import('./types').BuildEvent | import('./types').ScanEvent;
+  event?: BuildEvent | ScanEvent;
   message?: string;
 }

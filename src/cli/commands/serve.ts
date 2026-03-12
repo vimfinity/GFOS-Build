@@ -14,6 +14,7 @@ import type { FileSystem } from '../../infrastructure/file-system.js';
 import { resolvePipeline, resolveStepPath } from '../../config/resolver.js';
 import { resolveJavaHome } from '../../core/jdk-resolver.js';
 import type { BuildStep } from '../../core/types.js';
+import { SIDECAR_READY_PREFIX } from '@gfos-build/shared';
 
 const VERSION = '2.0.0';
 
@@ -388,7 +389,7 @@ export async function runServe(options: ServeOptions): Promise<void> {
   const addr = httpServer.address() as AddressInfo;
 
   // Signal readiness -- Electron reads this line to discover the port
-  process.stdout.write(`READY:${addr.port}\n`);
+  process.stdout.write(`${SIDECAR_READY_PREFIX}${addr.port}\n`);
 
   // Keep running until parent kills us
   await new Promise<void>((resolve) => {

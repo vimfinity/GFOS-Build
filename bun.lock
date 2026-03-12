@@ -5,6 +5,7 @@
     "": {
       "name": "gfos-build",
       "dependencies": {
+        "@gfos-build/shared": "workspace:*",
         "better-sqlite3": "^11.7.0",
         "ws": "^8.18.0",
         "zod": "^3.24.0",

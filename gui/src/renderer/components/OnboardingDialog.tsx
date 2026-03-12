@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { FolderOpen, Plus, Trash2, ArrowRight, ArrowLeft, Check, Wrench } from 'lucide-react';
+import { pickDirectory } from '@/api/bridge';
 
 interface OnboardingDialogProps {
   open: boolean;
@@ -49,10 +50,8 @@ export function OnboardingDialog({ open, onComplete }: OnboardingDialogProps) {
   }
 
   async function browseDirectory(callback: (dir: string) => void) {
-    if (window.electronAPI?.openDirectory) {
-      const dir = await window.electronAPI.openDirectory();
-      if (dir) callback(dir);
-    }
+    const dir = await pickDirectory();
+    if (dir) callback(dir);
   }
 
   function handleFinish() {

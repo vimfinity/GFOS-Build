@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import { spawnSidecar, type SidecarHandle } from './sidecar';
+import { IPC, SIDECAR_FALLBACK_PORT } from '@gfos-build/shared';
 
 let sidecar: SidecarHandle | null = null;
 
@@ -19,9 +20,9 @@ function createWindow(sidecarUrl: string): void {
     },
   });
 
-  ipcMain.handle('get-sidecar-url', () => sidecarUrl);
+  ipcMain.handle(IPC.GET_SIDECAR_URL, () => sidecarUrl);
 
-  ipcMain.handle('open-directory', async () => {
+  ipcMain.handle(IPC.OPEN_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory'],
       title: 'Select workspace root',
@@ -44,7 +45,7 @@ app.whenReady().then(async () => {
     console.error('Failed to start sidecar:', err);
     // In dev, create window anyway so we can see error
     if (process.env['NODE_ENV'] === 'development') {
-      createWindow('http://localhost:3847');
+      createWindow(`http://localhost:${SIDECAR_FALLBACK_PORT}`);
     } else {
       app.quit();
     }

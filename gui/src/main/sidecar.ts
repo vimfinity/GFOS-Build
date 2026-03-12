@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import readline from 'node:readline';
 import { app } from 'electron';
+import { SIDECAR_READY_PREFIX } from '@gfos-build/shared';
 
 export interface SidecarHandle {
   port: number;
@@ -51,11 +52,12 @@ export async function spawnSidecar(): Promise<SidecarHandle> {
     }, 15_000);
 
     rl.on('line', (line) => {
-      const match = /^READY:(\d+)$/.exec(line.trim());
-      if (match) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith(SIDECAR_READY_PREFIX)) {
+        const port = parseInt(trimmed.slice(SIDECAR_READY_PREFIX.length), 10);
         clearTimeout(timeout);
         rl.close();
-        resolve({ port: parseInt(match[1]!, 10), kill: () => proc.kill() });
+        resolve({ port, kill: () => proc.kill() });
       }
     });
 
