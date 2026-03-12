@@ -130,7 +130,7 @@ async function main(): Promise<void> {
   const { config, configPath } = configResult;
 
   if (command.name === 'config:show') {
-    runConfigShow(config, configPath);
+    runConfigShow(config, configPath, global.json);
     return;
   }
 

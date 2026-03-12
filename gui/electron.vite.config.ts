@@ -6,7 +6,7 @@ import { TanStackRouterVite } from '@tanstack/router-plugin/vite';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['@gfos-build/shared'] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['@gfos-build/shared', 'zod'] })],
     resolve: {
       alias: {
         '@server': resolve(__dirname, '../src'),

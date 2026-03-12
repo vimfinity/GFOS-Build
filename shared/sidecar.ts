@@ -1,5 +1,5 @@
-// Sidecar process protocol constants shared between the server startup code
-// (src/cli/commands/serve.ts) and the Electron sidecar launcher (gui/src/main/sidecar.ts).
+// Local API protocol constants shared between the CLI serve command
+// and the Electron desktop app.
 
 // The server writes this prefix followed by the port number to stdout to signal
 // that it is ready. Example: "READY:54321"

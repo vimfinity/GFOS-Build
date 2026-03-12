@@ -42,21 +42,32 @@ No Java runtime, Node.js, or other dependencies required — the app is fully se
 bun install
 ```
 
+If you pulled an older clone, run `bun install` again after updating. Bun needs to trust Electron's install script so the desktop binary is downloaded correctly.
+
 ### Run in development mode
 
 ```bash
-bun run dev:gui        # Electron app with hot reload
+bun run dev:desktop    # Electron app with hot reload
+```
+
+### Start the packaged desktop app locally
+
+```bash
+bun run start:desktop
 ```
 
 ### Build the distributable
 
 ```bash
-bun run build:server         # bundle server with tsdown
-bun run binary:build:win     # compile Bun CLI binary for Windows
-bun run check:gui            # typecheck + Electron package
+bun run build:desktop        # build Electron main/preload/renderer
+bun run check:desktop        # typecheck + desktop build
+bun run dist:desktop:win     # create the Windows desktop release
 ```
 
-The packaged app will be in `release/gui/GFOS Build-win32-x64/`.
+The release outputs will be in `release/desktop/`:
+
+- `release/desktop/win-unpacked/GFOS Build-win32-x64/`
+- `release/desktop/GFOS-Build-win32-x64.zip`
 
 ### Run tests
 
@@ -77,14 +88,14 @@ src/                         # Bun server (CLI + HTTP API)
 shared/                      # shared TypeScript types (api, types)
 
 gui/
-  src/main/                  # Electron main process (spawns server)
+  src/main/                  # Electron main process (hosts the local API server)
   src/renderer/              # React + TanStack Router + Tailwind
     routes/                  # builds/, pipelines/, projects/, settings/, stats/
     components/              # BuildOutput, PipelineDialog, UI primitives
     api/                     # React Query hooks, WebSocket event cache
 ```
 
-The server runs as a bundled Bun binary inside the packaged Electron app. The renderer communicates via a local HTTP/WebSocket API on a random port.
+The renderer communicates with a local HTTP/WebSocket API hosted inside the Electron main process on a random port.
 
 ## Configuration
 

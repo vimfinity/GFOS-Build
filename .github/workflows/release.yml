@@ -30,25 +30,8 @@ jobs:
         run: bun install
         # note: gui/package.json postinstall runs electron-rebuild automatically
 
-      - name: Build server bundle
-        run: bun run build:server
-
-      - name: Compile server binary (Windows x64)
-        run: bun run binary:build:win
-
-      - name: Build Electron renderer + main
-        working-directory: gui
-        run: bun run build
-
-      - name: Package Electron app
-        run: node gui/scripts/package-win.mjs
-
-      - name: Create ZIP archive
-        shell: pwsh
-        run: |
-          Compress-Archive `
-            -Path "release\gui\GFOS Build-win32-x64" `
-            -DestinationPath "release\GFOS-Build-${{ github.ref_name }}-win32-x64.zip"
+      - name: Build Windows desktop release
+        run: bun run dist:desktop:win
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -56,6 +39,6 @@ jobs:
           name: "GFOS Build ${{ github.ref_name }}"
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           generate_release_notes: true
-          files: release/GFOS-Build-${{ github.ref_name }}-win32-x64.zip
+          files: release/desktop/GFOS-Build-win32-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
