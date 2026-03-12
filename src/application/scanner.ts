@@ -1,14 +1,14 @@
 import * as crypto from 'node:crypto';
 import type { RepositoryScanner, ScanOptions } from '../core/repository-scanner.js';
 import type { ScanEvent } from '../core/types.js';
-import type { AppDatabase } from '../infrastructure/database.js';
+import type { IDatabase } from '../infrastructure/database.js';
 
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export class CachedScanner {
   constructor(
     private readonly scanner: RepositoryScanner,
-    private readonly db: AppDatabase,
+    private readonly db: IDatabase,
   ) {}
 
   async *scan(

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { AppConfig } from '../../config/schema.js';
 import type { BuildRunner } from '../../application/build-runner.js';
-import type { AppDatabase } from '../../infrastructure/database.js';
+import type { IDatabase } from '../../infrastructure/database.js';
 import type { FileSystem } from '../../infrastructure/file-system.js';
 import { resolveStepPath } from '../../config/resolver.js';
 import { resolveJavaHome } from '../../core/jdk-resolver.js';
@@ -20,7 +20,7 @@ export interface BuildCommandOptions {
 
 export async function runBuild(
   buildRunner: BuildRunner,
-  db: AppDatabase,
+  db: IDatabase,
   fs: FileSystem,
   config: AppConfig,
   options: BuildCommandOptions,

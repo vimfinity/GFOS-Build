@@ -1,11 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
-import { spawnSidecar, type SidecarHandle } from './sidecar';
-import { IPC, SIDECAR_FALLBACK_PORT } from '@gfos-build/shared';
+import { IPC } from '@gfos-build/shared';
+import { startServer, type ServerHandle } from './server';
 
-let sidecar: SidecarHandle | null = null;
+let server: ServerHandle | null = null;
 
-function createWindow(sidecarUrl: string): void {
+function createWindow(serverUrl: string): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -20,7 +20,7 @@ function createWindow(sidecarUrl: string): void {
     },
   });
 
-  ipcMain.handle(IPC.GET_SIDECAR_URL, () => sidecarUrl);
+  ipcMain.handle(IPC.GET_SIDECAR_URL, () => serverUrl);
 
   ipcMain.handle(IPC.OPEN_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(win, {
@@ -39,28 +39,25 @@ function createWindow(sidecarUrl: string): void {
 
 app.whenReady().then(async () => {
   try {
-    sidecar = await spawnSidecar();
-    createWindow(`http://localhost:${sidecar.port}`);
+    server = await startServer();
+    createWindow(`http://localhost:${server.port}`);
   } catch (err) {
-    console.error('Failed to start sidecar:', err);
-    // In dev, create window anyway so we can see error
-    if (process.env['NODE_ENV'] === 'development') {
-      createWindow(`http://localhost:${SIDECAR_FALLBACK_PORT}`);
-    } else {
-      app.quit();
-    }
+    console.error('Failed to start server:', err);
+    app.quit();
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0 && sidecar) {
-      createWindow(`http://localhost:${sidecar.port}`);
+    if (BrowserWindow.getAllWindows().length === 0 && server) {
+      createWindow(`http://localhost:${server.port}`);
     }
   });
 });
 
 app.on('window-all-closed', () => {
-  sidecar?.kill();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('quit', () => sidecar?.kill());
+app.on('quit', () => {
+  server?.close();
+  server?.db.close();
+});

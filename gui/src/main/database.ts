@@ -1,7 +1,14 @@
-import { Database } from 'bun:sqlite';
+import Database from 'better-sqlite3';
 import path from 'node:path';
 import { mkdirSync } from 'node:fs';
-import type { Project } from '../core/types.js';
+import type {
+  IDatabase,
+  StartBuildRunParams,
+  FinishBuildRunParams,
+  BuildRunRow,
+  BuildStats,
+} from '@server/infrastructure/database';
+import type { Project } from '@gfos-build/shared';
 
 const SCHEMA_VERSION = 1;
 
@@ -36,71 +43,14 @@ CREATE TABLE IF NOT EXISTS scan_cache (
 );
 `;
 
-export interface StartBuildRunParams {
-  projectPath: string;
-  projectName: string;
-  buildSystem: string;
-  command: string;
-  javaHome?: string;
-  pipelineName?: string;
-  stepIndex?: number;
-}
-
-export interface FinishBuildRunParams {
-  id: number;
-  exitCode: number;
-  durationMs: number;
-  status: 'success' | 'failed';
-}
-
-export interface BuildRunRow {
-  id: number;
-  project_path: string;
-  project_name: string;
-  build_system: string;
-  command: string;
-  java_home: string | null;
-  pipeline_name: string | null;
-  step_index: number | null;
-  started_at: string;
-  finished_at: string | null;
-  duration_ms: number | null;
-  exit_code: number | null;
-  status: string;
-}
-
-export interface BuildStats {
-  totalBuilds: number;
-  successCount: number;
-  failureCount: number;
-  avgDurationMs: number | null;
-  byPipeline: Array<{ name: string; runs: number; successes: number; avgMs: number | null }>;
-  byProject: Array<{ path: string; name: string; runs: number; successes: number; avgMs: number | null }>;
-  slowestSteps: Array<{ label: string; path: string; avgMs: number; runs: number }>;
-}
-
-/** Shared interface — implemented by AppDatabase (bun:sqlite) and NodeDatabase (better-sqlite3). */
-export interface IDatabase {
-  startBuildRun(params: StartBuildRunParams): number;
-  finishBuildRun(params: FinishBuildRunParams): void;
-  getPipelineState(pipelineName: string): { last_failed_step: number | null } | null;
-  upsertPipelineState(pipelineName: string, lastFailedStep: number | null): void;
-  getScanCache(cacheKey: string, ttlMs: number): Project[] | null;
-  setScanCache(cacheKey: string, projects: Project[]): void;
-  getRecentBuilds(opts: { limit: number; pipeline?: string; project?: string }): BuildRunRow[];
-  getBuildStats(): BuildStats;
-  getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null }>;
-  close(): void;
-}
-
-/** CLI implementation — uses bun:sqlite (built into the Bun runtime, no native compilation). */
-export class AppDatabase implements IDatabase {
-  private readonly db: Database;
+/** Electron/Node.js implementation — uses better-sqlite3 compiled for the Electron ABI via postinstall. */
+export class NodeDatabase implements IDatabase {
+  private readonly db: InstanceType<typeof Database>;
 
   constructor(dbPath: string) {
     mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
-    this.db.exec('PRAGMA journal_mode = WAL');
+    this.db.pragma('journal_mode = WAL');
     this.migrate();
   }
 

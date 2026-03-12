@@ -2,21 +2,14 @@
   "appId": "de.gfos.build",
   "productName": "GFOS Build",
   "asar": true,
+  "asarUnpack": [
+    "**/node_modules/better-sqlite3/**/*"
+  ],
   "directories": {
     "output": "../release/gui"
   },
   "files": [
     "out/**/*"
-  ],
-  "extraResources": [
-    {
-      "from": "../dist/server",
-      "to": "server"
-    },
-    {
-      "from": "../node_modules/better-sqlite3",
-      "to": "node_modules/better-sqlite3"
-    }
   ],
   "win": {
     "target": [

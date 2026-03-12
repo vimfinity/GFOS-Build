@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { AppConfig } from '../../config/schema.js';
 import { configSchema, pipelineConfigSchema } from '../../config/schema.js';
-import type { AppDatabase } from '../../infrastructure/database.js';
+import type { IDatabase } from '../../infrastructure/database.js';
 import type { CachedScanner } from '../../application/scanner.js';
 import type { BuildRunner } from '../../application/build-runner.js';
 import type { PipelineRunner } from '../../application/pipeline-runner.js';
@@ -14,7 +14,6 @@ import type { FileSystem } from '../../infrastructure/file-system.js';
 import { resolvePipeline, resolveStepPath } from '../../config/resolver.js';
 import { resolveJavaHome } from '../../core/jdk-resolver.js';
 import type { BuildStep } from '../../core/types.js';
-import { SIDECAR_READY_PREFIX } from '@gfos-build/shared';
 
 const VERSION = '2.0.0';
 
@@ -26,7 +25,7 @@ export interface ServeOptions {
   port: number;
   config: AppConfig;
   configPath: string;
-  db: AppDatabase;
+  db: IDatabase;
   scanner: CachedScanner;
   buildRunner: BuildRunner;
   pipelineRunner: PipelineRunner;
@@ -54,7 +53,7 @@ function badRequest(message: string): Response {
   return json({ error: message }, 400);
 }
 
-export async function runServe(options: ServeOptions): Promise<void> {
+export async function runServe(options: ServeOptions): Promise<{ port: number; close: () => void }> {
   const { db, scanner, buildRunner, pipelineRunner } = options;
   let currentConfig = options.config;
   const activeJobs = new Map<string, ActiveJob>();
@@ -387,13 +386,8 @@ export async function runServe(options: ServeOptions): Promise<void> {
   });
 
   const addr = httpServer.address() as AddressInfo;
-
-  // Signal readiness -- Electron reads this line to discover the port
-  process.stdout.write(`${SIDECAR_READY_PREFIX}${addr.port}\n`);
-
-  // Keep running until parent kills us
-  await new Promise<void>((resolve) => {
-    process.on('SIGINT', () => { httpServer.close(); wss.close(); resolve(); });
-    process.on('SIGTERM', () => { httpServer.close(); wss.close(); resolve(); });
-  });
+  return {
+    port: addr.port,
+    close: () => { httpServer.close(); wss.close(); },
+  };
 }

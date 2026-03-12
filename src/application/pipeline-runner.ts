@@ -1,11 +1,11 @@
 import type { BuildRunner } from './build-runner.js';
-import type { AppDatabase } from '../infrastructure/database.js';
+import type { IDatabase } from '../infrastructure/database.js';
 import type { Pipeline, BuildEvent, BuildStepResult, RunResult } from '../core/types.js';
 
 export class PipelineRunner {
   constructor(
     private readonly buildRunner: BuildRunner,
-    private readonly db: AppDatabase,
+    private readonly db: IDatabase,
   ) {}
 
   async *run(pipeline: Pipeline, fromIndex = 0): AsyncGenerator<BuildEvent> {

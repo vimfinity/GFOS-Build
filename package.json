@@ -13,8 +13,7 @@
   "scripts": {
     "dev": "bun run src/cli/index.ts",
     "dev:gui": "cd gui && bun run dev",
-    "rebuild:native": "cd gui && bun run rebuild:native",
-    "build": "tsc -p tsconfig.json",
+    "rebuild:native": "cd gui && bun run rebuild:native",    "build": "tsc -p tsconfig.json",
     "build:server": "tsdown",
     "build:gui": "bun run build:server && bun run binary:build:win && cd gui && bun run package",
     "start": "node dist/cli/index.js",
@@ -34,13 +33,12 @@
   },
   "dependencies": {
     "@gfos-build/shared": "workspace:*",
-    "better-sqlite3": "^11.7.0",
     "ws": "^8.18.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
-    "@types/better-sqlite3": "^7.6.12",
+    "@types/bun": "latest",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
     "eslint": "^9.18.0",

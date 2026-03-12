@@ -20,6 +20,7 @@ import { runPipelineRun } from './commands/pipeline-run.js';
 import { runPipelineList } from './commands/pipeline-list.js';
 import { runServe } from './commands/serve.js';
 import { configSchema } from '../config/schema.js';
+import { SIDECAR_READY_PREFIX } from '@gfos-build/shared';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import nodePath from 'node:path';
 
@@ -99,14 +100,21 @@ async function main(): Promise<void> {
     const fileSystem = new NodeFileSystem();
     const processRunner = new NodeProcessRunner();
     const db = new AppDatabase(getDbPath());
+    let server: { port: number; close: () => void } | null = null;
     try {
       const scanner = new CachedScanner(new RepositoryScanner(fileSystem), db);
       const executor = new BuildExecutor(processRunner);
       const npmExecutor = new NpmExecutor(processRunner);
       const buildRunner = new BuildRunner(executor, npmExecutor, fileSystem);
       const pipelineRunner = new PipelineRunner(buildRunner, db);
-      await runServe({ port: command.port, config, configPath, db, scanner, buildRunner, pipelineRunner, fs: fileSystem });
+      server = await runServe({ port: command.port, config, configPath, db, scanner, buildRunner, pipelineRunner, fs: fileSystem });
+      process.stdout.write(`${SIDECAR_READY_PREFIX}${server.port}\n`);
+      await new Promise<void>((resolve) => {
+        process.on('SIGINT', resolve);
+        process.on('SIGTERM', resolve);
+      });
     } finally {
+      server?.close();
       db.close();
     }
     return;

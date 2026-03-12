@@ -10,12 +10,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "package": "electron-vite build && node scripts/package-win.mjs",
     "package:win": "electron-vite build && node scripts/package-win.mjs",
-    "rebuild:native": "electron-rebuild -f -w better-sqlite3 -m .."
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
     "@base-ui-components/react": "^1.0.0-rc.0",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-router": "^1.95.0",
+    "better-sqlite3": "^11.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
@@ -28,6 +29,7 @@
     "@electron/rebuild": "^3.7.0",
     "@tailwindcss/vite": "^4.0.0",
     "@tanstack/router-plugin": "^1.95.0",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
