@@ -28,10 +28,7 @@ jobs:
 
       - name: Install dependencies
         run: bun install
-
-      - name: Rebuild native modules for Electron
-        working-directory: gui
-        run: bun run rebuild:native
+        # note: gui/package.json postinstall runs electron-rebuild automatically
 
       - name: Build server bundle
         run: bun run build:server
