@@ -13,12 +13,13 @@ const root = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(root, '..');
 const outDir = path.resolve(repoRoot, 'release', 'gui');
 
-// The compiled server bundle is included as a resource so sidecar.ts can
-// find it at process.resourcesPath/server/index.mjs in packaged mode.
-const serverDir = path.resolve(repoRoot, 'dist', 'server');
+// The Bun-compiled self-contained binary is bundled as an extra resource
+// so sidecar.ts can spawn it directly from process.resourcesPath in packaged mode.
+// Build it first with: bun run binary:build:win
+const binaryPath = path.resolve(repoRoot, 'release', 'gfos-build.exe');
 
-if (!fs.existsSync(serverDir)) {
-  console.error(`ERROR: ${serverDir} not found. Run "bun run build:server" first.`);
+if (!fs.existsSync(binaryPath)) {
+  console.error(`ERROR: ${binaryPath} not found. Run "bun run binary:build:win" first.`);
   process.exit(1);
 }
 
@@ -32,7 +33,7 @@ const appPaths = await packager({
   out: outDir,
   overwrite: true,
   icon: path.resolve(repoRoot, 'assets', 'icon.ico'),
-  extraResource: [serverDir],
+  extraResource: [binaryPath],
   ignore: [
     /node_modules/,
     /\/src\//,
