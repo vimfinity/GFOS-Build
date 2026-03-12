@@ -10,12 +10,6 @@ export interface SidecarHandle {
 }
 
 export async function spawnSidecar(): Promise<SidecarHandle> {
-  // Dev: re-execute the Electron binary as plain Node.js (ELECTRON_RUN_AS_NODE).
-  //      better-sqlite3 must be rebuilt for Electron ABI first — run:
-  //        bun run rebuild:native   (from repo root or gui/)
-  //
-  // Packaged: spawn the self-contained Bun-compiled binary from resources.
-  //           No ELECTRON_RUN_AS_NODE needed — the binary embeds its own runtime.
   let spawnCmd: string;
   let spawnArgs: string[];
   let spawnEnv: NodeJS.ProcessEnv;
@@ -26,10 +20,12 @@ export async function spawnSidecar(): Promise<SidecarHandle> {
     spawnArgs = ['serve', '--port', '0'];
     spawnEnv = process.env;
   } else {
-    const serverScript = path.join(app.getAppPath(), '..', 'dist', 'server', 'index.mjs');
-    spawnCmd = process.execPath;
-    spawnArgs = [serverScript, 'serve', '--port', '0'];
-    spawnEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+    // Dev: spawn bun directly so better-sqlite3 runs under the same runtime
+    // that compiled it (Bun ABI), avoiding NODE_MODULE_VERSION mismatches.
+    const serverEntry = path.join(app.getAppPath(), '..', 'src', 'cli', 'index.ts');
+    spawnCmd = process.platform === 'win32' ? 'bun.exe' : 'bun';
+    spawnArgs = ['run', serverEntry, 'serve', '--port', '0'];
+    spawnEnv = process.env;
   }
 
   return new Promise((resolve, reject) => {
