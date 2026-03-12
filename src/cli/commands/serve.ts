@@ -19,6 +19,7 @@ const VERSION = '2.0.0';
 
 interface ActiveJob {
   controller: AbortController;
+  startedAt: number;
 }
 
 export interface ServeOptions {
@@ -82,10 +83,12 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
   function startJob(runner: () => AsyncGenerator<unknown>): string {
     const jobId = randomUUID();
     const controller = new AbortController();
-    activeJobs.set(jobId, { controller });
+    const startedAt = Date.now();
+    activeJobs.set(jobId, { controller, startedAt });
 
     void (async () => {
       try {
+        broadcast(jobId, JSON.stringify({ type: 'event', jobId, event: { type: 'run:start', startedAt } }));
         for await (const event of runner()) {
           broadcast(jobId, JSON.stringify({ type: 'event', jobId, event }));
         }
@@ -119,24 +122,24 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     // GET /api/pipelines
     if (req.method === 'GET' && pathname === '/api/pipelines') {
       const lastRuns = db.getLastRunsByPipeline();
-      const pipelines = Object.entries(currentConfig.pipelines).map(([name, pipelineConfig]) => {
-        const resolved = resolvePipeline(name, pipelineConfig, currentConfig);
-        return {
-          name,
-          description: resolved.description,
-          failFast: resolved.failFast,
-          steps: resolved.steps.map((s) => ({
-            label: s.label,
-            path: s.path,
-            goals: s.goals,
-            flags: s.flags,
-            mavenExecutable: s.mavenExecutable,
-            javaVersion: s.javaVersion,
-            javaHome: s.javaHome,
-          })),
-          lastRun: lastRuns[name] ?? null,
-        };
-      });
+      // Use raw config for list view — avoids resolvePipeline() which throws when
+      // a step path references an unknown root.  Path resolution only needs to
+      // happen at run time, not for display.
+      const pipelines = Object.entries(currentConfig.pipelines).map(([name, pc]) => ({
+        name,
+        description: pc.description,
+        failFast: pc.failFast,
+        steps: pc.steps.map((s) => ({
+          label: s.label ?? path.basename(s.path.replace(/^[^:]+:/, '')),
+          path: s.path,
+          goals: s.goals ?? currentConfig.maven.defaultGoals,
+          flags: s.flags ?? currentConfig.maven.defaultFlags,
+          mavenExecutable: s.maven ?? currentConfig.maven.executable,
+          javaVersion: s.javaVersion,
+          javaHome: undefined,
+        })),
+        lastRun: lastRuns[name] ?? null,
+      }));
       return json(pipelines);
     }
 
@@ -188,6 +191,14 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
       return json(db.getBuildStats());
     }
 
+    // GET /api/builds/:runId/logs
+    const logsMatch = pathname.match(/^\/api\/builds\/(\d+)\/logs$/);
+    if (req.method === 'GET' && logsMatch) {
+      const runId = parseInt(logsMatch[1]!, 10);
+      const logs = db.getBuildLogs(runId);
+      return json(logs);
+    }
+
     // POST /api/pipeline/:name/run
     const pipelineRunMatch = pathname.match(/^\/api\/pipeline\/([^/]+)\/run$/);
     if (req.method === 'POST' && pipelineRunMatch) {
@@ -237,11 +248,48 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
       };
 
       const jobId = startJob(async function* () {
+        let runId: number | undefined;
+        try {
+          const command = [mavenExecutable, ...goals, ...flags].join(' ');
+          runId = db.startBuildRun({
+            projectPath: resolvedPath,
+            projectName: step.label,
+            buildSystem: 'maven',
+            command,
+            javaHome: step.javaHome,
+          });
+        } catch { /* non-fatal DB error */ }
+
+        let logSeq = 0;
         for await (const event of buildRunner.run(step, 0, 1)) {
-          yield event;
+          if (event.type === 'step:start' && runId !== undefined) {
+            yield { ...event, runId };
+          } else {
+            yield event;
+          }
+          if (event.type === 'step:output' && runId !== undefined) {
+            try { db.appendBuildLog(runId, logSeq++, event.stream, event.line); } catch { /* non-fatal */ }
+          }
+          if (event.type === 'step:done' && runId !== undefined) {
+            try {
+              db.finishBuildRun({ id: runId, exitCode: event.exitCode, durationMs: event.durationMs, status: event.success ? 'success' : 'failed' });
+            } catch { /* non-fatal */ }
+          }
         }
       });
       return json({ jobId });
+    }
+
+    // DELETE /api/builds/logs — clear stored log lines, keep build metadata for stats
+    if (req.method === 'DELETE' && pathname === '/api/builds/logs') {
+      db.clearBuildLogs();
+      return json({ ok: true });
+    }
+
+    // DELETE /api/builds — clear all build history and logs
+    if (req.method === 'DELETE' && pathname === '/api/builds') {
+      db.clearAllBuilds();
+      return json({ ok: true });
     }
 
     // DELETE /api/jobs/:id
@@ -359,6 +407,11 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
           if (!subscriptions.has(msg.jobId)) subscriptions.set(msg.jobId, new Set());
           subscriptions.get(msg.jobId)!.add(ws);
           joined.add(msg.jobId);
+          // Replay run:start so late-joining clients get the correct server timestamp
+          const activeJob = activeJobs.get(msg.jobId);
+          if (activeJob && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'event', jobId: msg.jobId, event: { type: 'run:start', startedAt: activeJob.startedAt } }));
+          }
         } else if (msg.type === 'unsubscribe' && msg.jobId) {
           subscriptions.get(msg.jobId)?.delete(ws);
           joined.delete(msg.jobId);

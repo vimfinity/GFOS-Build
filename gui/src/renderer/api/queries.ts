@@ -4,6 +4,7 @@ import type {
   HealthResponse,
   PipelineListItem,
   BuildRunRowApi,
+  BuildLogEntry,
   BuildStatsApi,
   StartJobResponse,
   ConfigResponse,
@@ -55,6 +56,14 @@ export const buildStatsQuery = queryOptions({
   staleTime: 30_000,
   gcTime: 120_000,
 });
+
+export const buildLogsQuery = (runId: number) =>
+  queryOptions({
+    queryKey: ['builds', runId, 'logs'],
+    queryFn: () => apiGet<BuildLogEntry[]>(`/api/builds/${runId}/logs`),
+    staleTime: Infinity,
+    gcTime: 300_000,
+  });
 
 export const scanQuery = queryOptions({
   queryKey: ['scan'],
@@ -113,4 +122,12 @@ export function useAdHocBuild() {
     mutationFn: (body: { path: string; goals?: string[]; flags?: string[]; java?: string }) =>
       apiPost<StartJobResponse>('/api/build', body),
   });
+}
+
+export function useClearBuildLogs() {
+  return useMutation({ mutationFn: () => apiDelete('/api/builds/logs') });
+}
+
+export function useClearAllBuilds() {
+  return useMutation({ mutationFn: () => apiDelete('/api/builds') });
 }

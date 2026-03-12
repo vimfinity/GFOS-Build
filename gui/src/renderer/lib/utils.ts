@@ -25,3 +25,35 @@ export function timeAgo(isoString: string): string {
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
 }
+
+/**
+ * Format an ISO date string as "Mar 12, 2026 14:30" (24-hour local time).
+ */
+export function formatDate(isoString: string): string {
+  const d = new Date(isoString);
+  const month = d.toLocaleString('en-US', { month: 'short' });
+  const day = d.getDate();
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${month} ${day}, ${year} ${hours}:${minutes}`;
+}
+
+/**
+ * Format an ISO date string as a short date label, e.g. "Mar 12".
+ */
+export function formatDateShort(isoString: string): string {
+  const d = new Date(isoString);
+  const month = d.toLocaleString('en-US', { month: 'short' });
+  const day = d.getDate();
+  return `${month} ${day}`;
+}
+
+/**
+ * Calculate a success rate as an integer percentage (0–100).
+ * Returns 0 when total is 0 to avoid division by zero.
+ */
+export function successRate(success: number, total: number): number {
+  if (total === 0) return 0;
+  return Math.round((success / total) * 100);
+}

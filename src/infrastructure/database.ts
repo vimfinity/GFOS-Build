@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS scan_cache (
   scanned_at    TEXT NOT NULL,
   projects_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS build_logs (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id  INTEGER NOT NULL,
+  seq     INTEGER NOT NULL,
+  stream  TEXT    NOT NULL DEFAULT 'stdout',
+  line    TEXT    NOT NULL,
+  FOREIGN KEY (run_id) REFERENCES build_runs(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_build_logs_run_id ON build_logs(run_id);
 `;
 
 export interface StartBuildRunParams {
@@ -90,6 +99,10 @@ export interface IDatabase {
   getRecentBuilds(opts: { limit: number; pipeline?: string; project?: string }): BuildRunRow[];
   getBuildStats(): BuildStats;
   getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null }>;
+  appendBuildLog(runId: number, seq: number, stream: string, line: string): void;
+  getBuildLogs(runId: number): Array<{ seq: number; stream: string; line: string }>;
+  clearBuildLogs(): void;
+  clearAllBuilds(): void;
   close(): void;
 }
 
@@ -277,6 +290,26 @@ export class AppDatabase implements IDatabase {
     return result;
   }
 
+  appendBuildLog(runId: number, seq: number, stream: string, line: string): void {
+    this.db
+      .prepare('INSERT INTO build_logs (run_id, seq, stream, line) VALUES (?, ?, ?, ?)')
+      .run(runId, seq, stream, line);
+  }
+
+  getBuildLogs(runId: number): Array<{ seq: number; stream: string; line: string }> {
+    return this.db
+      .prepare('SELECT seq, stream, line FROM build_logs WHERE run_id = ? ORDER BY seq ASC')
+      .all(runId) as Array<{ seq: number; stream: string; line: string }>;
+  }
+
+
+  clearBuildLogs(): void {
+    this.db.exec('DELETE FROM build_logs');
+  }
+
+  clearAllBuilds(): void {
+    this.db.exec('DELETE FROM build_runs');
+  }
   close(): void {
     this.db.close();
   }

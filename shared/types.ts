@@ -83,7 +83,8 @@ export interface ScanOptions {
 }
 
 export type BuildEvent =
-  | { type: 'step:start'; step: BuildStep; index: number; total: number; pipelineName?: string }
+  | { type: 'run:start'; startedAt: number }
+  | { type: 'step:start'; step: BuildStep; index: number; total: number; pipelineName?: string; runId?: number }
   | { type: 'step:output'; line: string; stream: 'stdout' | 'stderr' }
   | { type: 'step:done'; step: BuildStep; index: number; total: number; exitCode: number; durationMs: number; success: boolean }
   | { type: 'run:done'; result: RunResult };

@@ -1,110 +1,95 @@
-# GFOS Build Foundation
+# GFOS Build
 
-GFOS Build wurde **neu initialisiert** als belastbare Foundation für ein zukünftiges, feature-reiches Maven Build Tool.
+A desktop application for Maven project management, pipeline orchestration, and build monitoring.
 
-Der aktuelle Scope ist bewusst klein, aber professionell aufgebaut:
-- Discovery buildbarer Maven-Repositories in variablen Verzeichnisstrukturen
-- deterministische Build-Ausführung
-- klare Layer-Architektur für spätere Erweiterungen (Profiles, Queueing, UI, CI-Optimierungen)
+> **Alpha release** — core functionality is working but rough edges remain. Feedback welcome.
 
-## Arbeiten wir jetzt nur mit CLI?
+## Features
 
-**Ja, kurzfristig CLI-first.**
-Das ist absichtlich so gewählt, weil es für Discovery/Build-Logik die höchste Stabilität bei geringster Komplexität liefert.
+- **Project Scanner** — recursively discovers Maven projects across configurable root directories; distinguishes buildable modules from aggregator POMs
+- **Pipeline Builder** — define multi-step Maven build pipelines with per-step JDK, goals, and flags; resume from failed steps
+- **Live Build Output** — streaming build log with ANSI rendering, `[INFO]`/`[ERROR]`/`[WARNING]` syntax highlighting, and step progress indicator
+- **Build History** — persistent log of all pipeline and ad-hoc builds including stored log output; grouped pipeline runs; searchable and filterable
+- **Statistics Dashboard** — success rate, average duration, slowest steps, per-pipeline and per-project breakdowns
+- **Settings** — configure scan roots, Maven defaults, JDK paths, and exclude patterns
+- **Dark / Light theme**
 
-**Aber:** Wir setzen bereits auf die Technologien und Architektur, die später auch für weitere Interfaces tragen:
-- strikte Domain-Layer (`core`, `application`)
-- entkoppelte Infrastrukturadapter (`infrastructure`)
-- validierte Konfiguration (`zod`)
-- maschinenlesbare Ausgabe (`--json`) als Integrationsvertrag für spätere UI/API-Schichten
+## Download
 
-Damit ist eine spätere UI ein Add-on auf denselben Kern – kein Rewrite.
+Go to the [Releases](../../releases) page and download `GFOS-Build-win32-x64.zip` from the latest release.
 
-## Architektur
+Extract the ZIP anywhere and run **`GFOS Build.exe`**.
 
-```text
-src/
-  application/       # Orchestrierung von Use-Cases
-  cli/               # CLI Input/Output
-  config/            # Konfigurationsschema + Loader (zod-validiert)
-  core/              # Domänenlogik (Discovery/Build)
-  infrastructure/    # Node-Adapter (Dateisystem/Prozess)
-```
+### Requirements
 
-## Zielsystem ohne npm/node/bun testen
+- Windows x64
+- [Maven](https://maven.apache.org/download.cgi) accessible in `PATH` (or configured per-pipeline)
+- At least one JDK installed
 
-Das Zielsystem braucht **keine** JS-Runtime.
-Wir bauen ein Standalone-Binary via Bun-Compile:
+No Java runtime, Node.js, or other dependencies required — the app is fully self-contained.
 
-```bash
-bun run binary:build  # baut immer Windows-Binary (gfos-build.exe)
-```
+## Development
 
-Danach liegt ein Windows-Artefakt in `release/gfos-build.exe`, das direkt auf dem Zielsystem ausführbar ist.
+### Prerequisites
 
-Für lokale Smoke-Tests auf Nicht-Windows-Systemen gibt es zusätzlich:
-- `bun run binary:build:native` (baut natives Binary für das aktuelle Host-OS)
+- [Bun](https://bun.sh) >= 1.1
+- Node.js >= 20 (for `electron-rebuild`)
+- Windows (packaging target is win32-x64)
 
-## Teststrategie (du + ich + CI + Zielsystem)
-
-1. **Unit/Domain-Tests** (lokal + CI)
-   - `bun run check` (lint, typecheck, tests, ts-build)
-2. **Binary Smoke-Test** (lokal + CI)
-   - `bun run binary:build:native`
-   - `bun run binary:smoke`
-   - prüft reale Ausführung des kompilierten nativen Binaries gegen Fixture-Workspace
-3. **Plattformvalidierung in CI**
-   - GitHub Actions baut und smoket das Windows-Binary
-   - Windows-Artefakt wird hochgeladen
-4. **Zielsystem-Test ohne Runtime**
-   - Binary-Artefakt kopieren
-   - `gfos-build.exe scan --root <dein-path> --json` ausführen
-
-## Installation & Development
+### Setup
 
 ```bash
 bun install
-bun run check
 ```
 
-## CLI Nutzung
+### Run in development mode
 
 ```bash
-# Repository Discovery
-bun run dev -- scan --root "J:/dev/quellen" --max-depth 4
-
-# Build ausführen
-bun run dev -- build --root "J:/dev/quellen" --goals "clean install"
-
-# JSON-Ausgabe für Integrationen
-bun run dev -- scan --root "J:/dev/quellen" --json
+bun run dev:gui        # Electron app with hot reload
 ```
 
-## Konfiguration
+### Build the distributable
 
-Optional kann eine `gfos-build.config.json` im Projektverzeichnis liegen.
-Ein Beispiel liegt in [`gfos-build.config.example.json`](gfos-build.config.example.json).
-
-Beispiel:
-
-```json
-{
-  "roots": ["J:/dev/quellen"],
-  "scan": { "maxDepth": 4, "includeHidden": false },
-  "build": { "goals": ["clean", "install"], "mavenExecutable": "mvn", "failFast": true }
-}
+```bash
+bun run build:server         # bundle server with tsdown
+bun run binary:build:win     # compile Bun CLI binary for Windows
+bun run check:gui            # typecheck + Electron package
 ```
 
-CLI-Parameter überschreiben die Config.
+The packaged app will be in `release/gui/GFOS Build-win32-x64/`.
 
-## Nächste Ausbaustufen
+### Run tests
 
-1. Build-Profile & Selektionsregeln (Include/Exclude)
-2. JDK-Matrix und Context-Switching
-3. Parallel Build Queue mit Resource Limits
-4. Persistente Job-Historie + Reports
-5. UI-Schicht (TUI/GUI/Web) auf derselben Core-Logik
+```bash
+bun run check          # lint + typecheck + unit tests + build
+```
 
-Mehr technische Hintergründe: [`docs/TECH_DECISIONS.md`](docs/TECH_DECISIONS.md).
+## Architecture
 
-Architektur-Blueprint (inkl. UI-vs-CLI Strategie): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+```
+src/                         # Bun server (CLI + HTTP API)
+  application/               # pipeline runner, scanner
+  cli/                       # HTTP/WS server, route handlers
+  config/                    # zod-validated config schema
+  core/                      # domain types, JDK resolver
+  infrastructure/            # SQLite DB (bun:sqlite), file system
+
+shared/                      # shared TypeScript types (api, types)
+
+gui/
+  src/main/                  # Electron main process (spawns server)
+  src/renderer/              # React + TanStack Router + Tailwind
+    routes/                  # builds/, pipelines/, projects/, settings/, stats/
+    components/              # BuildOutput, PipelineDialog, UI primitives
+    api/                     # React Query hooks, WebSocket event cache
+```
+
+The server runs as a bundled Bun binary inside the packaged Electron app. The renderer communicates via a local HTTP/WebSocket API on a random port.
+
+## Configuration
+
+On first launch, GFOS Build walks you through setting up your scan roots and Maven defaults. Config is stored in the app's user data directory as `gfos-build.config.json`.
+
+## License
+
+MIT

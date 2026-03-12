@@ -1,12 +1,18 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { pipelinesQuery, useRunPipeline, useCreatePipeline, useUpdatePipeline, useDeletePipeline } from '@/api/queries';
+import {
+  pipelinesQuery,
+  useRunPipeline,
+  useCreatePipeline,
+  useUpdatePipeline,
+  useDeletePipeline,
+} from '@/api/queries';
 import { PipelineCard } from '@/components/PipelineCard';
 import { PipelineDialog, type PipelineFormData } from '@/components/PipelineDialog';
 import { Button } from '@/components/ui/button';
 import { SkeletonCard } from '@/components/ui/skeleton';
 import { useState } from 'react';
-import { Plus, Workflow } from 'lucide-react';
+import { Plus, Workflow, Search, AlertCircle, RefreshCw } from 'lucide-react';
 import type { PipelineListItem } from '@shared/api';
 
 export const Route = createFileRoute('/pipelines/')({
@@ -16,7 +22,7 @@ export const Route = createFileRoute('/pipelines/')({
 function PipelinesView() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: pipelines } = useQuery(pipelinesQuery);
+  const { data: pipelines, isLoading, isError, refetch } = useQuery(pipelinesQuery);
   const runPipeline = useRunPipeline();
   const createPipeline = useCreatePipeline();
   const updatePipeline = useUpdatePipeline();
@@ -25,6 +31,12 @@ function PipelinesView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<PipelineListItem | null>(null);
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
+  const [searchText, setSearchText] = useState('');
+
+  const filtered = (pipelines ?? []).filter((p) => {
+    if (!searchText.trim()) return true;
+    return p.name.toLowerCase().includes(searchText.trim().toLowerCase());
+  });
 
   async function handleRun(name: string) {
     setRunningPipelines((s) => new Set(s).add(name));
@@ -83,7 +95,11 @@ function PipelinesView() {
           <div>
             <h1 className="text-lg font-semibold text-foreground">Pipelines</h1>
             <p className="text-xs text-muted-foreground">
-              {pipelines?.length ?? 0} pipeline{(pipelines?.length ?? 0) !== 1 ? 's' : ''} configured
+              {isLoading
+                ? 'Loading…'
+                : isError
+                  ? 'Failed to load'
+                  : `${pipelines?.length ?? 0} pipeline${(pipelines?.length ?? 0) !== 1 ? 's' : ''} configured`}
             </p>
           </div>
         </div>
@@ -98,13 +114,41 @@ function PipelinesView() {
         </Button>
       </div>
 
+      {/* Search bar — only visible when pipelines are loaded and non-empty */}
+      {!isLoading && !isError && (pipelines?.length ?? 0) > 0 && (
+        <div className="relative max-w-sm">
+          <Search
+            size={13}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+          />
+          <input
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Search pipelines…"
+            className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+      )}
+
       {/* Pipeline cards */}
-      {!pipelines ? (
+      {isLoading ? (
         <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
           <SkeletonCard />
           <SkeletonCard />
         </div>
-      ) : !pipelines.length ? (
+      ) : isError ? (
+        <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
+          <AlertCircle size={32} className="text-destructive/50" />
+          <p className="text-sm text-destructive">Failed to load pipelines.</p>
+          <p className="text-xs text-center max-w-xs">
+            The server may be unavailable. Check the app status and try again.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            <RefreshCw size={13} /> Retry
+          </Button>
+        </div>
+      ) : !pipelines?.length ? (
         <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
           <Workflow size={32} className="text-border" />
           <p className="text-sm">No pipelines configured yet.</p>
@@ -119,9 +163,20 @@ function PipelinesView() {
             <Plus size={14} /> Create your first pipeline
           </Button>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+          <Search size={28} className="text-border" />
+          <p className="text-sm">No pipelines match &quot;{searchText}&quot;.</p>
+          <button
+            className="text-xs text-primary hover:underline"
+            onClick={() => setSearchText('')}
+          >
+            Clear search
+          </button>
+        </div>
       ) : (
         <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
-          {pipelines.map((p) => (
+          {filtered.map((p) => (
             <PipelineCard
               key={p.name}
               pipeline={p}

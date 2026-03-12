@@ -1,11 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2 } from 'lucide-react';
 import type { PipelineStep } from '@shared/api';
+import type { Project } from '@shared/types';
 import { pickDirectory } from '@/api/bridge';
+import { scanQuery, configQuery } from '@/api/queries';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface StepFormData {
   label: string;
@@ -14,21 +19,6 @@ interface StepFormData {
   flags: string;
   buildSystem: 'maven' | 'npm';
   javaVersion: string;
-}
-
-function emptyStep(): StepFormData {
-  return { label: '', path: '', goals: 'clean install', flags: '', buildSystem: 'maven', javaVersion: '' };
-}
-
-function fromApiStep(s: PipelineStep): StepFormData {
-  return {
-    label: s.label,
-    path: s.path,
-    goals: s.goals.join(' '),
-    flags: s.flags.join(' '),
-    buildSystem: 'maven',
-    javaVersion: s.javaVersion ?? '',
-  };
 }
 
 export interface PipelineFormData {
@@ -46,7 +36,40 @@ interface PipelineDialogProps {
   mode: 'create' | 'edit';
 }
 
-function BuildSystemToggle({ value, onChange }: { value: 'maven' | 'npm'; onChange: (v: 'maven' | 'npm') => void }) {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function emptyStep(): StepFormData {
+  return { label: '', path: '', goals: 'clean install', flags: '', buildSystem: 'maven', javaVersion: '' };
+}
+
+function fromApiStep(s: PipelineStep): StepFormData {
+  return {
+    label: s.label,
+    path: s.path,
+    goals: s.goals.join(' '),
+    flags: s.flags.join(' '),
+    buildSystem: 'maven',
+    javaVersion: s.javaVersion ?? '',
+  };
+}
+
+function getRelativePath(project: Project, roots: Record<string, string>): string {
+  const rootPath = roots[project.rootName];
+  if (!rootPath) return project.path;
+  const norm = project.path.replace(/\\/g, '/');
+  const rootNorm = rootPath.replace(/\\/g, '/').replace(/\/$/, '');
+  return norm.startsWith(rootNorm) ? norm.slice(rootNorm.length + 1) : project.path;
+}
+
+// ─── Build system toggle ──────────────────────────────────────────────────────
+
+function BuildSystemToggle({
+  value,
+  onChange,
+}: {
+  value: 'maven' | 'npm';
+  onChange: (v: 'maven' | 'npm') => void;
+}) {
   return (
     <div className="flex rounded-md border border-border overflow-hidden shrink-0" style={{ width: 100 }}>
       {(['maven', 'npm'] as const).map((sys) => (
@@ -68,6 +91,231 @@ function BuildSystemToggle({ value, onChange }: { value: 'maven' | 'npm'; onChan
   );
 }
 
+// ─── Java version select ──────────────────────────────────────────────────────
+
+function JavaVersionSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { data: configData } = useQuery(configQuery);
+  const jdkVersions = configData ? Object.keys(configData.config.jdkRegistry) : [];
+
+  if (jdkVersions.length === 0) {
+    return (
+      <Input
+        label="Java version (optional)"
+        placeholder="e.g. 17"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-medium text-muted-foreground">Java version</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <option value="">Default</option>
+        {jdkVersions.map((v) => (
+          <option key={v} value={v}>
+            Java {v}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ─── Project path picker ──────────────────────────────────────────────────────
+
+function ProjectPathPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const { data: scanData, isLoading: scanLoading } = useQuery(scanQuery);
+  const { data: configData } = useQuery(configQuery);
+  const roots = configData?.config.roots ?? {};
+
+  // Display value: matched project name + location, or raw path
+  const displayValue = useMemo(() => {
+    if (!value) return '';
+    const match = scanData?.projects.find((p) => p.path === value);
+    if (match) {
+      const relPath = getRelativePath(match, roots);
+      return `${match.name} (${match.rootName}:${relPath})`;
+    }
+    return value;
+  }, [value, scanData, roots]);
+
+  // Filtered projects for dropdown
+  const filtered = useMemo(() => {
+    if (!scanData?.projects) return [];
+    if (!query.trim()) return scanData.projects.slice(0, 20);
+    const q = query.toLowerCase();
+    return scanData.projects
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.path.toLowerCase().includes(q) ||
+          (p.maven?.artifactId ?? '').toLowerCase().includes(q),
+      )
+      .slice(0, 30);
+  }, [scanData, query]);
+
+  // Close when clicking outside the picker
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [open]);
+
+  async function handleBrowse(e: React.MouseEvent) {
+    e.preventDefault();
+    const dir = await pickDirectory();
+    if (dir) {
+      onChange(dir);
+      setOpen(false);
+      setQuery('');
+    }
+  }
+
+  function selectProject(project: Project) {
+    onChange(project.path);
+    setOpen(false);
+    setQuery('');
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setOpen(false);
+      setQuery('');
+      inputRef.current?.blur();
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const trimmed = query.trim();
+      // If the typed text looks like an absolute path, commit it directly
+      if (trimmed && /^([A-Za-z]:[/\\]|\/)/.test(trimmed)) {
+        onChange(trimmed);
+        setOpen(false);
+        setQuery('');
+      } else if (filtered.length > 0 && filtered[0]) {
+        // Otherwise select the first dropdown result
+        selectProject(filtered[0]);
+      }
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="flex flex-col gap-1.5">
+      <label className="text-xs font-medium text-muted-foreground">Project path</label>
+      <div className="flex gap-2">
+        {/* Input + dropdown wrapper */}
+        <div className="relative flex-1 min-w-0">
+          <input
+            ref={inputRef}
+            value={open ? query : displayValue}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => {
+              setOpen(true);
+              setQuery('');
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={open ? 'Search projects or type an absolute path…' : 'Select a project…'}
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+
+          {/* Dropdown */}
+          {open && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 max-h-60 overflow-auto rounded-md border border-border bg-background shadow-lg">
+              {scanLoading ? (
+                <div className="flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground">
+                  <Loader2 size={12} className="animate-spin shrink-0" />
+                  Loading projects…
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="px-3 py-2.5 text-xs text-muted-foreground">
+                  {query.trim() ? 'No matching projects' : 'No projects found'}
+                </div>
+              ) : (
+                filtered.map((project) => {
+                  const relPath = getRelativePath(project, roots);
+                  return (
+                    <button
+                      key={project.path}
+                      type="button"
+                      // Prevent the input from blurring before the click fires
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => selectProject(project)}
+                      className={cn(
+                        'flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-accent transition-colors',
+                        value === project.path && 'bg-accent/50',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'inline-flex items-center text-[10px] px-1.5 py-0 rounded font-semibold shrink-0 leading-[18px]',
+                          project.buildSystem === 'maven'
+                            ? 'bg-primary/20 text-primary'
+                            : 'bg-emerald-500/20 text-emerald-400',
+                        )}
+                      >
+                        {project.buildSystem === 'maven' ? 'mvn' : 'npm'}
+                      </span>
+                      <span className="text-sm font-medium text-foreground shrink-0">
+                        {project.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono truncate min-w-0">
+                        {relPath}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Browse button */}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={(e) => void handleBrowse(e)}
+          title="Browse directory"
+        >
+          <FolderOpen size={14} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step card ────────────────────────────────────────────────────────────────
+
 function StepCard({
   step,
   index,
@@ -85,11 +333,6 @@ function StepCard({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
-  async function browsePath() {
-    const dir = await pickDirectory();
-    if (dir) onUpdate('path', dir);
-  }
-
   return (
     <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-background/50">
       {/* Step header */}
@@ -147,27 +390,11 @@ function StepCard({
         </div>
       </div>
 
-      {/* Row 2: Path + Browse */}
-      <div className="flex gap-2 items-end">
-        <div className="flex-1 min-w-0">
-          <Input
-            label="Project path"
-            placeholder="e.g. root-name:services/my-module or /absolute/path"
-            value={step.path}
-            onChange={(e) => onUpdate('path', e.target.value)}
-          />
-        </div>
-        <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            onClick={() => void browsePath()}
-            title="Browse directory"
-          >
-            <FolderOpen size={14} />
-          </Button>
-      </div>
+      {/* Row 2: Project path picker */}
+      <ProjectPathPicker
+        value={step.path}
+        onChange={(v) => onUpdate('path', v)}
+      />
 
       {/* Row 3: Goals + Flags */}
       <div className="grid grid-cols-2 gap-3">
@@ -188,11 +415,9 @@ function StepCard({
       {/* Row 4 (Maven only): Java version */}
       {step.buildSystem === 'maven' && (
         <div className="max-w-[200px]">
-          <Input
-            label="Java version (optional)"
-            placeholder="e.g. 17"
+          <JavaVersionSelect
             value={step.javaVersion}
-            onChange={(e) => onUpdate('javaVersion', e.target.value)}
+            onChange={(v) => onUpdate('javaVersion', v)}
           />
         </div>
       )}
@@ -200,7 +425,15 @@ function StepCard({
   );
 }
 
-export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }: PipelineDialogProps) {
+// ─── Pipeline dialog ──────────────────────────────────────────────────────────
+
+export function PipelineDialog({
+  open,
+  onOpenChange,
+  initialData,
+  onSave,
+  mode,
+}: PipelineDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [failFast, setFailFast] = useState(true);
@@ -247,7 +480,8 @@ export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }
     onOpenChange(false);
   }
 
-  const canSave = name.trim().length > 0 && steps.length > 0 && steps.every((s) => s.path.trim());
+  const canSave =
+    name.trim().length > 0 && steps.length > 0 && steps.every((s) => s.path.trim());
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -256,7 +490,7 @@ export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }
         <DialogDescription>
           {mode === 'create'
             ? 'Define a build pipeline with one or more ordered steps.'
-            : 'Update this pipeline\'s steps and configuration.'}
+            : "Update this pipeline's steps and configuration."}
         </DialogDescription>
 
         <div className="flex flex-col gap-5 mt-4 max-h-[75vh] overflow-y-auto pr-1">
@@ -285,7 +519,9 @@ export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }
               className="rounded border-input accent-primary"
             />
             <span className="text-muted-foreground">Fail fast</span>
-            <span className="text-xs text-muted-foreground/60">(stop pipeline on first step failure)</span>
+            <span className="text-xs text-muted-foreground/60">
+              (stop pipeline on first step failure)
+            </span>
           </label>
 
           {/* Steps */}
@@ -312,7 +548,9 @@ export function PipelineDialog({ open, onOpenChange, initialData, onSave, mode }
         </div>
 
         <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button size="sm" onClick={handleSubmit} disabled={!canSave}>
             {mode === 'create' ? 'Create pipeline' : 'Save changes'}
           </Button>

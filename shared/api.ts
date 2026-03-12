@@ -61,6 +61,13 @@ export interface BuildRunRowApi {
   status: string;
 }
 
+/** GET /api/builds/:runId/logs */
+export interface BuildLogEntry {
+  seq: number;
+  stream: string;
+  line: string;
+}
+
 /** GET /api/builds/stats */
 export interface BuildStatsApi {
   totalBuilds: number;

@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StatsIndexRouteImport } from './routes/stats/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as PipelinesIndexRouteImport } from './routes/pipelines/index'
 import { Route as BuildsIndexRouteImport } from './routes/builds/index'
@@ -18,6 +20,16 @@ import { Route as BuildsJobIdRouteImport } from './routes/builds/$jobId'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatsIndexRoute = StatsIndexRouteImport.update({
+  id: '/stats/',
+  path: '/stats/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
@@ -47,6 +59,8 @@ export interface FileRoutesByFullPath {
   '/builds/': typeof BuildsIndexRoute
   '/pipelines/': typeof PipelinesIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/stats/': typeof StatsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +68,8 @@ export interface FileRoutesByTo {
   '/builds': typeof BuildsIndexRoute
   '/pipelines': typeof PipelinesIndexRoute
   '/projects': typeof ProjectsIndexRoute
+  '/settings': typeof SettingsIndexRoute
+  '/stats': typeof StatsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,12 +78,28 @@ export interface FileRoutesById {
   '/builds/': typeof BuildsIndexRoute
   '/pipelines/': typeof PipelinesIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/stats/': typeof StatsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/builds/$jobId' | '/builds/' | '/pipelines/' | '/projects/'
+  fullPaths:
+    | '/'
+    | '/builds/$jobId'
+    | '/builds/'
+    | '/pipelines/'
+    | '/projects/'
+    | '/settings/'
+    | '/stats/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/builds/$jobId' | '/builds' | '/pipelines' | '/projects'
+  to:
+    | '/'
+    | '/builds/$jobId'
+    | '/builds'
+    | '/pipelines'
+    | '/projects'
+    | '/settings'
+    | '/stats'
   id:
     | '__root__'
     | '/'
@@ -75,6 +107,8 @@ export interface FileRouteTypes {
     | '/builds/'
     | '/pipelines/'
     | '/projects/'
+    | '/settings/'
+    | '/stats/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -83,6 +117,8 @@ export interface RootRouteChildren {
   BuildsIndexRoute: typeof BuildsIndexRoute
   PipelinesIndexRoute: typeof PipelinesIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
+  StatsIndexRoute: typeof StatsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -92,6 +128,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stats/': {
+      id: '/stats/'
+      path: '/stats'
+      fullPath: '/stats/'
+      preLoaderRoute: typeof StatsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/': {
@@ -131,6 +181,8 @@ const rootRouteChildren: RootRouteChildren = {
   BuildsIndexRoute: BuildsIndexRoute,
   PipelinesIndexRoute: PipelinesIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
+  StatsIndexRoute: StatsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

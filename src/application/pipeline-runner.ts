@@ -18,6 +18,7 @@ export class PipelineRunner {
     for (let i = 0; i < stepsToRun.length; i++) {
       const step = stepsToRun[i]!;
       const displayIndex = fromIndex + i;
+      let logSeq = 0;
 
       let stepRunId: number | undefined;
       try {
@@ -36,7 +37,19 @@ export class PipelineRunner {
       }
 
       for await (const event of this.buildRunner.run(step, displayIndex, total, pipeline.name)) {
-        yield event;
+        if (event.type === 'step:start' && stepRunId !== undefined) {
+          yield { ...event, runId: stepRunId };
+        } else {
+          yield event;
+        }
+
+        if (event.type === 'step:output' && stepRunId !== undefined) {
+          try {
+            this.db.appendBuildLog(stepRunId, logSeq++, event.stream, event.line);
+          } catch {
+            // non-fatal
+          }
+        }
 
         if (event.type === 'step:done') {
           results.push({

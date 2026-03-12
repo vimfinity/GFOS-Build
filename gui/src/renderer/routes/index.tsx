@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { buildStatsQuery, buildsQuery, pipelinesQuery, useRunPipeline } from '@/api/queries';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,12 +7,26 @@ import { Card, CardContent } from '@/components/ui/card';
 import { SkeletonRows } from '@/components/ui/skeleton';
 import { formatDuration, timeAgo, cn } from '@/lib/utils';
 import { useState } from 'react';
-import { BarChart3, CheckCircle2, Timer, Loader2, Play, ExternalLink } from 'lucide-react';
+import {
+  BarChart3,
+  CheckCircle2,
+  Timer,
+  Loader2,
+  Play,
+  ExternalLink,
+  Zap,
+  AlertCircle,
+  RefreshCw,
+} from 'lucide-react';
 import type { BuildRunRowApi, PipelineListItem } from '@shared/api';
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
 });
+
+// ---------------------------------------------------------------------------
+// Stat card
+// ---------------------------------------------------------------------------
 
 function StatCard({
   label,
@@ -21,6 +35,7 @@ function StatCard({
   icon: Icon,
   iconClass,
   loading,
+  accentClass,
 }: {
   label: string;
   value: string | number;
@@ -28,9 +43,10 @@ function StatCard({
   icon: React.ElementType;
   iconClass: string;
   loading?: boolean;
+  accentClass?: string;
 }) {
   return (
-    <Card>
+    <Card className={cn(accentClass && `border-l-2 ${accentClass}`)}>
       <CardContent className="p-5 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -44,29 +60,83 @@ function StatCard({
               {value}
             </span>
           )}
-          {sub && !loading && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+          {sub && !loading && (
+            <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    success: 'bg-success',
-    failed: 'bg-destructive',
-    running: 'bg-warning animate-pulse',
-  };
+// ---------------------------------------------------------------------------
+// Inline error card (used inside section panels)
+// ---------------------------------------------------------------------------
+
+function ErrorCard({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
   return (
-    <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', colors[status] ?? 'bg-muted-foreground')} />
+    <div className="p-4 flex items-center gap-3 text-destructive">
+      <AlertCircle size={14} className="shrink-0" />
+      <span className="text-xs flex-1">{message}</span>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <RefreshCw size={11} />
+          Retry
+        </button>
+      )}
+    </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Status dot used in Quick Run row
+// ---------------------------------------------------------------------------
+
+function StatusDot({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    success: 'bg-success',
+    failed:  'bg-destructive',
+    running: 'bg-warning animate-pulse',
+  };
+  return (
+    <div
+      className={cn(
+        'w-1.5 h-1.5 rounded-full shrink-0',
+        colors[status] ?? 'bg-muted-foreground',
+      )}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+
 function Dashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const { data: stats, isLoading: statsLoading } = useQuery(buildStatsQuery);
-  const { data: builds } = useQuery(buildsQuery({ limit: 15 }));
-  const { data: pipelines } = useQuery(pipelinesQuery);
+  const {
+    data: builds,
+    isLoading: buildsLoading,
+    isError: buildsError,
+  } = useQuery(buildsQuery({ limit: 15 }));
+  const {
+    data: pipelines,
+    isLoading: pipelinesLoading,
+    isError: pipelinesError,
+  } = useQuery(pipelinesQuery);
+
   const runPipeline = useRunPipeline();
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
 
@@ -92,41 +162,60 @@ function Dashboard() {
     }
   }
 
+  function retryBuilds() {
+    void queryClient.refetchQueries({ queryKey: ['builds'] });
+  }
+
+  function retryPipelines() {
+    void queryClient.refetchQueries({ queryKey: ['pipelines'] });
+  }
+
   return (
     <div className="p-6 flex flex-col gap-6 max-w-6xl mx-auto">
-      {/* Stat cards — always rendered, number shows "—" while first fetch is in flight */}
+
+      {/* ── Stat cards ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Total Builds"
           value={stats?.totalBuilds ?? 0}
           icon={BarChart3}
           iconClass="text-primary"
+          accentClass="border-l-primary/60"
           loading={statsLoading}
         />
         <StatCard
           label="Success Rate"
-          value={successRate != null ? `${successRate}%` : stats ? '—' : '—'}
-          sub={stats && stats.totalBuilds > 0 ? `${stats.successCount} of ${stats.totalBuilds} builds` : undefined}
+          value={successRate != null ? `${successRate}%` : '—'}
+          sub={
+            stats && stats.totalBuilds > 0
+              ? `${stats.successCount} of ${stats.totalBuilds} builds`
+              : undefined
+          }
           icon={CheckCircle2}
           iconClass="text-success"
+          accentClass="border-l-success/60"
           loading={statsLoading}
         />
         <StatCard
           label="Avg Duration"
           value={stats?.avgDurationMs ? formatDuration(stats.avgDurationMs) : '—'}
+          sub={stats?.totalBuilds ? `across ${stats.totalBuilds} builds` : undefined}
           icon={Timer}
           iconClass="text-warning"
+          accentClass="border-l-warning/60"
           loading={statsLoading}
         />
         <StatCard
           label="Active Jobs"
           value={activeBuilds.length}
-          icon={Loader2}
-          iconClass={activeBuilds.length > 0 ? 'text-warning animate-spin' : 'text-muted-foreground'}
+          sub={activeBuilds.length > 0 ? 'running now' : 'all quiet'}
+          icon={Zap}
+          iconClass={activeBuilds.length > 0 ? 'text-warning' : 'text-muted-foreground'}
+          accentClass={activeBuilds.length > 0 ? 'border-l-warning/60' : undefined}
         />
       </div>
 
-      {/* Active builds */}
+      {/* ── Active builds ─────────────────────────────────────────────────── */}
       {activeBuilds.length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -134,10 +223,17 @@ function Dashboard() {
           </h2>
           <div className="grid gap-2 grid-cols-1 lg:grid-cols-2">
             {activeBuilds.map((b) => (
-              <Link key={b.id} to="/builds/$jobId" params={{ jobId: String(b.id) }} className="block">
+              <Link
+                key={b.id}
+                to="/builds/$jobId"
+                params={{ jobId: String(b.id) }}
+                className="block"
+              >
                 <Card className="hover:border-primary/40 transition-colors cursor-pointer">
                   <CardContent className="p-3 flex items-center gap-3">
-                    <Loader2 size={14} className="text-warning animate-spin shrink-0" />
+                    <div className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
+                      <Loader2 size={12} className="text-warning animate-spin" />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium text-foreground truncate block">
                         {b.pipeline_name ?? 'ad-hoc build'}
@@ -158,8 +254,9 @@ function Dashboard() {
         </section>
       )}
 
-      {/* Two-column lower section */}
+      {/* ── Two-column lower section ─────────────────────────────────────── */}
       <div className="flex gap-5">
+
         {/* Recent Builds */}
         <section className="flex flex-col gap-3 flex-1 min-w-0">
           <div className="flex items-center justify-between">
@@ -170,8 +267,14 @@ function Dashboard() {
               View all
             </Link>
           </div>
+
           <div className="rounded-lg border border-border overflow-hidden bg-card">
-            {!builds ? (
+            {buildsError ? (
+              <ErrorCard
+                message="Could not load recent builds"
+                onRetry={retryBuilds}
+              />
+            ) : buildsLoading ? (
               <div className="p-4">
                 <SkeletonRows count={4} />
               </div>
@@ -202,12 +305,18 @@ function Dashboard() {
               Manage →
             </Link>
           </div>
+
           <div className="rounded-lg border border-border overflow-hidden bg-card">
-            {!pipelines ? (
+            {pipelinesError ? (
+              <ErrorCard
+                message="Could not load pipelines"
+                onRetry={retryPipelines}
+              />
+            ) : pipelinesLoading ? (
               <div className="p-4">
                 <SkeletonRows count={3} />
               </div>
-            ) : pipelines.length === 0 ? (
+            ) : !pipelines || pipelines.length === 0 ? (
               <div className="p-6 text-center flex flex-col gap-2">
                 <span className="text-sm text-muted-foreground italic">No pipelines yet</span>
                 <Link to="/pipelines" className="text-xs text-primary hover:underline">
@@ -233,24 +342,38 @@ function Dashboard() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Row components
+// ---------------------------------------------------------------------------
+
 function RecentBuildRow({ build }: { build: BuildRunRowApi }) {
   return (
     <Link
-      to="/builds"
+      to="/builds/$jobId"
+      params={{ jobId: String(build.id) }}
       className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/30 transition-colors"
     >
       <StatusBadge status={build.status} />
       <div className="flex-1 min-w-0">
         <span className="text-xs text-foreground/80 truncate block">
-          {build.pipeline_name ?? <span className="italic text-muted-foreground">ad-hoc</span>}
+          {build.pipeline_name ?? (
+            <span className="italic text-muted-foreground">ad-hoc</span>
+          )}
         </span>
         <span className="text-[10px] font-mono text-muted-foreground truncate block">
           {build.project_name}
         </span>
       </div>
-      <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums">
-        {timeAgo(build.started_at)}
-      </span>
+      <div className="flex flex-col items-end gap-0.5 shrink-0">
+        <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+          {timeAgo(build.started_at)}
+        </span>
+        {build.duration_ms != null && (
+          <span className="text-[10px] text-muted-foreground/50 tabular-nums">
+            {formatDuration(build.duration_ms)}
+          </span>
+        )}
+      </div>
     </Link>
   );
 }
@@ -265,7 +388,7 @@ function QuickRunRow({
   onRun: (name: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2.5">
+    <div className="flex items-center gap-2 px-3 py-2.5 hover:bg-accent/20 transition-colors">
       <div className="flex-1 min-w-0">
         <span className="text-xs font-medium text-foreground truncate block">{pipeline.name}</span>
         <div className="flex items-center gap-1.5 mt-0.5">
@@ -280,8 +403,13 @@ function QuickRunRow({
         className="h-7 px-2.5 text-xs shrink-0"
         onClick={() => onRun(pipeline.name)}
         disabled={isRunning}
+        title={`Run ${pipeline.name}`}
       >
-        {isRunning ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+        {isRunning ? (
+          <Loader2 size={11} className="animate-spin" />
+        ) : (
+          <Play size={11} />
+        )}
       </Button>
     </div>
   );

@@ -39,6 +39,8 @@
         "react-dom": "^19.0.0",
         "react-virtuoso": "^4.12.3",
         "tailwind-merge": "^2.6.0",
+        "ws": "^8.18.0",
+        "zod": "^3.24.0",
       },
       "devDependencies": {
         "@electron/packager": "^19.0.5",
@@ -49,6 +51,7 @@
         "@types/node": "^22.10.0",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
+        "@types/ws": "^8.5.13",
         "@vitejs/plugin-react": "^4.3.4",
         "electron": "^34.0.0",
         "electron-builder": "^25.1.8",
