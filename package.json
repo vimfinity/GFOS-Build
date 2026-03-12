@@ -15,7 +15,7 @@
     "dev:gui": "cd gui && bun run dev",
     "rebuild:native": "cd gui && bun run rebuild:native",
     "build": "tsc -p tsconfig.json",
-    "build:server": "tsdown src/cli/index.ts --outDir dist/server --format esm --platform node --external better-sqlite3",
+    "build:server": "tsdown",
     "build:gui": "bun run build:server && bun run binary:build:win && cd gui && bun run package",
     "start": "node dist/cli/index.js",
     "lint": "eslint src tests",
