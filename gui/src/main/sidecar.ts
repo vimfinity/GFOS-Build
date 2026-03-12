@@ -9,33 +9,33 @@ export interface SidecarHandle {
 }
 
 export async function spawnSidecar(): Promise<SidecarHandle> {
-  // In packaged mode: spawn the self-contained Bun binary bundled in resources.
-  // In dev mode: spawn bun directly with the compiled server bundle.
+  // Dev: re-execute the Electron binary as plain Node.js (ELECTRON_RUN_AS_NODE).
+  //      better-sqlite3 must be rebuilt for Electron ABI first — run:
+  //        bun run rebuild:native   (from repo root or gui/)
   //
-  // We never use ELECTRON_RUN_AS_NODE because Electron's Node.js ABI differs
-  // from the ABI that better-sqlite3 (a native addon) was compiled against.
+  // Packaged: spawn the self-contained Bun-compiled binary from resources.
+  //           No ELECTRON_RUN_AS_NODE needed — the binary embeds its own runtime.
   let spawnCmd: string;
   let spawnArgs: string[];
+  let spawnEnv: NodeJS.ProcessEnv;
 
   if (app.isPackaged) {
     const binName = process.platform === 'win32' ? 'gfos-build.exe' : 'gfos-build';
     spawnCmd = path.join(process.resourcesPath, binName);
     spawnArgs = ['serve', '--port', '0'];
+    spawnEnv = process.env;
   } else {
-    spawnCmd = 'bun';
-    spawnArgs = [
-      path.join(app.getAppPath(), '..', 'dist', 'server', 'index.mjs'),
-      'serve',
-      '--port',
-      '0',
-    ];
+    const serverScript = path.join(app.getAppPath(), '..', 'dist', 'server', 'index.mjs');
+    spawnCmd = process.execPath;
+    spawnArgs = [serverScript, 'serve', '--port', '0'];
+    spawnEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
   }
 
   return new Promise((resolve, reject) => {
     let proc: ChildProcess;
     try {
       proc = spawn(spawnCmd, spawnArgs, {
-        env: process.env,
+        env: spawnEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });

@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "bun run src/cli/index.ts",
     "dev:gui": "cd gui && bun run dev",
+    "rebuild:native": "cd gui && bun run rebuild:native",
     "build": "tsc -p tsconfig.json",
     "build:server": "tsdown src/cli/index.ts --outDir dist/server --format esm --platform node --external better-sqlite3",
     "build:gui": "bun run build:server && bun run binary:build:win && cd gui && bun run package",

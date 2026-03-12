@@ -9,7 +9,8 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "package": "electron-vite build && node scripts/package-win.mjs",
-    "package:win": "electron-vite build && node scripts/package-win.mjs"
+    "package:win": "electron-vite build && node scripts/package-win.mjs",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3 -m .."
   },
   "dependencies": {
     "@base-ui-components/react": "^1.0.0-rc.0",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@electron/packager": "^19.0.5",
+    "@electron/rebuild": "^3.7.0",
     "@tailwindcss/vite": "^4.0.0",
     "@tanstack/router-plugin": "^1.95.0",
     "@types/node": "^22.10.0",
