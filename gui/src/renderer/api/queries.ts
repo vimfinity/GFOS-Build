@@ -15,6 +15,8 @@ export const healthQuery = queryOptions({
   queryFn: () => apiGet<HealthResponse>('/api/health'),
   refetchInterval: 30_000,
   staleTime: 20_000,
+  retry: 1,
+  retryDelay: 1_500,
 });
 
 export const configQuery = queryOptions({

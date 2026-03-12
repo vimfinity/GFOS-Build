@@ -10,8 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as PipelinesIndexRouteImport } from './routes/pipelines/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
+import { Route as PipelinesIndexRouteImport } from './routes/pipelines/index'
 import { Route as BuildsIndexRouteImport } from './routes/builds/index'
 import { Route as BuildsJobIdRouteImport } from './routes/builds/$jobId'
 
@@ -20,14 +20,14 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PipelinesIndexRoute = PipelinesIndexRouteImport.update({
-  id: '/pipelines/',
-  path: '/pipelines/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PipelinesIndexRoute = PipelinesIndexRouteImport.update({
+  id: '/pipelines/',
+  path: '/pipelines/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BuildsIndexRoute = BuildsIndexRouteImport.update({
@@ -43,40 +43,46 @@ const BuildsJobIdRoute = BuildsJobIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/pipelines/': typeof PipelinesIndexRoute
-  '/projects/': typeof ProjectsIndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds/': typeof BuildsIndexRoute
+  '/pipelines/': typeof PipelinesIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/pipelines': typeof PipelinesIndexRoute
-  '/projects': typeof ProjectsIndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds': typeof BuildsIndexRoute
+  '/pipelines': typeof PipelinesIndexRoute
+  '/projects': typeof ProjectsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/pipelines/': typeof PipelinesIndexRoute
-  '/projects/': typeof ProjectsIndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds/': typeof BuildsIndexRoute
+  '/pipelines/': typeof PipelinesIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/pipelines/' | '/projects/' | '/builds/$jobId' | '/builds/'
+  fullPaths: '/' | '/builds/$jobId' | '/builds/' | '/pipelines/' | '/projects/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/pipelines' | '/projects' | '/builds/$jobId' | '/builds'
-  id: '__root__' | '/' | '/pipelines/' | '/projects/' | '/builds/$jobId' | '/builds/'
+  to: '/' | '/builds/$jobId' | '/builds' | '/pipelines' | '/projects'
+  id:
+    | '__root__'
+    | '/'
+    | '/builds/$jobId'
+    | '/builds/'
+    | '/pipelines/'
+    | '/projects/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  PipelinesIndexRoute: typeof PipelinesIndexRoute
-  ProjectsIndexRoute: typeof ProjectsIndexRoute
   BuildsJobIdRoute: typeof BuildsJobIdRoute
   BuildsIndexRoute: typeof BuildsIndexRoute
+  PipelinesIndexRoute: typeof PipelinesIndexRoute
+  ProjectsIndexRoute: typeof ProjectsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -88,18 +94,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/pipelines/': {
-      id: '/pipelines/'
-      path: '/pipelines'
-      fullPath: '/pipelines/'
-      preLoaderRoute: typeof PipelinesIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/projects/': {
       id: '/projects/'
       path: '/projects'
       fullPath: '/projects/'
       preLoaderRoute: typeof ProjectsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pipelines/': {
+      id: '/pipelines/'
+      path: '/pipelines'
+      fullPath: '/pipelines/'
+      preLoaderRoute: typeof PipelinesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/builds/': {
@@ -121,10 +127,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  PipelinesIndexRoute: PipelinesIndexRoute,
-  ProjectsIndexRoute: ProjectsIndexRoute,
   BuildsJobIdRoute: BuildsJobIdRoute,
   BuildsIndexRoute: BuildsIndexRoute,
+  PipelinesIndexRoute: PipelinesIndexRoute,
+  ProjectsIndexRoute: ProjectsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

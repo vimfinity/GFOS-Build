@@ -13,7 +13,7 @@ export async function spawnSidecar(): Promise<SidecarHandle> {
   // In dev mode it lives at the repo root dist/server/.
   const serverScript = app.isPackaged
     ? path.join(process.resourcesPath, 'server', 'index.mjs')
-    : path.join(app.getAppPath(), '..', '..', 'dist', 'server', 'index.mjs');
+    : path.join(app.getAppPath(), '..', 'dist', 'server', 'index.mjs');
 
   return new Promise((resolve, reject) => {
     let proc: ChildProcess;

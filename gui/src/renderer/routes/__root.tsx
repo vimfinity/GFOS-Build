@@ -2,7 +2,7 @@ import { createRootRoute, Outlet, Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { healthQuery, configQuery, useSaveConfig } from '@/api/queries';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
-import { LayoutDashboard, Workflow, FolderSearch, Hammer, Wrench } from 'lucide-react';
+import { LayoutDashboard, Workflow, FolderSearch, Hammer, Wrench, ServerCrash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const Route = createRootRoute({
@@ -37,25 +37,48 @@ function NavTab({ to, icon: Icon, label, exact }: { to: string; icon: React.Elem
 }
 
 function HealthDot() {
-  const { data } = useQuery(healthQuery);
+  const { data, isError } = useQuery(healthQuery);
   return (
     <div
-      title={data ? `Server v${data.version} · uptime ${data.uptime}s` : 'Connecting to server…'}
+      title={
+        isError
+          ? 'Server unreachable — check terminal for errors'
+          : data
+            ? `Server v${data.version} · uptime ${data.uptime}s`
+            : 'Connecting to server…'
+      }
       className={cn(
         'w-2 h-2 rounded-full flex-shrink-0 transition-colors',
-        data ? 'bg-success' : 'bg-border animate-pulse',
+        isError ? 'bg-destructive' : data ? 'bg-success' : 'bg-border animate-pulse',
       )}
     />
+  );
+}
+
+function ServerOfflineOverlay() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 h-full text-center px-6">
+      <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+        <ServerCrash size={24} className="text-destructive" />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-sm font-semibold text-foreground">Server failed to start</p>
+        <p className="text-xs text-muted-foreground max-w-xs">
+          The background server process could not be reached. Check the terminal for error output, then restart the app.
+        </p>
+      </div>
+    </div>
   );
 }
 
 function RootLayout() {
   const queryClient = useQueryClient();
   const { data: configData } = useQuery(configQuery);
+  const { isError: serverOffline } = useQuery(healthQuery);
   const saveConfig = useSaveConfig();
 
   // Show onboarding whenever config has no roots configured (regardless of route)
-  const needsOnboarding = configData !== undefined && Object.keys(configData.config.roots).length === 0;
+  const needsOnboarding = !serverOffline && configData !== undefined && Object.keys(configData.config.roots).length === 0;
 
   async function handleOnboardingComplete(config: {
     roots: Record<string, string>;
@@ -97,7 +120,7 @@ function RootLayout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto min-w-0">
-        <Outlet />
+        {serverOffline ? <ServerOfflineOverlay /> : <Outlet />}
       </main>
 
       {/* Global onboarding wizard — shown whenever no roots are configured */}
