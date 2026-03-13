@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const guiRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(guiRoot, '..');
+const extraArgs = process.argv.slice(2);
+const isSmokeTest = extraArgs.includes('--smoke-test');
+const forwardedArgs = extraArgs.filter((arg) => arg !== '--smoke-test');
 const packagedExe = path.resolve(
   repoRoot,
   'release',
@@ -27,8 +30,12 @@ if (!fs.existsSync(packagedExe)) {
   });
 }
 
-const child = spawn(packagedExe, {
+const child = spawn(packagedExe, forwardedArgs, {
   cwd: path.dirname(packagedExe),
+  env: {
+    ...process.env,
+    ...(isSmokeTest ? { GFOS_BUILD_SMOKE_TEST: '1' } : {}),
+  },
   stdio: 'inherit',
 });
 

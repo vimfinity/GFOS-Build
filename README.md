@@ -16,9 +16,11 @@ A desktop application for Maven project management, pipeline orchestration, and 
 
 ## Download
 
-Go to the [Releases](../../releases) page and download `GFOS-Build-win32-x64.zip` from the latest release.
+Go to the [Releases](../../releases) page and download the latest `GFOS-Build-<version>-win32-x64.zip`.
 
-Extract the ZIP anywhere and run **`GFOS Build.exe`**.
+Extract the ZIP anywhere and run **`GFOS Build.exe`** from the extracted `GFOS Build <version>/` folder.
+
+If you want GFOS Build to appear in Windows search, run **`Add GFOS Build to Start Menu.cmd`** once from the extracted folder. This creates a per-user Start Menu shortcut with no admin rights or installer required.
 
 ### Requirements
 
@@ -67,7 +69,12 @@ bun run dist:desktop:win     # create the Windows desktop release
 The release outputs will be in `release/desktop/`:
 
 - `release/desktop/win-unpacked/GFOS Build-win32-x64/`
-- `release/desktop/GFOS-Build-win32-x64.zip`
+- `release/desktop/GFOS-Build-<version>-win32-x64.zip`
+
+The portable desktop bundle also includes:
+
+- `Add GFOS Build to Start Menu.cmd`
+- `Remove GFOS Build from Start Menu.cmd`
 
 ### Run tests
 

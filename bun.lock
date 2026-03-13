@@ -26,7 +26,7 @@
     },
     "gui": {
       "name": "gfos-build-gui",
-      "version": "0.1.0-alpha.1",
+      "version": "0.1.0-alpha.2",
       "dependencies": {
         "@base-ui-components/react": "^1.0.0-rc.0",
         "@tanstack/react-query": "^5.62.0",

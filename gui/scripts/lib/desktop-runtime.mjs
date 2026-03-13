@@ -12,7 +12,9 @@ export const guiRoot = path.resolve(__dirname, '..', '..');
 export const repoRoot = path.resolve(guiRoot, '..');
 export const guiPackageJson = require(path.join(guiRoot, 'package.json'));
 export const productName = guiPackageJson.productName ?? 'GFOS Build';
+export const appVersion = guiPackageJson.version;
 export const electronVersion = require('electron/package.json').version;
+export const zipArtifactName = `GFOS-Build-${appVersion}-win32-x64.zip`;
 
 export function run(command, cwd) {
   execSync(command, {

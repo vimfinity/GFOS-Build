@@ -1,7 +1,7 @@
 {
   "name": "gfos-build-gui",
   "productName": "GFOS Build",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "GFOS Build — Desktop GUI",
   "private": true,
   "main": "out/main/index.js",
@@ -9,6 +9,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "node scripts/start-win.mjs",
+    "smoke:win": "node scripts/start-win.mjs --smoke-test",
     "check": "bun run typecheck && bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "dist:win": "node scripts/dist-win.mjs",

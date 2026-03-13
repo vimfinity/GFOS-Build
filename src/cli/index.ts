@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'node:module';
 import { parseArgs } from './args.js';
 import { loadConfig } from '../config/loader.js';
 import { getDbPath, getConfigPath } from '../config/paths.js';
@@ -24,7 +25,8 @@ import { SIDECAR_READY_PREFIX } from '@gfos-build/shared';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import nodePath from 'node:path';
 
-const VERSION = '1.0.0';
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require('../../package.json') as { version: string };
 
 const HELP_TEXT = `
 gfos-build v${VERSION} — Maven build orchestration CLI
