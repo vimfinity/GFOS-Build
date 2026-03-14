@@ -29,7 +29,12 @@ export async function runPipelineRun(
     throw new Error(`Pipeline "${options.pipelineName}" not found. ${hint}`);
   }
 
-  const pipeline = resolvePipeline(options.pipelineName, pipelineConfig, config);
+  let pipeline;
+  try {
+    pipeline = resolvePipeline(options.pipelineName, pipelineConfig, config);
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : String(error));
+  }
 
   let fromIndex = 0;
   if (options.from) {

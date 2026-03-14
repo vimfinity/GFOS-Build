@@ -1,11 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { JdkRegistryFields, type JdkRegistryEntry } from '@/components/JdkRegistryFields';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { TagInput } from '@/components/ui/tag-input';
+import { MAVEN_OPTIONS } from '@/components/MavenCommandFields';
 import { cn } from '@/lib/utils';
 import { FolderOpen, Plus, Trash2, ArrowRight, ArrowLeft, Check, Wrench } from 'lucide-react';
 import { pickDirectory } from '@/api/bridge';
+import type { MavenOptionKey } from '@shared/types';
 
 interface OnboardingDialogProps {
   open: boolean;
@@ -13,12 +17,12 @@ interface OnboardingDialogProps {
   onOpenChange?: (open: boolean) => void;
   initialConfig?: {
     roots: Record<string, string>;
-    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
+    maven: { executable: string; defaultGoals: string[]; defaultOptionKeys: string[]; defaultExtraOptions: string[] };
     jdkRegistry: Record<string, string>;
   };
   onComplete: (config: {
     roots: Record<string, string>;
-    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
+    maven: { executable: string; defaultGoals: string[]; defaultOptionKeys: string[]; defaultExtraOptions: string[] };
     jdkRegistry: Record<string, string>;
   }) => void;
 }
@@ -32,21 +36,24 @@ export function OnboardingDialog({
 }: OnboardingDialogProps) {
   const [step, setStep] = useState(0);
   const [mavenExe, setMavenExe] = useState('mvn');
-  const [defaultGoals, setDefaultGoals] = useState('clean install');
-  const [defaultFlags, setDefaultFlags] = useState('');
-  const [jdks, setJdks] = useState<Array<{ version: string; path: string }>>([]);
+  const [defaultGoals, setDefaultGoals] = useState<string[]>(['clean', 'install']);
+  const [defaultOptionKeys, setDefaultOptionKeys] = useState<MavenOptionKey[]>([]);
+  const [defaultExtraOptions, setDefaultExtraOptions] = useState<string[]>([]);
+  const [jdks, setJdks] = useState<JdkRegistryEntry[]>([]);
   const [roots, setRoots] = useState<Array<{ name: string; path: string }>>([]);
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     setMavenExe(initialConfig?.maven.executable ?? 'mvn');
-    setDefaultGoals(initialConfig?.maven.defaultGoals.join(' ') ?? 'clean install');
-    setDefaultFlags(initialConfig?.maven.defaultFlags.join(' ') ?? '');
+    setDefaultGoals(initialConfig?.maven.defaultGoals ?? ['clean', 'install']);
+    setDefaultOptionKeys((initialConfig?.maven.defaultOptionKeys as MavenOptionKey[] | undefined) ?? []);
+    setDefaultExtraOptions(initialConfig?.maven.defaultExtraOptions ?? []);
     setJdks(
       Object.entries(initialConfig?.jdkRegistry ?? {}).map(([version, path]) => ({
         version,
         path,
+        source: 'manual' as const,
       })),
     );
     setRoots(
@@ -56,16 +63,6 @@ export function OnboardingDialog({
       })),
     );
   }, [open, initialConfig]);
-
-  function addJdk() {
-    setJdks((items) => [...items, { version: '', path: '' }]);
-  }
-  function removeJdk(index: number) {
-    setJdks((items) => items.filter((_, i) => i !== index));
-  }
-  function updateJdk(index: number, field: 'version' | 'path', value: string) {
-    setJdks((items) => items.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
-  }
 
   function addRoot() {
     setRoots((items) => [...items, { name: '', path: '' }]);
@@ -95,8 +92,9 @@ export function OnboardingDialog({
       roots: rootsObj,
       maven: {
         executable: mavenExe || 'mvn',
-        defaultGoals: defaultGoals.split(/\s+/).filter(Boolean),
-        defaultFlags: defaultFlags.split(/\s+/).filter(Boolean),
+        defaultGoals,
+        defaultOptionKeys,
+        defaultExtraOptions,
       },
       jdkRegistry: jdkObj,
     });
@@ -126,19 +124,19 @@ export function OnboardingDialog({
             <div className="rounded-[18px] border border-border/80 bg-card/40 px-4 py-4">
               <p className="text-sm font-medium text-foreground">Maven defaults</p>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Pick the executable, common goals, and extra flags new runs should inherit.
+                Pick the executable, common goals, standard options, and extra options new runs should inherit.
               </p>
             </div>
             <div className="rounded-[18px] border border-border/80 bg-card/40 px-4 py-4">
               <p className="text-sm font-medium text-foreground">Optional JDK versions</p>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Register local JDKs so pipeline steps can target a specific Java version later.
+                Register local JDKs so GFOS Build can pin Maven runs through JAVA_HOME instead of relying on the system Java.
               </p>
             </div>
             <div className="rounded-[18px] border border-border/80 bg-card/40 px-4 py-4">
               <p className="text-sm font-medium text-foreground">Project roots</p>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Tell GFOS where your Maven and npm codebases live so scanning knows where to look.
+                Tell GFOS where your Maven and Node codebases live so scanning knows where to look.
               </p>
             </div>
           </div>
@@ -146,10 +144,10 @@ export function OnboardingDialog({
       ),
     },
     {
-      title: 'Maven configuration',
-      description: 'Choose the default executable and command arguments for new runs.',
+      title: 'Maven presets',
+      description: 'Choose the default executable and preset options for new Maven runs.',
       content: (
-        <div className="flex flex-col gap-3.5">
+        <div className="flex flex-col gap-4">
           <div>
             <Input
               label="Maven executable"
@@ -160,78 +158,71 @@ export function OnboardingDialog({
             {helperText('Executable name or absolute path used when GFOS starts Maven builds.')}
           </div>
           <div>
-            <Input
+            <TagInput
               label="Default goals"
-              placeholder="clean install"
+              placeholder="e.g. clean"
               value={defaultGoals}
-              onChange={(e) => setDefaultGoals(e.target.value)}
+              onChange={setDefaultGoals}
             />
             {helperText('Pre-filled goals for ad-hoc Maven runs and Maven pipeline steps.')}
           </div>
           <div>
-            <Input
-              label="Default flags"
-              placeholder="-DskipTests -T 2C"
-              value={defaultFlags}
-              onChange={(e) => setDefaultFlags(e.target.value)}
+            <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Default standard options
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {MAVEN_OPTIONS.map((option) => {
+                const active = defaultOptionKeys.includes(option.key);
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() =>
+                      setDefaultOptionKeys((current) =>
+                        current.includes(option.key)
+                          ? current.filter((key) => key !== option.key)
+                          : [...current, option.key],
+                      )
+                    }
+                    className={cn(
+                      'pill-control border transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+                      active
+                        ? 'border-primary/20 bg-primary/10 text-primary'
+                        : 'border-border bg-card/70 text-muted-foreground hover:bg-accent/60 hover:text-foreground active:bg-accent/80',
+                    )}
+                  >
+                    {option.flag}
+                  </button>
+                );
+              })}
+            </div>
+            {helperText('Preselect common Maven flags like -DskipTests, -U, or -q for new runs.')}
+          </div>
+          <div>
+            <TagInput
+              label="Default extra options"
+              placeholder="e.g. -T4"
+              value={defaultExtraOptions}
+              onChange={setDefaultExtraOptions}
             />
-            {helperText('Optional Maven flags appended to new runs by default.')}
+            {helperText('Optional non-standard Maven options appended to new runs by default.')}
           </div>
         </div>
       ),
     },
     {
       title: 'JDK registry',
-      description: 'Register JDK installations for per-step JAVA_HOME overrides.',
+      description: 'Register JDK installations for explicit JAVA_HOME overrides.',
       content: (
         <div className="flex flex-col gap-2.5">
           <p className="text-sm text-muted-foreground">
-            Leave this empty if you want to use the system Java installation.
+            Leave this empty if you want Maven to use the system Java installation. Detected Java versions from Maven projects are only enforceable when a matching JDK is registered here.
           </p>
-          {jdks.map((jdk, index) => (
-            <div key={index} className="rounded-[20px] border border-border bg-secondary/45 p-3">
-              <div className="grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)_auto_auto]">
-                <div>
-                  <Input
-                    label="Version"
-                    placeholder="17"
-                    value={jdk.version}
-                    onChange={(e) => updateJdk(index, 'version', e.target.value)}
-                  />
-                  {helperText('Key used later when choosing a Java version for a pipeline step.')}
-                </div>
-                <div>
-                  <Input
-                    label="JAVA_HOME path"
-                    placeholder="C:\\Program Files\\Java\\jdk-17"
-                    value={jdk.path}
-                    onChange={(e) => updateJdk(index, 'path', e.target.value)}
-                  />
-                  {helperText('Absolute JAVA_HOME directory for this installed JDK.')}
-                </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => void browseDirectory((dir) => updateJdk(index, 'path', dir))}
-                  className="self-end"
-                >
-                  <FolderOpen size={14} />
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  onClick={() => removeJdk(index)}
-                  className="self-end"
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" onClick={addJdk} className="self-start">
-            <Plus size={14} />
-            Add JDK
-          </Button>
+          <JdkRegistryFields
+            entries={jdks}
+            onChange={setJdks}
+            emptyMessage="No JDK entries yet. Use Detect from folder if your JDKs live under a shared parent like J:\\dev\\java."
+          />
         </div>
       ),
     },
@@ -259,7 +250,7 @@ export function OnboardingDialog({
                     value={root.path}
                     onChange={(e) => updateRoot(index, 'path', e.target.value)}
                   />
-                  {helperText('Directory GFOS scans for Maven and npm projects under this root.')}
+                  {helperText('Directory GFOS scans for Maven and Node projects under this root.')}
                 </div>
                 <Button
                   variant="outline"

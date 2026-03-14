@@ -15,6 +15,7 @@ interface PipelineCardProps {
 function LastRunIcon({ status }: { status: string }) {
   if (status === 'success') return <CheckCircle2 size={14} className="text-success shrink-0" />;
   if (status === 'failed') return <XCircle size={14} className="text-destructive shrink-0" />;
+  if (status === 'launched') return <ArrowUpRight size={14} className="text-warning shrink-0" />;
   if (status === 'running') {
     return <Loader2 size={14} className="text-primary animate-spin shrink-0" />;
   }
@@ -53,6 +54,7 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
               className="pill-meta rounded-full border border-border bg-secondary text-secondary-foreground"
             >
               {step.label || `Step ${index + 1}`}
+              {step.buildSystem === 'node' && step.executionMode === 'external' ? ' · external' : ''}
             </span>
           ))}
         </div>

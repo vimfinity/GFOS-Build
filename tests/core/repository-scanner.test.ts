@@ -4,7 +4,6 @@ import { RepositoryScanner } from '../../src/core/repository-scanner.js';
 import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
 import type { ScanEvent, ScanOptions } from '../../src/core/types.js';
 
-// In-memory filesystem for testing
 class InMemoryFileSystem implements FileSystem {
   private files = new Map<string, string>();
   private directories = new Map<string, DirEntry[]>();
@@ -60,7 +59,6 @@ describe('RepositoryScanner', () => {
     const scanner = new RepositoryScanner(fs);
     const events = await collectEvents(scanner, {
       roots: { test: rootPath },
-      maxDepth: 4,
       includeHidden: false,
       exclude: [],
     });
@@ -77,7 +75,7 @@ describe('RepositoryScanner', () => {
     }
   });
 
-  it('does not descend into directories with pom.xml (submodule skipping)', async () => {
+  it('collapses nested Maven modules under the broader project entry', async () => {
     const fs = new InMemoryFileSystem();
     const rootPath = path.resolve('/workspaces');
 
@@ -89,14 +87,16 @@ describe('RepositoryScanner', () => {
     const scanner = new RepositoryScanner(fs);
     const events = await collectEvents(scanner, {
       roots: { test: rootPath },
-      maxDepth: 4,
       includeHidden: false,
       exclude: [],
     });
 
     const found = events.filter((e) => e.type === 'repo:found');
     expect(found).toHaveLength(1);
-    expect(found[0]!.type === 'repo:found' && found[0]!.project.name).toBe('parent');
+    if (found[0]?.type === 'repo:found') {
+      expect(found[0].project.name).toBe('parent');
+      expect(found[0].project.maven?.modules.map((moduleEntry) => moduleEntry.relativePath)).toEqual(['child']);
+    }
   });
 
   it('skips hidden directories by default', async () => {
@@ -112,7 +112,6 @@ describe('RepositoryScanner', () => {
     const scanner = new RepositoryScanner(fs);
     const events = await collectEvents(scanner, {
       roots: { test: rootPath },
-      maxDepth: 4,
       includeHidden: false,
       exclude: [],
     });
@@ -135,7 +134,6 @@ describe('RepositoryScanner', () => {
     const scanner = new RepositoryScanner(fs);
     const events = await collectEvents(scanner, {
       roots: { test: rootPath },
-      maxDepth: 4,
       includeHidden: true,
       exclude: [],
     });
@@ -157,7 +155,6 @@ describe('RepositoryScanner', () => {
     const scanner = new RepositoryScanner(fs);
     const events = await collectEvents(scanner, {
       roots: { test: rootPath },
-      maxDepth: 4,
       includeHidden: false,
       exclude: ['skip'],
     });
@@ -167,37 +164,23 @@ describe('RepositoryScanner', () => {
     expect(found[0]!.type === 'repo:found' && found[0]!.project.name).toBe('keep');
   });
 
-  it('respects maxDepth', async () => {
+  it('recursively scans without a depth limit', async () => {
     const fs = new InMemoryFileSystem();
     const rootPath = path.resolve('/workspaces');
 
     fs.addDirectory(rootPath, [dirEntry('level1', true)]);
     fs.addDirectory(path.join(rootPath, 'level1'), [dirEntry('level2', true)]);
     fs.addDirectory(path.join(rootPath, 'level1', 'level2'), []);
-    fs.addFile(
-      path.join(rootPath, 'level1', 'level2', 'pom.xml'),
-      '<project><artifactId>deep</artifactId></project>'
-    );
+    fs.addFile(path.join(rootPath, 'level1', 'level2', 'pom.xml'), '<project><artifactId>deep</artifactId></project>');
 
     const scanner = new RepositoryScanner(fs);
-
-    // maxDepth 1 should not find it (root = depth 0, level1 = depth 1, level2 = depth 2)
-    const shallow = await collectEvents(scanner, {
+    const events = await collectEvents(scanner, {
       roots: { test: rootPath },
-      maxDepth: 1,
       includeHidden: false,
       exclude: [],
     });
-    expect(shallow.filter((e) => e.type === 'repo:found')).toHaveLength(0);
 
-    // maxDepth 2 should find it
-    const deep = await collectEvents(scanner, {
-      roots: { test: rootPath },
-      maxDepth: 2,
-      includeHidden: false,
-      exclude: [],
-    });
-    expect(deep.filter((e) => e.type === 'repo:found')).toHaveLength(1);
+    expect(events.filter((e) => e.type === 'repo:found')).toHaveLength(1);
   });
 
   it('detects .mvn/maven.config', async () => {
@@ -211,7 +194,6 @@ describe('RepositoryScanner', () => {
     const scanner = new RepositoryScanner(fs);
     const events = await collectEvents(scanner, {
       roots: { test: rootPath },
-      maxDepth: 4,
       includeHidden: false,
       exclude: [],
     });
@@ -237,7 +219,6 @@ describe('RepositoryScanner', () => {
     const scanner = new RepositoryScanner(fs);
     const events = await collectEvents(scanner, {
       roots: { r1: root1, r2: root2 },
-      maxDepth: 4,
       includeHidden: false,
       exclude: [],
     });
@@ -252,7 +233,6 @@ describe('RepositoryScanner', () => {
 
     const events = await collectEvents(scanner, {
       roots: { test: path.resolve('/nonexistent') },
-      maxDepth: 4,
       includeHidden: false,
       exclude: [],
     });
@@ -261,6 +241,52 @@ describe('RepositoryScanner', () => {
     expect(done).toBeDefined();
     if (done?.type === 'scan:done') {
       expect(done.projects).toHaveLength(0);
+    }
+  });
+
+  it('detects pnpm projects from lockfiles', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/web');
+
+    fs.addDirectory(rootPath, []);
+    fs.addFile(path.join(rootPath, 'package.json'), JSON.stringify({ name: 'web', scripts: { build: 'vite build' } }));
+    fs.addFile(path.join(rootPath, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((event) => event.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.buildSystem).toBe('node');
+      expect(found.project.node?.packageManager).toBe('pnpm');
+      expect(found.project.node?.scripts.build).toBe('vite build');
+    }
+  });
+
+  it('falls back to npm when no known lockfile exists', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/app');
+
+    fs.addDirectory(rootPath, []);
+    fs.addFile(path.join(rootPath, 'package.json'), JSON.stringify({ name: 'app', scripts: { dev: 'vite' } }));
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((event) => event.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.buildSystem).toBe('node');
+      expect(found.project.node?.packageManager).toBe('npm');
     }
   });
 });

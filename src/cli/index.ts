@@ -9,7 +9,7 @@ import { NodeProcessRunner } from '../infrastructure/process-runner.js';
 import { AppDatabase } from '../infrastructure/database.js';
 import { RepositoryScanner } from '../core/repository-scanner.js';
 import { BuildExecutor } from '../core/build-executor.js';
-import { NpmExecutor } from '../core/npm-executor.js';
+import { NodeExecutor } from '../core/node-executor.js';
 import { CachedScanner } from '../application/scanner.js';
 import { BuildRunner } from '../application/build-runner.js';
 import { PipelineRunner } from '../application/pipeline-runner.js';
@@ -29,13 +29,13 @@ const require = createRequire(import.meta.url);
 const { version: VERSION } = require('../../package.json') as { version: string };
 
 const HELP_TEXT = `
-gfos-build v${VERSION} — Maven build orchestration CLI
+gfos-build v${VERSION} — build orchestration CLI
 
 Usage:
   gfos-build build <path> [options]          Run a single Maven build
   gfos-build pipeline run <name> [options]   Execute a saved pipeline
   gfos-build pipeline list                   List configured pipelines
-  gfos-build scan [path] [options]           Discover Maven projects
+  gfos-build scan [path] [options]           Discover Maven and Node projects
   gfos-build config init                     Setup wizard
   gfos-build config show                     Print current config
   gfos-build version                         Show version
@@ -58,7 +58,6 @@ pipeline run options:
   --dry-run         Print steps without executing
 
 scan options:
-  --depth <n>       Override maxDepth
   --no-cache        Force fresh scan
 `;
 
@@ -82,7 +81,18 @@ async function main(): Promise<void> {
   }
 
   // All other commands require a config
-  const configResult = loadConfig(global.config);
+  let configResult: ReturnType<typeof loadConfig>;
+  let serveConfigError: string | undefined;
+  try {
+    configResult = loadConfig(global.config);
+  } catch (error) {
+    if (command.name === 'serve') {
+      configResult = { found: false };
+      serveConfigError = error instanceof Error ? error.message : String(error);
+    } else {
+      throw error;
+    }
+  }
 
   // Serve can start without a config — creates defaults so the GUI onboarding works
   if (command.name === 'serve') {
@@ -106,10 +116,10 @@ async function main(): Promise<void> {
     try {
       const scanner = new CachedScanner(new RepositoryScanner(fileSystem), db);
       const executor = new BuildExecutor(processRunner);
-      const npmExecutor = new NpmExecutor(processRunner);
-      const buildRunner = new BuildRunner(executor, npmExecutor, fileSystem);
+      const nodeExecutor = new NodeExecutor(processRunner);
+      const buildRunner = new BuildRunner(executor, nodeExecutor, fileSystem);
       const pipelineRunner = new PipelineRunner(buildRunner, db);
-      server = await runServe({ port: command.port, config, configPath, db, scanner, buildRunner, pipelineRunner, fs: fileSystem });
+      server = await runServe({ port: command.port, config, configPath, configError: serveConfigError, db, scanner, buildRunner, pipelineRunner, fs: fileSystem });
       process.stdout.write(`${SIDECAR_READY_PREFIX}${server.port}\n`);
       await new Promise<void>((resolve) => {
         process.on('SIGINT', resolve);
@@ -144,15 +154,14 @@ async function main(): Promise<void> {
   try {
     const scanner = new CachedScanner(new RepositoryScanner(fileSystem), db);
     const executor = new BuildExecutor(processRunner);
-    const npmExecutor = new NpmExecutor(processRunner);
-    const buildRunner = new BuildRunner(executor, npmExecutor, fileSystem);
+    const nodeExecutor = new NodeExecutor(processRunner);
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fileSystem);
     const pipelineRunner = new PipelineRunner(buildRunner, db);
 
     switch (command.name) {
       case 'scan':
         await runScan(scanner, config, {
           path: command.path,
-          depth: command.depth,
           noCache: command.noCache,
           json: global.json,
         });

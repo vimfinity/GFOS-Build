@@ -9,7 +9,10 @@ import type {
   StartJobResponse,
   ConfigResponse,
   ScanResponse,
+  ProjectInspectionResponse,
+  JdkDetectionResponse,
 } from '@shared/api';
+import type { ExecutionMode, MavenOptionKey, MavenProfileState, NodeCommandType } from '@shared/types';
 
 export const healthQuery = queryOptions({
   queryKey: ['health'],
@@ -121,13 +124,29 @@ export function useAdHocBuild() {
   return useMutation({
     mutationFn: (body: {
       path: string;
-      buildSystem: 'maven' | 'npm';
+      buildSystem: 'maven' | 'node';
+      modulePath?: string;
       goals?: string[];
-      flags?: string[];
+      optionKeys?: MavenOptionKey[];
+      profileStates?: Record<string, MavenProfileState>;
+      extraOptions?: string[];
       java?: string;
-      npmScript?: string;
+      commandType?: NodeCommandType;
+      script?: string;
+      args?: string[];
+      executionMode?: ExecutionMode;
     }) =>
       apiPost<StartJobResponse>('/api/build', body),
+  });
+}
+
+export function inspectProject(path: string) {
+  return apiPost<ProjectInspectionResponse>('/api/project/inspect', { path });
+}
+
+export function useDetectJdks() {
+  return useMutation({
+    mutationFn: (path: string) => apiPost<JdkDetectionResponse>('/api/jdks/detect', { path }),
   });
 }
 

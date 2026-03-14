@@ -51,6 +51,7 @@ function deriveGroupStatus(steps: BuildRunRowApi[]): string {
   if (steps.some((step) => step.status === 'running')) return 'running';
   if (steps.some((step) => step.status === 'failed')) return 'failed';
   if (steps.every((step) => step.status === 'success')) return 'success';
+  if (steps.some((step) => step.status === 'launched')) return 'launched';
   return steps[steps.length - 1]?.status ?? 'running';
 }
 
@@ -88,7 +89,7 @@ function groupBuilds(rows: BuildRunRowApi[]): GroupedItem[] {
   return resultChron.reverse();
 }
 
-const STATUS_PILLS = ['All', 'Success', 'Failed', 'Running'] as const;
+const STATUS_PILLS = ['All', 'Success', 'Failed', 'Launched', 'Running'] as const;
 type StatusFilter = (typeof STATUS_PILLS)[number];
 
 function BuildsView() {

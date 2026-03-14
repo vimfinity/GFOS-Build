@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { BuildRunner } from '../../src/application/build-runner.js';
 import { BuildExecutor } from '../../src/core/build-executor.js';
-import { NpmExecutor } from '../../src/core/npm-executor.js';
+import { NodeExecutor } from '../../src/core/node-executor.js';
 import type { ProcessRunner } from '../../src/infrastructure/process-runner.js';
-import type { ProcessEvent, BuildStep, BuildEvent } from '../../src/core/types.js';
+import type { BuildEvent, MavenBuildStep, NodeBuildStep, ProcessEvent } from '../../src/core/types.js';
 import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
 
 class FakeProcessRunner implements ProcessRunner {
@@ -23,13 +23,17 @@ class FakeProcessRunner implements ProcessRunner {
       },
     };
   }
+
+  launchExternal(): AsyncIterable<ProcessEvent> {
+    return this.spawn();
+  }
 }
 
-function createMockFs(existingFiles: string[]): FileSystem {
+function createMockFs(existingFiles: string[], fileContents: Record<string, string> = {}): FileSystem {
   return {
     exists: async (p: string) => existingFiles.includes(p),
     readDir: async (): Promise<DirEntry[]> => [],
-    readFile: async () => '',
+    readFile: async (p: string) => fileContents[p] ?? '',
     writeFile: async () => {},
     mkdir: async () => {},
   };
@@ -37,12 +41,15 @@ function createMockFs(existingFiles: string[]): FileSystem {
 
 import path from 'node:path';
 
-function makeStep(overrides: Partial<BuildStep> = {}): BuildStep {
+function makeStep(overrides: Partial<MavenBuildStep> = {}): MavenBuildStep {
   return {
     path: path.resolve('/project'),
     buildSystem: 'maven',
     goals: ['clean', 'install'],
-    flags: [],
+    optionKeys: [],
+    profileStates: {},
+    extraOptions: [],
+    executionMode: 'internal',
     label: 'test-project',
     mavenExecutable: 'mvn',
     ...overrides,
@@ -61,14 +68,17 @@ describe('BuildRunner', () => {
   it('throws when pom.xml does not exist', async () => {
     const runner = new FakeProcessRunner();
     const executor = new BuildExecutor(runner);
-    const npmExecutor = new NpmExecutor(runner);
+    const nodeExecutor = new NodeExecutor(runner);
     const fs = createMockFs([]);
-    const buildRunner = new BuildRunner(executor, npmExecutor, fs);
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fs);
     const step = makeStep();
-
-    await expect(async () => {
-      await collectBuildEvents(buildRunner.run(step, 0, 1));
-    }).rejects.toThrow('No pom.xml found');
+    const events = await collectBuildEvents(buildRunner.run(step, 0, 1));
+    expect(events[0]).toEqual({ type: 'step:output', line: `No pom.xml found at "${step.path}".`, stream: 'stderr' });
+    expect(events[1]!.type).toBe('step:done');
+    if (events[1]?.type === 'step:done') {
+      expect(events[1].success).toBe(false);
+      expect(events[1].status).toBe('failed');
+    }
   });
 
   it('emits step:start, step:output, step:done events in order', async () => {
@@ -81,9 +91,9 @@ describe('BuildRunner', () => {
     const step = makeStep();
     const pomPath = path.join(step.path, 'pom.xml');
     const executor = new BuildExecutor(runner);
-    const npmExecutor = new NpmExecutor(runner);
+    const nodeExecutor = new NodeExecutor(runner);
     const fs = createMockFs([pomPath]);
-    const buildRunner = new BuildRunner(executor, npmExecutor, fs);
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fs);
 
     const events = await collectBuildEvents(buildRunner.run(step, 0, 1));
 
@@ -99,9 +109,9 @@ describe('BuildRunner', () => {
     const step = makeStep();
     const pomPath = path.join(step.path, 'pom.xml');
     const executor = new BuildExecutor(runner);
-    const npmExecutor = new NpmExecutor(runner);
+    const nodeExecutor = new NodeExecutor(runner);
     const fs = createMockFs([pomPath]);
-    const buildRunner = new BuildRunner(executor, npmExecutor, fs);
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fs);
 
     const events = await collectBuildEvents(buildRunner.run(step, 0, 1));
     const stepDone = events.find((e) => e.type === 'step:done');
@@ -109,7 +119,41 @@ describe('BuildRunner', () => {
     expect(stepDone).toBeDefined();
     if (stepDone?.type === 'step:done') {
       expect(stepDone.success).toBe(false);
+      expect(stepDone.status).toBe('failed');
       expect(stepDone.exitCode).toBe(1);
+    }
+  });
+
+  it('marks successful external node handoff as launched', async () => {
+    const runner = new FakeProcessRunner();
+    runner.events = [{ type: 'done', exitCode: 0, durationMs: 120 }];
+
+    const packageJsonPath = path.join('C:/repo/app', 'package.json');
+    const step: NodeBuildStep = {
+      path: 'C:/repo/app',
+      buildSystem: 'node',
+      label: 'app',
+      commandType: 'script',
+      script: 'dev',
+      args: [],
+      executionMode: 'external',
+      nodeExecutables: { npm: 'npm', pnpm: 'pnpm', bun: 'bun' },
+    };
+    const executor = new BuildExecutor(runner);
+    const nodeExecutor = new NodeExecutor(runner);
+    const fs = createMockFs(
+      [packageJsonPath],
+      { [packageJsonPath]: JSON.stringify({ name: 'app', scripts: { dev: 'next dev' } }) },
+    );
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fs);
+
+    const events = await collectBuildEvents(buildRunner.run(step, 0, 1));
+    const stepDone = events.find((event) => event.type === 'step:done');
+
+    expect(stepDone?.type).toBe('step:done');
+    if (stepDone?.type === 'step:done') {
+      expect(stepDone.status).toBe('launched');
+      expect(stepDone.success).toBe(true);
     }
   });
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -12,8 +12,11 @@ import type { BuildRunner } from '../../application/build-runner.js';
 import type { PipelineRunner } from '../../application/pipeline-runner.js';
 import type { FileSystem } from '../../infrastructure/file-system.js';
 import { resolvePipeline, resolveStepPath } from '../../config/resolver.js';
-import { resolveJavaHome } from '../../core/jdk-resolver.js';
+import { detectJdks, requireRegisteredJavaHome, resolveJavaHome } from '../../core/jdk-resolver.js';
 import type { BuildStep } from '../../core/types.js';
+import { inspectMavenProject } from '../../core/maven-project.js';
+import { inspectNodeProject } from '../../core/node-project.js';
+import { buildCommandString } from '../../core/build-command.js';
 
 const VERSION = '2.0.0';
 
@@ -31,6 +34,7 @@ export interface ServeOptions {
   port: number;
   config: AppConfig;
   configPath: string;
+  configError?: string;
   db: IDatabase;
   scanner: CachedScanner;
   buildRunner: BuildRunner;
@@ -62,6 +66,7 @@ function badRequest(message: string): Response {
 export async function runServe(options: ServeOptions): Promise<{ port: number; close: () => void }> {
   const { db, scanner, buildRunner, pipelineRunner } = options;
   let currentConfig = options.config;
+  let currentConfigError = options.configError;
   const activeJobs = new Map<string, ActiveJob>();
   const jobHistory = new Map<string, JobHistory>();
   const startTime = Date.now();
@@ -71,11 +76,62 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
 
   /** Write current config to disk and return the updated config object. */
   function persistConfig(patch: Partial<AppConfig>): AppConfig {
-    const raw = JSON.parse(readFileSync(options.configPath, 'utf-8'));
-    const merged = { ...raw, ...patch };
+    const merged = { ...currentConfig, ...patch };
     writeFileSync(options.configPath, JSON.stringify(merged, null, 2) + '\n', 'utf-8');
     currentConfig = configSchema.parse(merged);
+    currentConfigError = undefined;
     return currentConfig;
+  }
+
+  function requireValidConfig(pathname: string): Response | null {
+    if (!currentConfigError) return null;
+    if (
+      pathname === '/api/health' ||
+      pathname === '/api/config' ||
+      pathname === '/api/jdks/detect' ||
+      pathname === '/api/pipelines' ||
+      pathname === '/api/scan' ||
+      pathname === '/api/scan/refresh' ||
+      pathname === '/api/builds' ||
+      pathname === '/api/builds/stats' ||
+      /^\/api\/builds\/\d+\/logs$/.test(pathname)
+    ) {
+      return null;
+    }
+    return json({ error: currentConfigError }, 409);
+  }
+
+  async function inspectProject(rawPath: string) {
+    const resolvedPath = resolveStepPath(rawPath, currentConfig.roots);
+    const maven = await inspectMavenProject(options.fs, resolvedPath);
+    if (maven) {
+      return {
+        project: {
+          name: path.basename(resolvedPath),
+          path: resolvedPath,
+          depth: 0,
+          rootName: '',
+          buildSystem: 'maven' as const,
+          maven,
+        },
+      };
+    }
+
+    const node = await inspectNodeProject(options.fs, resolvedPath);
+    if (!node) {
+      return { project: null };
+    }
+
+    return {
+      project: {
+        name: path.basename(resolvedPath),
+        path: resolvedPath,
+        depth: 0,
+        rootName: '',
+        buildSystem: 'node' as const,
+        node,
+      },
+    };
   }
 
   // Manual pub/sub replacing Bun's built-in server.publish / ws.subscribe
@@ -131,6 +187,8 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     const { pathname } = url;
 
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
+    const configBlock = requireValidConfig(pathname);
+    if (configBlock) return configBlock;
 
     // GET /api/health
     if (req.method === 'GET' && pathname === '/api/health') {
@@ -139,7 +197,7 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
 
     // GET /api/config
     if (req.method === 'GET' && pathname === '/api/config') {
-      return json({ config: currentConfig, configPath: options.configPath });
+      return json({ config: currentConfig, configPath: options.configPath, error: currentConfigError });
     }
 
     // GET /api/pipelines
@@ -148,24 +206,74 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
       // Use raw config for list view — avoids resolvePipeline() which throws when
       // a step path references an unknown root.  Path resolution only needs to
       // happen at run time, not for display.
-      const pipelines = Object.entries(currentConfig.pipelines).map(([name, pc]) => ({
-        name,
-        description: pc.description,
-        failFast: pc.failFast,
-        steps: pc.steps.map((s) => ({
-          label: s.label ?? path.basename(s.path.replace(/^[^:]+:/, '')),
-          path: s.path,
-          buildSystem: s.buildSystem ?? 'maven',
-          goals: s.buildSystem === 'npm' ? [] : (s.goals ?? currentConfig.maven.defaultGoals),
-          flags: s.buildSystem === 'npm' ? [] : (s.flags ?? currentConfig.maven.defaultFlags),
-          mavenExecutable: s.maven ?? currentConfig.maven.executable,
-          npmScript: s.buildSystem === 'npm' ? (s.npmScript ?? currentConfig.npm.defaultBuildScript) : undefined,
-          javaVersion: s.javaVersion,
-          javaHome: undefined,
+      const pipelines = await Promise.all(
+        Object.entries(currentConfig.pipelines).map(async ([name, pc]) => ({
+          name,
+          description: pc.description,
+          failFast: pc.failFast,
+          steps: await Promise.all(
+            pc.steps.map(async (s) => {
+              if (s.buildSystem === 'node') {
+                let inspection: Awaited<ReturnType<typeof inspectProject>> = { project: null };
+                try {
+                  inspection = await inspectProject(s.path);
+                } catch {
+                  // Keep pipeline list available even when a stored path no longer resolves.
+                }
+                return {
+                  label: s.label ?? path.basename(s.path.replace(/^[^:]+:/, '')),
+                  path: s.path,
+                  buildSystem: 'node' as const,
+                  packageManager: inspection.project?.buildSystem === 'node' ? inspection.project.node?.packageManager : undefined,
+                  executionMode: s.executionMode,
+                  commandType: s.commandType,
+                  script: s.script,
+                  args: s.args,
+                };
+              }
+
+              return {
+                label: s.label ?? path.basename(s.path.replace(/^[^:]+:/, '')),
+                path: s.path,
+                buildSystem: 'maven' as const,
+                goals: s.goals ?? currentConfig.maven.defaultGoals,
+                modulePath: s.modulePath,
+                optionKeys: s.optionKeys ?? currentConfig.maven.defaultOptionKeys,
+                profileStates: s.profileStates ?? {},
+                extraOptions: s.extraOptions ?? currentConfig.maven.defaultExtraOptions,
+                executionMode: s.executionMode ?? 'internal',
+                mavenExecutable: s.maven ?? currentConfig.maven.executable,
+                javaVersion: s.javaVersion,
+                javaHome: undefined,
+              };
+            }),
+          ),
+          lastRun: lastRuns[name] ?? null,
         })),
-        lastRun: lastRuns[name] ?? null,
-      }));
+      );
       return json(pipelines);
+    }
+
+    // POST /api/project/inspect
+    if (req.method === 'POST' && pathname === '/api/project/inspect') {
+      const body = (await req.json()) as { path?: string };
+      if (!body.path) return badRequest('path is required');
+      try {
+        return json(await inspectProject(body.path));
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    // POST /api/jdks/detect
+    if (req.method === 'POST' && pathname === '/api/jdks/detect') {
+      const body = (await req.json()) as { path?: string };
+      if (!body.path) return badRequest('path is required');
+      try {
+        return json({ baseDir: body.path, jdks: await detectJdks(body.path, options.fs) });
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : String(error));
+      }
     }
 
     // GET /api/scan
@@ -173,7 +281,6 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
       const noCache = url.searchParams.get('noCache') === 'true';
       const scanOptions = {
         roots: currentConfig.roots,
-        maxDepth: currentConfig.scan.maxDepth,
         includeHidden: currentConfig.scan.includeHidden,
         exclude: currentConfig.scan.exclude,
       };
@@ -190,7 +297,6 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     if (req.method === 'POST' && pathname === '/api/scan/refresh') {
       const scanOptions = {
         roots: currentConfig.roots,
-        maxDepth: currentConfig.scan.maxDepth,
         includeHidden: currentConfig.scan.includeHidden,
         exclude: currentConfig.scan.exclude,
       };
@@ -235,7 +341,12 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
       let body: { from?: string; dryRun?: boolean } = {};
       try { body = (await req.json()) as typeof body; } catch { /* no body */ }
 
-      const pipeline = resolvePipeline(pipelineName, pipelineConfig, currentConfig);
+      let pipeline;
+      try {
+        pipeline = resolvePipeline(pipelineName, pipelineConfig, currentConfig);
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : String(error));
+      }
       let fromIndex = 0;
       if (body.from) {
         const n = parseInt(body.from, 10);
@@ -255,68 +366,120 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     if (req.method === 'POST' && pathname === '/api/build') {
       let body: {
         path?: string;
-        buildSystem?: 'maven' | 'npm';
+        buildSystem?: 'maven' | 'node';
+        modulePath?: string;
         goals?: string[];
-        flags?: string[];
+        optionKeys?: Array<'skipTests' | 'skipTestCompile' | 'updateSnapshots' | 'offline' | 'quiet' | 'debug' | 'errors' | 'failAtEnd' | 'failNever'>;
+        profileStates?: Record<string, 'default' | 'enabled' | 'disabled'>;
+        extraOptions?: string[];
         java?: string;
         maven?: string;
-        npmScript?: string;
+        commandType?: 'script' | 'install';
+        script?: string;
+        args?: string[];
+        executionMode?: 'internal' | 'external';
       } = {};
       try { body = (await req.json()) as typeof body; } catch { /* no body */ }
       if (!body.path) return badRequest('path is required');
 
       const resolvedPath = resolveStepPath(body.path, currentConfig.roots);
       const buildSystem = body.buildSystem ?? 'maven';
-      const goals = body.goals ?? currentConfig.maven.defaultGoals;
-      const flags = body.flags ?? currentConfig.maven.defaultFlags;
-      const mavenExecutable = body.maven ?? currentConfig.maven.executable;
-      const javaHome = buildSystem === 'maven' ? resolveJavaHome(currentConfig, body.java) : undefined;
+      const inspection = await inspectProject(body.path);
+      if (!inspection.project) return badRequest(`No build manifest found at "${resolvedPath}".`);
+      if (inspection.project.buildSystem !== buildSystem) {
+        return badRequest(`Project at "${resolvedPath}" is ${inspection.project.buildSystem}, not ${buildSystem}.`);
+      }
+      if (buildSystem === 'node') {
+        const commandType = body.commandType ?? 'script';
+        const script = body.script;
+        if (commandType === 'script') {
+          if (!script) return badRequest('script is required for node script builds');
+          if (!(script in (inspection.project.node?.scripts ?? {}))) {
+            return badRequest(`Script "${script}" was not found in package.json.`);
+          }
+        }
+      } else {
+        const availableModulePaths = new Set(
+          inspection.project.maven?.modules.map((moduleEntry) => moduleEntry.relativePath) ?? [],
+        );
+        if (body.modulePath && !availableModulePaths.has(body.modulePath)) {
+          return badRequest(`Module "${body.modulePath}" was not found in the selected Maven project.`);
+        }
+
+        const availableProfileIds = new Set(
+          inspection.project.maven?.profiles.map((profile) => profile.id) ?? [],
+        );
+        for (const profileId of Object.keys(body.profileStates ?? {})) {
+          if (!availableProfileIds.has(profileId)) {
+            return badRequest(`Profile "${profileId}" was not found in the selected Maven project.`);
+          }
+        }
+
+        const goals = body.goals ?? currentConfig.maven.defaultGoals;
+        if (goals.length === 0) {
+          return badRequest('At least one Maven goal is required.');
+        }
+
+        if (body.java) {
+          try {
+            requireRegisteredJavaHome(currentConfig, body.java);
+          } catch (error) {
+            return badRequest(error instanceof Error ? error.message : String(error));
+          }
+        }
+      }
 
       const step: BuildStep =
-        buildSystem === 'npm'
+        buildSystem === 'node'
           ? {
               path: resolvedPath,
-              goals: [],
-              flags: [],
-              buildSystem: 'npm',
-              label: path.basename(resolvedPath),
-              mavenExecutable: currentConfig.maven.executable,
-              npmExecutable: currentConfig.npm.executable,
-              npmScript: body.npmScript ?? currentConfig.npm.defaultBuildScript,
+              buildSystem: 'node',
+              label: inspection.project.name,
+              commandType: body.commandType ?? 'script',
+              script: body.script,
+              args: body.args ?? [],
+              executionMode: body.executionMode ?? 'internal',
+              packageManager: inspection.project.node?.packageManager,
+              nodeExecutables: currentConfig.node.executables,
             }
           : {
               path: resolvedPath,
-              goals,
-              flags,
+              modulePath: body.modulePath,
+              goals: body.goals ?? currentConfig.maven.defaultGoals,
+              optionKeys: body.optionKeys ?? currentConfig.maven.defaultOptionKeys,
+              profileStates: body.profileStates ?? {},
+              extraOptions: body.extraOptions ?? currentConfig.maven.defaultExtraOptions,
+              executionMode: body.executionMode ?? 'internal',
               buildSystem: 'maven',
-              label: path.basename(resolvedPath),
-              mavenExecutable,
+              label: inspection.project.name,
+              mavenExecutable: body.maven ?? currentConfig.maven.executable,
               javaVersion: body.java,
-              javaHome,
+              javaHome: resolveJavaHome(currentConfig, body.java),
             };
 
       const jobId = startJob(async function* (jobId) {
         let runId: number | undefined;
         const activeJob = activeJobs.get(jobId);
-        try {
-          const command =
-            step.buildSystem === 'npm'
-              ? [step.npmExecutable ?? 'npm', 'run', step.npmScript ?? 'build'].join(' ')
-              : [mavenExecutable, ...goals, ...flags].join(' ');
-          runId = db.startBuildRun({
-            jobId,
-            projectPath: resolvedPath,
-            projectName: step.label,
-            buildSystem: step.buildSystem,
-            command,
-            javaHome: step.javaHome,
-          });
-        } catch { /* non-fatal DB error */ }
-
         let logSeq = 0;
         for await (const event of buildRunner.run(step, 0, 1, undefined, activeJob?.controller.signal)) {
-          if (event.type === 'step:start' && runId !== undefined) {
-            yield { ...event, runId };
+          if (event.type === 'step:start') {
+            if (runId === undefined) {
+              try {
+                runId = db.startBuildRun({
+                  jobId,
+                  projectPath: event.step.path,
+                  projectName: event.step.label,
+                  buildSystem: event.step.buildSystem,
+                  packageManager: event.step.buildSystem === 'node' ? event.step.packageManager : undefined,
+                  executionMode: event.step.executionMode,
+                  command: buildCommandString(event.step),
+                  javaHome: event.step.buildSystem === 'maven' ? event.step.javaHome : undefined,
+                });
+              } catch {
+                // non-fatal DB error
+              }
+            }
+            yield runId !== undefined ? { ...event, runId } : event;
           } else {
             yield event;
           }
@@ -325,7 +488,7 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
           }
           if (event.type === 'step:done' && runId !== undefined) {
             try {
-              db.finishBuildRun({ id: runId, exitCode: event.exitCode, durationMs: event.durationMs, status: event.success ? 'success' : 'failed' });
+              db.finishBuildRun({ id: runId, exitCode: event.exitCode, durationMs: event.durationMs, status: event.status });
             } catch { /* non-fatal */ }
           }
         }
@@ -402,8 +565,12 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     // POST /api/config — save partial config (e.g. roots from onboarding)
     if (req.method === 'POST' && pathname === '/api/config') {
       const body = (await req.json()) as Partial<AppConfig>;
-      persistConfig(body);
-      return json({ ok: true });
+      try {
+        persistConfig(body);
+        return json({ ok: true });
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : String(error));
+      }
     }
 
     return notFound();

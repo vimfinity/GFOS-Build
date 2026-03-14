@@ -2,12 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { loadConfig } from '../../src/config/loader.js';
 import * as fs from 'node:fs';
 
-vi.mock('node:fs', async (importOriginal) => {
-  const original = await importOriginal<typeof import('node:fs')>();
-  return { ...original, readFileSync: vi.fn() };
-});
+vi.mock('node:fs', () => ({ readFileSync: vi.fn() }));
 
-const mockedReadFileSync = vi.mocked(fs.readFileSync);
+const mockedReadFileSync = fs.readFileSync as unknown as ReturnType<typeof vi.fn>;
 
 function makeEnoent(): NodeJS.ErrnoException {
   const err = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
@@ -17,9 +14,10 @@ function makeEnoent(): NodeJS.ErrnoException {
 
 const validConfig = JSON.stringify({
   roots: { quellen: 'J:/dev/quellen' },
-  maven: { executable: 'mvn', defaultGoals: ['clean', 'install'], defaultFlags: [] },
+  maven: { executable: 'mvn', defaultGoals: ['clean', 'install'], defaultOptionKeys: [], defaultExtraOptions: [] },
+  node: { executables: { npm: 'npm', pnpm: 'pnpm', bun: 'bun' } },
   jdkRegistry: { '21': 'J:/dev/java/jdk21' },
-  scan: { maxDepth: 4, includeHidden: false, exclude: [] },
+  scan: { includeHidden: false, exclude: [] },
   pipelines: {},
 });
 
@@ -55,8 +53,10 @@ describe('loadConfig', () => {
     if (result.found) {
       expect(result.config.maven.executable).toBe('mvn');
       expect(result.config.maven.defaultGoals).toEqual(['clean', 'install']);
-      expect(result.config.scan.maxDepth).toBe(4);
+      expect(result.config.maven.defaultOptionKeys).toEqual([]);
+      expect(result.config.maven.defaultExtraOptions).toEqual([]);
       expect(result.config.scan.includeHidden).toBe(false);
+      expect(result.config.scan.exclude).toEqual([]);
     }
   });
 
@@ -69,7 +69,7 @@ describe('loadConfig', () => {
 
   it('throws on Zod validation errors', () => {
     const badConfig = JSON.stringify({
-      scan: { maxDepth: 0 }, // min is 1
+      scan: { includeHidden: 'yes' },
     });
     mockedReadFileSync.mockReturnValue(badConfig);
     expect(() => loadConfig('/custom/config.json')).toThrow(
@@ -87,6 +87,15 @@ describe('loadConfig', () => {
     );
   });
 
+  it('rejects obsolete top-level npm config', () => {
+    mockedReadFileSync.mockReturnValue(
+      JSON.stringify({
+        npm: { executable: 'npm' },
+      }),
+    );
+    expect(() => loadConfig('/custom/config.json')).toThrow('Config validation errors');
+  });
+
   it('loads full config with pipelines', () => {
     const fullConfig = JSON.stringify({
       roots: { quellen: 'J:/dev/quellen' },
@@ -97,8 +106,12 @@ describe('loadConfig', () => {
           steps: [
             {
               path: 'quellen:2025/web',
+              buildSystem: 'maven',
               goals: ['clean', 'install'],
-              flags: ['-DskipTests'],
+              optionKeys: ['skipTests'],
+              profileStates: {},
+              extraOptions: [],
+              executionMode: 'internal',
             },
           ],
         },

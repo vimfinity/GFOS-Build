@@ -3,13 +3,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { configQuery, useSaveConfig } from '@/api/queries';
 import { pickDirectory } from '@/api/bridge';
+import { JdkRegistryFields, type JdkRegistryEntry } from '@/components/JdkRegistryFields';
+import { MAVEN_OPTIONS } from '@/components/MavenCommandFields';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import { Input, NumberField } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { TagInput } from '@/components/ui/tag-input';
 import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { Settings, Plus, Trash2, FolderOpen, Save, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import type { MavenOptionKey } from '@shared/types';
 import {
   getStoredThemePreference,
   setStoredThemePreference,
@@ -29,23 +32,21 @@ interface KvEntry {
 function createConfigPayload({
   mavenExec,
   mavenGoals,
-  mavenFlags,
-  npmExec,
-  npmScript,
+  mavenOptionKeys,
+  mavenExtraOptions,
+  nodeExecutables,
   jdkEntries,
   rootEntries,
-  maxDepth,
   includeHidden,
   excludePatterns,
 }: {
   mavenExec: string;
   mavenGoals: string[];
-  mavenFlags: string[];
-  npmExec: string;
-  npmScript: string;
-  jdkEntries: KvEntry[];
+  mavenOptionKeys: MavenOptionKey[];
+  mavenExtraOptions: string[];
+  nodeExecutables: { npm: string; pnpm: string; bun: string };
+  jdkEntries: JdkRegistryEntry[];
   rootEntries: KvEntry[];
-  maxDepth: number;
   includeHidden: boolean;
   excludePatterns: string[];
 }) {
@@ -53,17 +54,16 @@ function createConfigPayload({
     maven: {
       executable: mavenExec,
       defaultGoals: mavenGoals,
-      defaultFlags: mavenFlags,
+      defaultOptionKeys: mavenOptionKeys,
+      defaultExtraOptions: mavenExtraOptions,
     },
-    npm: {
-      executable: npmExec,
-      defaultBuildScript: npmScript,
-      defaultInstallArgs: [],
+    node: {
+      executables: nodeExecutables,
     },
     jdkRegistry: Object.fromEntries(
       jdkEntries
-        .filter((entry) => entry.key.trim())
-        .map((entry) => [entry.key.trim(), entry.value]),
+        .filter((entry) => entry.version.trim())
+        .map((entry) => [entry.version.trim(), entry.path]),
     ),
     roots: Object.fromEntries(
       rootEntries
@@ -71,7 +71,6 @@ function createConfigPayload({
         .map((entry) => [entry.key.trim(), entry.value]),
     ),
     scan: {
-      maxDepth,
       includeHidden,
       exclude: excludePatterns,
     },
@@ -86,12 +85,11 @@ function SettingsView() {
 
   const [mavenExec, setMavenExec] = useState('');
   const [mavenGoals, setMavenGoals] = useState<string[]>([]);
-  const [mavenFlags, setMavenFlags] = useState<string[]>([]);
-  const [npmExec, setNpmExec] = useState('');
-  const [npmScript, setNpmScript] = useState('');
-  const [jdkEntries, setJdkEntries] = useState<KvEntry[]>([]);
+  const [mavenOptionKeys, setMavenOptionKeys] = useState<MavenOptionKey[]>([]);
+  const [mavenExtraOptions, setMavenExtraOptions] = useState<string[]>([]);
+  const [nodeExecutables, setNodeExecutables] = useState({ npm: 'npm', pnpm: 'pnpm', bun: 'bun' });
+  const [jdkEntries, setJdkEntries] = useState<JdkRegistryEntry[]>([]);
   const [rootEntries, setRootEntries] = useState<KvEntry[]>([]);
-  const [maxDepth, setMaxDepth] = useState(4);
   const [includeHidden, setIncludeHidden] = useState(false);
   const [excludePatterns, setExcludePatterns] = useState<string[]>([]);
   const [themePreference, setThemePreference] = useState<ThemePreference>('system');
@@ -106,23 +104,25 @@ function SettingsView() {
     const { config } = configData;
     const nextMavenExec = config.maven.executable;
     const nextMavenGoals = config.maven.defaultGoals;
-    const nextMavenFlags = config.maven.defaultFlags;
-    const nextNpmExec = config.npm.executable;
-    const nextNpmScript = config.npm.defaultBuildScript;
-    const nextJdkEntries = Object.entries(config.jdkRegistry).map(([key, value]) => ({ key, value }));
+    const nextMavenOptionKeys = config.maven.defaultOptionKeys;
+    const nextMavenExtraOptions = config.maven.defaultExtraOptions;
+    const nextNodeExecutables = config.node.executables;
+    const nextJdkEntries = Object.entries(config.jdkRegistry).map(([key, value]) => ({
+      version: key,
+      path: value,
+      source: 'manual' as const,
+    }));
     const nextRootEntries = Object.entries(config.roots).map(([key, value]) => ({ key, value }));
-    const nextMaxDepth = config.scan.maxDepth;
     const nextIncludeHidden = config.scan.includeHidden;
     const nextExcludePatterns = config.scan.exclude;
 
     setMavenExec(nextMavenExec);
     setMavenGoals(nextMavenGoals);
-    setMavenFlags(nextMavenFlags);
-    setNpmExec(nextNpmExec);
-    setNpmScript(nextNpmScript);
+    setMavenOptionKeys(nextMavenOptionKeys);
+    setMavenExtraOptions(nextMavenExtraOptions);
+    setNodeExecutables(nextNodeExecutables);
     setJdkEntries(nextJdkEntries);
     setRootEntries(nextRootEntries);
-    setMaxDepth(nextMaxDepth);
     setIncludeHidden(nextIncludeHidden);
     setExcludePatterns(nextExcludePatterns);
     setBaselineSnapshot(
@@ -130,12 +130,11 @@ function SettingsView() {
         createConfigPayload({
           mavenExec: nextMavenExec,
           mavenGoals: nextMavenGoals,
-          mavenFlags: nextMavenFlags,
-          npmExec: nextNpmExec,
-          npmScript: nextNpmScript,
+          mavenOptionKeys: nextMavenOptionKeys,
+          mavenExtraOptions: nextMavenExtraOptions,
+          nodeExecutables: nextNodeExecutables,
           jdkEntries: nextJdkEntries,
           rootEntries: nextRootEntries,
-          maxDepth: nextMaxDepth,
           includeHidden: nextIncludeHidden,
           excludePatterns: nextExcludePatterns,
         }),
@@ -149,24 +148,22 @@ function SettingsView() {
       createConfigPayload({
         mavenExec,
         mavenGoals,
-        mavenFlags,
-        npmExec,
-        npmScript,
+        mavenOptionKeys,
+        mavenExtraOptions,
+        nodeExecutables,
         jdkEntries,
         rootEntries,
-        maxDepth,
         includeHidden,
         excludePatterns,
       }),
     [
       mavenExec,
       mavenGoals,
-      mavenFlags,
-      npmExec,
-      npmScript,
+      mavenOptionKeys,
+      mavenExtraOptions,
+      nodeExecutables,
       jdkEntries,
       rootEntries,
-      maxDepth,
       includeHidden,
       excludePatterns,
     ],
@@ -229,20 +226,6 @@ function SettingsView() {
           : 'Save failed. Try again.',
       );
     }
-  }
-
-  function addJdk() {
-    setJdkEntries((prev) => [...prev, { key: '', value: '' }]);
-  }
-  function removeJdk(index: number) {
-    setJdkEntries((prev) => prev.filter((_, i) => i !== index));
-  }
-  function updateJdk(index: number, field: 'key' | 'value', value: string) {
-    setJdkEntries((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
-  }
-  async function browseJdk(index: number) {
-    const dir = await pickDirectory();
-    if (dir) updateJdk(index, 'value', dir);
   }
 
   function addRoot() {
@@ -383,7 +366,7 @@ function SettingsView() {
 
           <ConfigCard
             title="Maven"
-            description="Default Maven command settings used for scans, ad-hoc runs, and pipeline steps."
+            description="Preset Maven command settings used for new ad-hoc runs and Maven pipeline steps."
             icon={<Settings size={14} className="text-primary" />}
           >
             <div className="flex flex-col gap-1.5">
@@ -410,71 +393,102 @@ function SettingsView() {
                 Pre-filled Maven goals for new ad-hoc runs and Maven pipeline steps.
               </p>
             </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Default standard options
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {MAVEN_OPTIONS.map((option) => {
+                  const active = mavenOptionKeys.includes(option.key);
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() =>
+                        setMavenOptionKeys((current) =>
+                          current.includes(option.key)
+                            ? current.filter((key) => key !== option.key)
+                            : [...current, option.key],
+                        )
+                      }
+                      className={cn(
+                        'pill-control border transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+                        active
+                          ? 'border-primary/20 bg-primary/10 text-primary'
+                          : 'border-border bg-card/70 text-muted-foreground hover:bg-accent/60 hover:text-foreground active:bg-accent/80',
+                      )}
+                    >
+                      {option.flag}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                These toggles preselect common Maven flags like `-DskipTests` or `-U` for new Maven runs.
+              </p>
+            </div>
             <div className="flex flex-col gap-1.5">
               <TagInput
-                id="maven-flags"
-                label="Default flags"
-                value={mavenFlags}
-                onChange={setMavenFlags}
+                id="maven-extra-options"
+                label="Default extra options"
+                value={mavenExtraOptions}
+                onChange={setMavenExtraOptions}
                 placeholder="e.g. -T4"
               />
               <p className="text-[11px] leading-relaxed text-muted-foreground/72">
-                Optional flags appended to Maven commands by default.
+                Optional extra Maven options appended to new runs by default.
               </p>
             </div>
           </ConfigCard>
 
           <ConfigCard
-            title="npm"
-            description="Default npm command settings used for ad-hoc runs and npm pipeline steps."
+            title="Node Package Managers"
+            description="Executable overrides used when GFOS Build starts npm, pnpm, or bun scripts."
             icon={<Settings size={14} className="text-primary" />}
           >
             <div className="flex flex-col gap-1.5">
               <Input
-                id="npm-exec"
-                label="Executable"
+                id="node-npm-exec"
+                label="npm executable"
                 placeholder="npm"
-                value={npmExec}
-                onChange={(e) => setNpmExec(e.target.value)}
+                value={nodeExecutables.npm}
+                onChange={(e) => setNodeExecutables((current) => ({ ...current, npm: e.target.value }))}
               />
               <p className="text-[11px] leading-relaxed text-muted-foreground/72">
-                Executable name or absolute path used when GFOS starts npm commands.
+                Executable name or absolute path used when GFOS Build runs `npm run ...`.
               </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Input
-                id="npm-script"
-                label="Default build script"
-                placeholder="build"
-                value={npmScript}
-                onChange={(e) => setNpmScript(e.target.value)}
+                id="node-pnpm-exec"
+                label="pnpm executable"
+                placeholder="pnpm"
+                value={nodeExecutables.pnpm}
+                onChange={(e) => setNodeExecutables((current) => ({ ...current, pnpm: e.target.value }))}
               />
               <p className="text-[11px] leading-relaxed text-muted-foreground/72">
-                Default script name for new npm runs, for example `build` or `dist`.
+                Executable name or absolute path used when GFOS Build runs `pnpm run ...`.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Input
+                id="node-bun-exec"
+                label="bun executable"
+                placeholder="bun"
+                value={nodeExecutables.bun}
+                onChange={(e) => setNodeExecutables((current) => ({ ...current, bun: e.target.value }))}
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Executable name or absolute path used when GFOS Build runs `bun run ...`.
               </p>
             </div>
           </ConfigCard>
 
           <ConfigCard
             title="Scan settings"
-            description="Define how deeply GFOS scans your configured roots and what it skips."
+            description="Define what GFOS scans inside your configured roots and what it skips."
             icon={<Settings size={14} className="text-primary" />}
           >
-            <div className="flex flex-col gap-1.5">
-              <NumberField
-                id="max-depth"
-                label="Max depth"
-                min={1}
-                max={10}
-                value={maxDepth}
-                onChange={setMaxDepth}
-                className="max-w-32"
-              />
-              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
-                Maximum folder depth scanned below each configured root before search stops.
-              </p>
-            </div>
-
             <div className="flex flex-col gap-2">
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                 Include hidden directories
@@ -526,57 +540,24 @@ function SettingsView() {
         <div className="flex flex-col gap-5">
           <ConfigCard
             title="JDK registry"
-            description="Register local Java installations so Maven runs can target a specific version."
+            description="Register local Java installations so GFOS Build can pin Maven runs via JAVA_HOME."
             icon={<Settings size={14} className="text-primary" />}
           >
-            {jdkEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No JDK entries yet. Add one to enable Java version selection.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {jdkEntries.map((entry, index) => (
-                  <div key={index} className="rounded-[18px] border border-border bg-secondary/45 p-3">
-                    <div className="grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)_auto_auto]">
-                      <Input
-                        placeholder="e.g. 17"
-                        value={entry.key}
-                        onChange={(e) => updateJdk(index, 'key', e.target.value)}
-                      />
-                      <Input
-                        placeholder="C:\\Program Files\\Java\\jdk-17"
-                        value={entry.value}
-                        onChange={(e) => updateJdk(index, 'value', e.target.value)}
-                      />
-                      <Tooltip content="Browse" side="bottom">
-                        <Button variant="outline" size="icon" onClick={() => void browseJdk(index)} aria-label="Browse JDK path">
-                          <FolderOpen size={14} />
-                        </Button>
-                      </Tooltip>
-                      <Tooltip content="Remove" side="bottom">
-                        <Button variant="destructive" size="icon" onClick={() => removeJdk(index)} aria-label="Remove JDK entry">
-                          <Trash2 size={14} />
-                        </Button>
-                      </Tooltip>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Button variant="outline" size="sm" onClick={addJdk}>
-              <Plus size={13} />
-              Add JDK
-            </Button>
+            <JdkRegistryFields
+              entries={jdkEntries}
+              onChange={setJdkEntries}
+              emptyMessage="No JDK entries yet. Maven builds can still use the system Java, but detected project Java versions cannot be enforced until you register matching JDKs here."
+            />
           </ConfigCard>
 
           <ConfigCard
             title="Project roots"
-            description="Choose which top-level folders GFOS scans for Maven and npm projects."
+            description="Choose which top-level folders GFOS scans for Maven and Node projects."
             icon={<Settings size={14} className="text-primary" />}
           >
             {rootEntries.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Add root directories to scan for Maven and npm projects.
+                Add root directories to scan for Maven and Node projects.
               </p>
             ) : (
               <div className="flex flex-col gap-3">
