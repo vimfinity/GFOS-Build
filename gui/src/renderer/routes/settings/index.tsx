@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { configQuery, useSaveConfig } from '@/api/queries';
+import { useUpdateState } from '@/api/update';
 import { pickDirectory } from '@/api/bridge';
 import { JdkRegistryFields, type JdkRegistryEntry } from '@/components/JdkRegistryFields';
 import { MAVEN_OPTIONS } from '@/components/MavenCommandFields';
@@ -10,7 +11,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { TagInput } from '@/components/ui/tag-input';
 import { Tooltip } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 import { Settings, Plus, Trash2, FolderOpen, Save, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { MavenOptionKey } from '@shared/types';
 import {
@@ -82,6 +83,7 @@ function SettingsView() {
   const queryClient = useQueryClient();
   const { data: configData, isLoading } = useQuery(configQuery);
   const saveConfig = useSaveConfig();
+  const { state: updateState, busyAction, checkForUpdates, downloadUpdate, applyUpdate } = useUpdateState();
 
   const [mavenExec, setMavenExec] = useState('');
   const [mavenGoals, setMavenGoals] = useState<string[]>([]);
@@ -538,6 +540,54 @@ function SettingsView() {
         </div>
 
         <div className="flex flex-col gap-5">
+          <ConfigCard
+            title="Updates"
+            description="Managed installs can update in place. Portable builds stay manual but can still point to the latest release."
+            icon={<Settings size={14} className="text-primary" />}
+          >
+            <div className="space-y-1">
+              <p className="text-sm text-foreground">
+                Version <span className="font-medium">v{updateState.currentVersion}</span>
+              </p>
+              <p className="text-sm text-muted-foreground capitalize">
+                {updateState.distribution} install · channel {updateState.channel}
+              </p>
+              {updateState.lastCheckedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  Last checked {formatDate(updateState.lastCheckedAt)}
+                </p>
+              ) : null}
+              {updateState.availableVersion ? (
+                <p className="text-sm text-muted-foreground">
+                  Latest available: <span className="font-medium text-foreground">v{updateState.availableVersion}</span>
+                </p>
+              ) : null}
+              {updateState.error ? <p className="text-sm text-destructive">{updateState.error}</p> : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => void checkForUpdates()} disabled={busyAction !== null}>
+                {busyAction === 'check' ? <Loader2 size={13} className="animate-spin" /> : null}
+                Check now
+              </Button>
+              {updateState.status === 'available' ? (
+                <Button size="sm" onClick={() => void downloadUpdate()} disabled={busyAction !== null}>
+                  {busyAction === 'download' ? <Loader2 size={13} className="animate-spin" /> : null}
+                  {updateState.distribution === 'managed' ? 'Download update' : 'Download latest ZIP'}
+                </Button>
+              ) : null}
+              {(updateState.status === 'downloaded' || updateState.status === 'apply_blocked_active_jobs') ? (
+                <Button
+                  size="sm"
+                  onClick={() => void applyUpdate()}
+                  disabled={busyAction !== null || updateState.status === 'apply_blocked_active_jobs'}
+                >
+                  {busyAction === 'apply' ? <Loader2 size={13} className="animate-spin" /> : null}
+                  Restart to update
+                </Button>
+              ) : null}
+            </div>
+          </ConfigCard>
+
           <ConfigCard
             title="JDK registry"
             description="Register local Java installations so GFOS Build can pin Maven runs via JAVA_HOME."

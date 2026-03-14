@@ -18,6 +18,7 @@ export interface ServerHandle {
   port: number;
   db: NodeDatabase;
   close: () => void;
+  getActiveJobCount: () => number;
 }
 
 export async function startServer(): Promise<ServerHandle> {
@@ -51,7 +52,7 @@ export async function startServer(): Promise<ServerHandle> {
   const buildRunner = new BuildRunner(executor, nodeExecutor, fileSystem);
   const pipelineRunner = new PipelineRunner(buildRunner, db);
 
-  const { port, close } = await runServe({
+  const { port, close, getActiveJobCount } = await runServe({
     port: 0,
     config,
     configPath,
@@ -63,5 +64,5 @@ export async function startServer(): Promise<ServerHandle> {
     fs: fileSystem,
   });
 
-  return { port, db, close };
+  return { port, db, close, getActiveJobCount };
 }

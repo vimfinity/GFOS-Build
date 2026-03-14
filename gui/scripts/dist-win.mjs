@@ -7,6 +7,7 @@ import { appVersion, packageDesktopApp, productName, repoRoot, guiRoot, run, sta
 const releaseRoot = path.resolve(repoRoot, 'release', 'desktop');
 const unpackedRoot = path.resolve(releaseRoot, 'win-unpacked');
 const zipPath = path.resolve(releaseRoot, zipArtifactName);
+const managedReleaseRoot = path.resolve(releaseRoot, 'managed');
 const legacyGuiRelease = path.resolve(repoRoot, 'release', 'gui');
 const legacySidecarBinary = path.resolve(repoRoot, 'release', 'gfos-build.exe');
 const stagingRoot = path.resolve(releaseRoot, '.stage-win');
@@ -63,6 +64,7 @@ for (const entry of fs.readdirSync(releaseRoot, { withFileTypes: true })) {
 }
 fs.rmSync(legacyGuiRelease, { recursive: true, force: true });
 fs.rmSync(legacySidecarBinary, { force: true });
+fs.rmSync(managedReleaseRoot, { recursive: true, force: true });
 fs.rmSync(stagingRoot, { recursive: true, force: true });
 fs.rmSync(zipStageRoot, { recursive: true, force: true });
 

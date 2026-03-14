@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { healthQuery, configQuery, useSaveConfig } from '@/api/queries';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
 import { TooltipProvider, Tooltip, ShortcutKey } from '@/components/ui/tooltip';
+import { UpdateControl } from '@/components/UpdateControl';
 import { ServerCrash, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
@@ -323,6 +324,7 @@ function RootLayout() {
           <div className="mx-1 h-5 w-px bg-border" />
 
           <div className="flex items-center gap-1">
+            <UpdateControl />
             <SettingsNavButton
               shortcut={`${primaryModifierLabel} 6`}
             />
