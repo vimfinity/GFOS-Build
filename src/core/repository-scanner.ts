@@ -1,10 +1,22 @@
 import path from 'node:path';
 import type { FileSystem } from '../infrastructure/file-system.js';
-import type { Project, MavenMetadata, NpmMetadata, ScanEvent, ScanOptions } from './types.js';
-import { parsePomMetadata } from './pom-parser.js';
-import { parsePackageJson, type PackageParsed } from './package-parser.js';
+import type { Project, ScanEvent, ScanOptions } from './types.js';
+import { inspectMavenProject } from './maven-project.js';
+import { inspectNodeProject } from './node-project.js';
 
 export type { ScanOptions } from './types.js';
+
+const HARD_SKIPPED_DIRECTORIES = new Set([
+  'node_modules',
+  '.git',
+  'target',
+  'dist',
+  'build',
+  '.next',
+  'out',
+  'coverage',
+  '.turbo',
+]);
 
 export class RepositoryScanner {
   constructor(private readonly fs: FileSystem) {}
@@ -13,6 +25,7 @@ export class RepositoryScanner {
     const startTime = Date.now();
     const discovered: Project[] = [];
     const seen = new Set<string>();
+    const claimedMavenModuleDirs = new Set<string>();
 
     for (const [rootName, rootPath] of Object.entries(options.roots)) {
       if (!(await this.fs.exists(rootPath))) continue;
@@ -22,11 +35,21 @@ export class RepositoryScanner {
       while (queue.length > 0) {
         const { dir, depth } = queue.shift()!;
         if (seen.has(dir)) continue;
+        if (claimedMavenModuleDirs.has(path.normalize(dir))) {
+          seen.add(dir);
+          continue;
+        }
 
         const pomPath = path.join(dir, 'pom.xml');
         if (await this.fs.exists(pomPath)) {
           seen.add(dir);
-          const maven = await this.extractMavenMetadata(pomPath);
+          const maven = await inspectMavenProject(this.fs, dir);
+          if (!maven) {
+            continue;
+          }
+          for (const moduleEntry of maven.modules) {
+            claimedMavenModuleDirs.add(path.normalize(moduleEntry.fullPath));
+          }
           const project: Project = {
             name: path.basename(dir),
             path: dir,
@@ -37,46 +60,44 @@ export class RepositoryScanner {
           };
           discovered.push(project);
           yield { type: 'repo:found', project };
-          continue; // do not traverse submodules
+          continue;
         }
 
         // Check for Angular workspace (angular.json takes priority over package.json)
         const angularJsonPath = path.join(dir, 'angular.json');
         if (await this.fs.exists(angularJsonPath)) {
           seen.add(dir);
-          const npm = await this.extractNpmMetadata(path.join(dir, 'package.json'), true);
+          const node = await inspectNodeProject(this.fs, dir, true);
           const project: Project = {
             name: path.basename(dir),
             path: dir,
             depth,
             rootName,
-            buildSystem: 'npm',
-            npm,
+            buildSystem: 'node',
+            node: node ?? undefined,
           };
           discovered.push(project);
           yield { type: 'repo:found', project };
           continue;
         }
 
-        // Check for plain npm project (package.json without pom.xml or angular.json)
+        // Check for a plain Node project (package.json without pom.xml or angular.json)
         const packageJsonPath = path.join(dir, 'package.json');
         if (await this.fs.exists(packageJsonPath)) {
           seen.add(dir);
-          const npm = await this.extractNpmMetadata(packageJsonPath, false);
+          const node = await inspectNodeProject(this.fs, dir, false);
           const project: Project = {
             name: path.basename(dir),
             path: dir,
             depth,
             rootName,
-            buildSystem: 'npm',
-            npm,
+            buildSystem: 'node',
+            node: node ?? undefined,
           };
           discovered.push(project);
           yield { type: 'repo:found', project };
           continue;
         }
-
-        if (depth >= options.maxDepth) continue;
 
         let entries;
         try {
@@ -87,7 +108,7 @@ export class RepositoryScanner {
 
         for (const entry of entries) {
           if (!entry.isDirectory()) continue;
-          if (entry.name === 'node_modules') continue;
+          if (HARD_SKIPPED_DIRECTORIES.has(entry.name)) continue;
           if (!options.includeHidden && entry.name.startsWith('.')) continue;
           if (options.exclude.includes(entry.name)) continue;
           queue.push({ dir: path.join(dir, entry.name), depth: depth + 1 });
@@ -100,57 +121,6 @@ export class RepositoryScanner {
       projects: [...discovered].sort((a, b) => a.path.localeCompare(b.path)),
       durationMs: Date.now() - startTime,
       fromCache: false,
-    };
-  }
-
-  private async extractMavenMetadata(pomPath: string): Promise<MavenMetadata> {
-    const dir = path.dirname(pomPath);
-    let artifactId = 'unknown';
-    let packaging = 'jar';
-    let isAggregator = false;
-    let javaVersion: string | undefined;
-
-    try {
-      const content = await this.fs.readFile(pomPath);
-      const meta = parsePomMetadata(content);
-      artifactId = meta.artifactId;
-      packaging = meta.packaging;
-      isAggregator = meta.isAggregator;
-      javaVersion = meta.javaVersion;
-    } catch {
-      // non-fatal
-    }
-
-    const mvnConfigPath = path.join(dir, '.mvn', 'maven.config');
-    const hasMvnConfig = await this.fs.exists(mvnConfigPath);
-    let mvnConfigContent: string | undefined;
-    if (hasMvnConfig) {
-      try {
-        mvnConfigContent = (await this.fs.readFile(mvnConfigPath)).trim();
-      } catch {
-        // non-fatal
-      }
-    }
-
-    return { pomPath, artifactId, packaging, isAggregator, javaVersion, hasMvnConfig, mvnConfigContent };
-  }
-
-  private async extractNpmMetadata(packageJsonPath: string, isAngular: boolean): Promise<NpmMetadata> {
-    let parsed: PackageParsed = { name: path.basename(path.dirname(packageJsonPath)), scripts: {}, isAngular };
-    try {
-      const content = await this.fs.readFile(packageJsonPath);
-      parsed = parsePackageJson(content);
-      if (isAngular) parsed = { ...parsed, isAngular: true };
-    } catch {
-      // non-fatal
-    }
-    return {
-      packageJsonPath,
-      name: parsed.name,
-      version: parsed.version,
-      scripts: parsed.scripts,
-      isAngular: parsed.isAngular,
-      angularVersion: parsed.angularVersion,
     };
   }
 }

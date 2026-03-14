@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  configQuery,
   pipelinesQuery,
   useRunPipeline,
   useCreatePipeline,
@@ -23,6 +24,7 @@ export const Route = createFileRoute('/pipelines/')({
 function PipelinesView() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: configData } = useQuery(configQuery);
   const { data: pipelines, isLoading, isError, refetch } = useQuery(pipelinesQuery);
   const runPipeline = useRunPipeline();
   const createPipeline = useCreatePipeline();
@@ -33,6 +35,7 @@ function PipelinesView() {
   const [editTarget, setEditTarget] = useState<PipelineListItem | null>(null);
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
   const [searchText, setSearchText] = useState('');
+  const configError = configData?.error;
 
   const filtered = (pipelines ?? []).filter((pipeline) => {
     if (!searchText.trim()) return true;
@@ -68,18 +71,25 @@ function PipelinesView() {
       description: data.description || undefined,
       failFast: data.failFast,
       steps: data.steps.map((step) =>
-        step.buildSystem === 'npm'
+        step.buildSystem === 'node'
           ? {
               path: step.path,
               label: step.label || undefined,
-              buildSystem: 'npm' as const,
-              npmScript: step.npmScript.trim() || undefined,
+              buildSystem: 'node' as const,
+              commandType: step.commandType,
+              script: step.commandType === 'script' ? step.script.trim() : undefined,
+              args: step.args.split(/\s+/).filter(Boolean),
+              executionMode: step.executionMode,
             }
           : {
               path: step.path,
               label: step.label || undefined,
-              goals: step.mavenGoals.split(/\s+/).filter(Boolean),
-              flags: step.mavenFlags.split(/\s+/).filter(Boolean),
+              modulePath: step.mavenModulePath || undefined,
+              goals: step.mavenGoals,
+              optionKeys: step.mavenOptionKeys,
+              profileStates: step.mavenProfileStates,
+              extraOptions: step.mavenExtraOptions,
+              executionMode: step.executionMode,
               javaVersion: step.javaVersion || undefined,
               buildSystem: 'maven' as const,
             },
@@ -110,6 +120,7 @@ function PipelinesView() {
         {(pipelines?.length ?? 0) > 0 ? (
           <Button
             size="sm"
+            disabled={Boolean(configError)}
             onClick={() => {
               setEditTarget(null);
               setDialogOpen(true);
@@ -161,12 +172,13 @@ function PipelinesView() {
           <div>
             <p className="text-base font-semibold text-foreground">No pipelines yet</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Create your first reusable flow for Maven or npm projects.
+              Create your first reusable flow for Maven or Node projects.
             </p>
           </div>
           <Button
             variant="outline"
             size="sm"
+            disabled={Boolean(configError)}
             onClick={() => {
               setEditTarget(null);
               setDialogOpen(true);
@@ -198,7 +210,7 @@ function PipelinesView() {
               onRun={handleRun}
               onEdit={() => handleEdit(pipeline)}
               onDelete={() => void handleDelete(pipeline.name)}
-              isRunning={runningPipelines.has(pipeline.name)}
+              isRunning={runningPipelines.has(pipeline.name) || Boolean(configError)}
             />
           ))}
         </div>

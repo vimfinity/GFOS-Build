@@ -1,12 +1,24 @@
 {
-  "roots": ["J:/dev/quellen"],
-  "scan": {
-    "maxDepth": 4,
-    "includeHidden": false
+  "roots": {
+    "quellen": "J:/dev/quellen"
   },
-  "build": {
-    "goals": ["clean", "install"],
-    "mavenExecutable": "mvn",
-    "failFast": true
-  }
+  "maven": {
+    "executable": "mvn",
+    "defaultGoals": ["clean", "install"],
+    "defaultOptionKeys": [],
+    "defaultExtraOptions": []
+  },
+  "node": {
+    "executables": {
+      "npm": "npm",
+      "pnpm": "pnpm",
+      "bun": "bun"
+    }
+  },
+  "jdkRegistry": {},
+  "scan": {
+    "includeHidden": false,
+    "exclude": []
+  },
+  "pipelines": {}
 }

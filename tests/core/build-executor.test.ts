@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { BuildExecutor } from '../../src/core/build-executor.js';
 import type { ProcessRunner } from '../../src/infrastructure/process-runner.js';
-import type { ProcessEvent, BuildStep } from '../../src/core/types.js';
+import type { MavenBuildStep, ProcessEvent } from '../../src/core/types.js';
 
 class FakeProcessRunner implements ProcessRunner {
   lastArgs?: { executable: string; args: string[]; options: { cwd: string; env?: Record<string, string | undefined> } };
@@ -28,13 +28,21 @@ class FakeProcessRunner implements ProcessRunner {
       },
     };
   }
+
+  launchExternal(): AsyncIterable<ProcessEvent> {
+    return this.spawn('cmd.exe', [], { cwd: '' });
+  }
 }
 
-function makeStep(overrides: Partial<BuildStep> = {}): BuildStep {
+function makeStep(overrides: Partial<MavenBuildStep> = {}): MavenBuildStep {
   return {
     path: 'J:/dev/quellen/2025/web',
+    buildSystem: 'maven',
     goals: ['clean', 'install'],
-    flags: ['-DskipTests'],
+    optionKeys: ['skipTests'],
+    profileStates: {},
+    extraOptions: [],
+    executionMode: 'internal',
     label: 'web',
     mavenExecutable: 'mvn',
     ...overrides,

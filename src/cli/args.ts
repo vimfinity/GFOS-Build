@@ -2,7 +2,7 @@ export type Command =
   | { name: 'build'; path: string; goals?: string[]; flags?: string[]; maven?: string; java?: string; dryRun: boolean }
   | { name: 'pipeline:run'; pipelineName: string; from?: string; continue: boolean; dryRun: boolean }
   | { name: 'pipeline:list' }
-  | { name: 'scan'; path?: string; depth?: number; noCache: boolean }
+  | { name: 'scan'; path?: string; noCache: boolean }
   | { name: 'serve'; port: number }
   | { name: 'config:init' }
   | { name: 'config:show' }
@@ -126,21 +126,20 @@ function parsePipelineRun(args: string[], global: GlobalOptions): ParsedArgs {
 
 function parseScan(args: string[], global: GlobalOptions): ParsedArgs {
   let pathArg: string | undefined;
-  let depth: number | undefined;
   let noCache = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
-    if (arg === '--depth' && i + 1 < args.length) {
-      depth = parseInt(args[++i]!, 10);
-    } else if (arg === '--no-cache') {
+    if (arg === '--no-cache') {
       noCache = true;
+    } else if (arg === '--depth' && i + 1 < args.length) {
+      i += 1;
     } else if (!arg.startsWith('-') && !pathArg) {
       pathArg = arg;
     }
   }
 
-  return { command: { name: 'scan', path: pathArg, depth, noCache }, global };
+  return { command: { name: 'scan', path: pathArg, noCache }, global };
 }
 
 function parseServe(args: string[], global: GlobalOptions): ParsedArgs {

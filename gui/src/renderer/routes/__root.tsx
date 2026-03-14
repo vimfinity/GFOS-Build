@@ -210,6 +210,7 @@ function RootLayout() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const primaryModifierLabel = isMac ? '⌘' : 'Ctrl';
+  const configError = configData?.error ?? null;
 
   useEffect(() => {
     applyThemePreference(getStoredThemePreference());
@@ -271,6 +272,7 @@ function RootLayout() {
   // Show onboarding whenever no project roots are configured
   const needsOnboarding =
     !serverOffline &&
+    !configError &&
     configData !== undefined &&
     Object.keys(configData.config.roots).length === 0;
 
@@ -282,7 +284,7 @@ function RootLayout() {
 
   async function handleOnboardingComplete(config: {
     roots: Record<string, string>;
-    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
+    maven: { executable: string; defaultGoals: string[]; defaultOptionKeys: string[]; defaultExtraOptions: string[] };
     jdkRegistry: Record<string, string>;
   }) {
     await saveConfig.mutateAsync(config);
@@ -350,6 +352,20 @@ function RootLayout() {
           </div>
         ) : (
           <div className={cn('flex min-h-0 flex-1 flex-col pb-2 sm:pb-3', isLiveBuildRoute && 'overflow-hidden')}>
+            {configError && (
+              <div className="mx-auto mb-5 flex w-full max-w-6xl items-start gap-3 rounded-[24px] border border-destructive/20 bg-card px-5 py-4 text-sm">
+                <ServerCrash size={16} className="mt-0.5 shrink-0 text-destructive" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground">Configuration needs to be fixed</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {configError}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Build and pipeline actions stay disabled until the configuration is valid again.
+                  </p>
+                </div>
+              </div>
+            )}
             <Outlet />
             {!isLiveBuildRoute && <div className="h-8 shrink-0 sm:h-10" aria-hidden="true" />}
           </div>

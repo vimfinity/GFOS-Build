@@ -41,7 +41,6 @@ export class CachedScanner {
 function buildCacheKey(options: ScanOptions): string {
   const data = JSON.stringify({
     roots: Object.entries(options.roots).sort(),
-    maxDepth: options.maxDepth,
     includeHidden: options.includeHidden,
     exclude: [...options.exclude].sort(),
   });

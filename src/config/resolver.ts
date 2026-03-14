@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { AppConfig, BuildStepConfig, PipelineConfig } from './schema.js';
 import type { BuildStep, Pipeline } from '../core/types.js';
-import { resolveJavaHome } from '../core/jdk-resolver.js';
+import { requireRegisteredJavaHome } from '../core/jdk-resolver.js';
 
 export function resolveStepPath(rawPath: string, roots: AppConfig['roots']): string {
   const colonIndex = rawPath.indexOf(':');
@@ -31,28 +31,39 @@ export function resolveStepPath(rawPath: string, roots: AppConfig['roots']): str
 export function resolveStep(stepConfig: BuildStepConfig, config: AppConfig): BuildStep {
   const resolvedPath = resolveStepPath(stepConfig.path, config.roots);
   const label = stepConfig.label ?? path.basename(resolvedPath);
-  const buildSystem = stepConfig.buildSystem ?? 'maven';
 
-  if (buildSystem === 'npm') {
+  if (stepConfig.buildSystem === 'node') {
     return {
       path: resolvedPath,
-      buildSystem: 'npm',
-      goals: [],
-      flags: [],
+      buildSystem: 'node',
       label,
-      mavenExecutable: config.maven.executable,
-      npmExecutable: config.npm.executable,
-      npmScript: stepConfig.npmScript ?? config.npm.defaultBuildScript,
+      commandType: stepConfig.commandType,
+      script: stepConfig.script,
+      args: stepConfig.args,
+      executionMode: stepConfig.executionMode,
+      nodeExecutables: config.node.executables,
     };
   }
 
   const goals = stepConfig.goals ?? config.maven.defaultGoals;
-  const flags = stepConfig.flags ?? config.maven.defaultFlags;
   const mavenExecutable = stepConfig.maven ?? config.maven.executable;
   const javaVersion = stepConfig.javaVersion;
-  const javaHome = resolveJavaHome(config, javaVersion);
+  const javaHome = requireRegisteredJavaHome(config, javaVersion);
 
-  return { path: resolvedPath, buildSystem: 'maven', goals, flags, label, mavenExecutable, javaVersion, javaHome };
+  return {
+    path: resolvedPath,
+    buildSystem: 'maven',
+    modulePath: stepConfig.modulePath,
+    goals,
+    optionKeys: stepConfig.optionKeys ?? config.maven.defaultOptionKeys,
+    profileStates: stepConfig.profileStates ?? {},
+    extraOptions: stepConfig.extraOptions ?? config.maven.defaultExtraOptions,
+    executionMode: stepConfig.executionMode ?? 'internal',
+    label,
+    mavenExecutable,
+    javaVersion,
+    javaHome,
+  };
 }
 
 export function resolvePipeline(

@@ -1,9 +1,9 @@
-import { CheckCircle, XCircle, Loader2, Circle } from 'lucide-react';
+import { ArrowUpRight, CheckCircle, XCircle, Loader2, Circle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/lib/utils';
 import type { BuildEvent } from '@shared/types';
 
-type StepStatus = 'pending' | 'running' | 'success' | 'failed';
+type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'launched';
 
 interface StepState {
   label: string;
@@ -23,7 +23,7 @@ function deriveSteps(events: BuildEvent[], _totalFromPipeline: number, stepLabel
       if (states[i]) {
         states[i] = {
           ...states[i]!,
-          status: event.success ? 'success' : 'failed',
+          status: event.status,
           durationMs: event.durationMs,
         };
       }
@@ -43,6 +43,7 @@ const icons: Record<StepStatus, React.ReactNode> = {
   running: <Loader2 size={15} className="text-warning animate-spin" />,
   success: <CheckCircle size={15} className="text-success" />,
   failed:  <XCircle size={15} className="text-destructive" />,
+  launched: <ArrowUpRight size={15} className="text-warning" />,
 };
 
 const pillColors: Record<StepStatus, string> = {
@@ -50,6 +51,7 @@ const pillColors: Record<StepStatus, string> = {
   running: 'border-primary/20 bg-primary/10 text-primary',
   success: 'border-success/20 bg-success/10 text-success',
   failed: 'border-destructive/20 bg-destructive/10 text-destructive',
+  launched: 'border-warning/20 bg-warning/10 text-warning',
 };
 
 export function StepTimeline({ events, stepLabels }: StepTimelineProps) {

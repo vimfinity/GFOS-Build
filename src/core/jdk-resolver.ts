@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { AppConfig } from '../config/schema.js';
 import type { FileSystem } from '../infrastructure/file-system.js';
+import { buildChildProcessEnv } from '../infrastructure/process-env.js';
 
 /**
  * Look up a JDK path from the registry by version string.
@@ -13,6 +14,22 @@ export function resolveJavaHome(
   return config.jdkRegistry[javaVersion];
 }
 
+export function requireRegisteredJavaHome(
+  config: AppConfig,
+  javaVersion: string | undefined,
+): string | undefined {
+  if (!javaVersion) return undefined;
+
+  const javaHome = resolveJavaHome(config, javaVersion);
+  if (!javaHome) {
+    throw new Error(
+      `Java version "${javaVersion}" is not registered in the JDK registry. Add it in Settings before selecting it as a JAVA_HOME override.`,
+    );
+  }
+
+  return javaHome;
+}
+
 /**
  * Build a JAVA_HOME-augmented env object, or undefined if no override needed.
  */
@@ -20,7 +37,7 @@ export function buildEnvWithJavaHome(
   javaHome: string | undefined,
 ): NodeJS.ProcessEnv | undefined {
   if (!javaHome) return undefined;
-  return { ...process.env, JAVA_HOME: javaHome };
+  return buildChildProcessEnv({ JAVA_HOME: javaHome });
 }
 
 // ---------------------------------------------------------------------------
@@ -38,49 +55,31 @@ export interface DetectedJdk {
  * then reads the `release` file to extract the major version.
  */
 export async function detectJdks(baseDir: string, fs: FileSystem): Promise<DetectedJdk[]> {
-  const results: DetectedJdk[] = [];
+  const results = new Map<string, DetectedJdk>();
 
-  if (!(await fs.exists(baseDir))) return results;
+  if (!(await fs.exists(baseDir))) return [];
+
+  const selfDetected = await inspectJdkHome(baseDir, path.basename(baseDir), fs);
+  if (selfDetected) {
+    results.set(selfDetected.version, selfDetected);
+  }
 
   let entries;
   try {
     entries = await fs.readDir(baseDir);
   } catch {
-    return results;
+    return Array.from(results.values()).sort((a, b) => Number(a.version) - Number(b.version));
   }
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
 
-    const jdkDir = path.join(baseDir, entry.name);
-    const javacPath = path.join(jdkDir, 'bin', process.platform === 'win32' ? 'javac.exe' : 'javac');
-
-    if (!(await fs.exists(javacPath))) continue;
-
-    // Try reading the release file for version info
-    const releasePath = path.join(jdkDir, 'release');
-    let version: string | undefined;
-
-    if (await fs.exists(releasePath)) {
-      try {
-        const content = await fs.readFile(releasePath);
-        version = parseJavaVersion(content);
-      } catch {
-        // Non-fatal — fall back to directory name
-      }
-    }
-
-    if (!version) {
-      // Fall back to inferring from directory name
-      version = inferVersionFromName(entry.name);
-    }
-
-    if (version) {
-      results.push({ version, path: jdkDir });
-    }
+    const detected = await inspectJdkHome(path.join(baseDir, entry.name), entry.name, fs);
+    if (!detected || results.has(detected.version)) continue;
+    results.set(detected.version, detected);
   }
 
-  return results.sort((a, b) => Number(a.version) - Number(b.version));
+  return Array.from(results.values()).sort((a, b) => Number(a.version) - Number(b.version));
 }
 
 /**
@@ -108,4 +107,31 @@ function inferVersionFromName(name: string): string | undefined {
   // Match common JDK directory naming patterns: jdk21, jdk-17, jdk1.8, etc.
   const match = name.match(/(?:jdk|java)[_-]?(\d+)/i);
   return match?.[1];
+}
+
+async function inspectJdkHome(
+  jdkDir: string,
+  fallbackName: string,
+  fs: FileSystem,
+): Promise<DetectedJdk | undefined> {
+  const javacPath = path.join(jdkDir, 'bin', process.platform === 'win32' ? 'javac.exe' : 'javac');
+  if (!(await fs.exists(javacPath))) return undefined;
+
+  const releasePath = path.join(jdkDir, 'release');
+  let version: string | undefined;
+
+  if (await fs.exists(releasePath)) {
+    try {
+      const content = await fs.readFile(releasePath);
+      version = parseJavaVersion(content);
+    } catch {
+      // Non-fatal — fall back to directory name.
+    }
+  }
+
+  if (!version) {
+    version = inferVersionFromName(fallbackName);
+  }
+
+  return version ? { version, path: jdkDir } : undefined;
 }

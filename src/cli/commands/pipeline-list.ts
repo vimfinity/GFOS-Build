@@ -1,5 +1,6 @@
 import type { AppConfig } from '../../config/schema.js';
 import { resolvePipeline } from '../../config/resolver.js';
+import { buildCommandString } from '../../core/build-command.js';
 
 const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
@@ -40,11 +41,10 @@ export function runPipelineList(config: AppConfig, json: boolean): void {
       const prefix = isLast ? '\u2514\u2500' : '\u251C\u2500';
       const gutter = isLast ? '  ' : '\u2502 ';
 
-      const goals = [...step.goals, ...step.flags].join(' ');
       console.log(`  ${prefix} ${CYAN}${i + 1}${RESET}  ${BOLD}${step.label}${RESET}   ${DIM}${step.path}${RESET}`);
-      console.log(`  ${gutter}      ${DIM}${step.mavenExecutable} ${goals}${RESET}`);
+      console.log(`  ${gutter}      ${DIM}${buildCommandString(step)}${RESET}`);
 
-      if (step.javaHome) {
+      if (step.buildSystem === 'maven' && step.javaHome) {
         console.log(`  ${gutter}      ${DIM}Java ${step.javaVersion ?? '?'} (${step.javaHome})${RESET}`);
       }
     }

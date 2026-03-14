@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import path from 'node:path';
 import { mkdirSync } from 'node:fs';
 import type { Project } from '../core/types.js';
+import type { BuildCompletionStatus, ExecutionMode, PackageManager } from '../core/types.js';
 
 const SCHEMA_VERSION = 1;
 
@@ -15,6 +16,8 @@ CREATE TABLE IF NOT EXISTS build_runs (
   project_path  TEXT    NOT NULL,
   project_name  TEXT    NOT NULL,
   build_system  TEXT    NOT NULL DEFAULT 'maven',
+  package_manager TEXT,
+  execution_mode TEXT,
   command       TEXT    NOT NULL,
   java_home     TEXT,
   pipeline_name TEXT,
@@ -51,6 +54,8 @@ export interface StartBuildRunParams {
   projectPath: string;
   projectName: string;
   buildSystem: string;
+  packageManager?: PackageManager;
+  executionMode?: ExecutionMode;
   command: string;
   javaHome?: string;
   pipelineName?: string;
@@ -61,7 +66,7 @@ export interface FinishBuildRunParams {
   id: number;
   exitCode: number;
   durationMs: number;
-  status: 'success' | 'failed';
+  status: BuildCompletionStatus;
 }
 
 export interface BuildRunRow {
@@ -70,6 +75,8 @@ export interface BuildRunRow {
   project_path: string;
   project_name: string;
   build_system: string;
+  package_manager: PackageManager | null;
+  execution_mode: ExecutionMode | null;
   command: string;
   java_home: string | null;
   pipeline_name: string | null;
@@ -127,6 +134,12 @@ export class AppDatabase implements IDatabase {
     if (!columns.some((column) => column.name === 'job_id')) {
       this.db.exec('ALTER TABLE build_runs ADD COLUMN job_id TEXT');
     }
+    if (!columns.some((column) => column.name === 'package_manager')) {
+      this.db.exec('ALTER TABLE build_runs ADD COLUMN package_manager TEXT');
+    }
+    if (!columns.some((column) => column.name === 'execution_mode')) {
+      this.db.exec('ALTER TABLE build_runs ADD COLUMN execution_mode TEXT');
+    }
     const row = this.db
       .prepare('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')
       .get() as { version: number } | undefined;
@@ -140,14 +153,16 @@ export class AppDatabase implements IDatabase {
     this.db
       .prepare(
         `INSERT INTO build_runs
-          (job_id, project_path, project_name, build_system, command, java_home, pipeline_name, step_index, started_at, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')`,
+          (job_id, project_path, project_name, build_system, package_manager, execution_mode, command, java_home, pipeline_name, step_index, started_at, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')`,
       )
       .run(
         params.jobId ?? null,
         params.projectPath,
         params.projectName,
         params.buildSystem,
+        params.packageManager ?? null,
+        params.executionMode ?? null,
         params.command,
         params.javaHome ?? null,
         params.pipelineName ?? null,
@@ -233,7 +248,7 @@ export class AppDatabase implements IDatabase {
   }
 
   getRecentBuilds(opts: { limit: number; pipeline?: string; project?: string }): BuildRunRow[] {
-    const SELECT = `SELECT id, job_id, project_path, project_name, build_system, command, java_home,
+    const SELECT = `SELECT id, job_id, project_path, project_name, build_system, package_manager, execution_mode, command, java_home,
                 pipeline_name, step_index, started_at, finished_at, duration_ms, exit_code, status
          FROM build_runs`;
     if (opts.pipeline) {
@@ -254,31 +269,34 @@ export class AppDatabase implements IDatabase {
   getBuildStats(): BuildStats {
     const totals = (this.db
       .prepare(
-        `SELECT COUNT(*) as total,
+        `SELECT COUNT(CASE WHEN status IN ('success', 'failed') THEN 1 END) as total,
                 SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
                 SUM(CASE WHEN status = 'failed'  THEN 1 ELSE 0 END) as failure_count,
-                AVG(CASE WHEN status != 'running' THEN duration_ms END) as avg_duration_ms
+                AVG(CASE WHEN status IN ('success', 'failed') THEN duration_ms END) as avg_duration_ms
          FROM build_runs`,
       )
       .get() as { total: number; success_count: number; failure_count: number; avg_duration_ms: number | null } | undefined) ?? { total: 0, success_count: 0, failure_count: 0, avg_duration_ms: null };
 
     const byPipeline = (this.db
       .prepare(
-        `SELECT pipeline_name as name, COUNT(*) as runs,
+        `SELECT pipeline_name as name,
+                COUNT(CASE WHEN status IN ('success', 'failed') THEN 1 END) as runs,
                 SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successes,
-                AVG(CASE WHEN status != 'running' THEN duration_ms END) as avg_ms
+                AVG(CASE WHEN status IN ('success', 'failed') THEN duration_ms END) as avg_ms
          FROM build_runs WHERE pipeline_name IS NOT NULL
          GROUP BY pipeline_name ORDER BY runs DESC`,
       )
       .all() as Array<{ name: string; runs: number; successes: number; avg_ms: number | null }>)
+      .filter((r) => r.runs > 0)
       .map((r) => ({ name: r.name, runs: r.runs, successes: r.successes, avgMs: r.avg_ms }));
 
     const byProject = (this.db
       .prepare(
-        `SELECT project_path as path, project_name as name, COUNT(*) as runs,
+        `SELECT project_path as path, project_name as name,
+                COUNT(CASE WHEN status IN ('success', 'failed') THEN 1 END) as runs,
                 SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successes,
-                AVG(CASE WHEN status != 'running' THEN duration_ms END) as avg_ms
-         FROM build_runs GROUP BY project_path ORDER BY runs DESC LIMIT 20`,
+                AVG(CASE WHEN status IN ('success', 'failed') THEN duration_ms END) as avg_ms
+         FROM build_runs GROUP BY project_path HAVING runs > 0 ORDER BY runs DESC LIMIT 20`,
       )
       .all() as Array<{ path: string; name: string; runs: number; successes: number; avg_ms: number | null }>)
       .map((r) => ({ path: r.path, name: r.name, runs: r.runs, successes: r.successes, avgMs: r.avg_ms }));

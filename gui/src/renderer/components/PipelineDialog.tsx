@@ -3,22 +3,35 @@ import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MavenCommandFields, getSuggestedJavaOverride, type MavenCommandValue } from '@/components/MavenCommandFields';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { Tooltip } from '@/components/ui/tooltip';
+import { getNodeScriptChoices, getNodeScriptComboboxOptions, type NodeScriptChoice } from '@/lib/node-script-options';
 import { cn } from '@/lib/utils';
 import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2, Check } from 'lucide-react';
 import type { PipelineStep } from '@shared/api';
-import type { Project } from '@shared/types';
+import type { ExecutionMode, MavenMetadata, MavenOptionKey, MavenProfileState, NodeCommandType, PackageManager, Project } from '@shared/types';
 import { pickDirectory } from '@/api/bridge';
-import { scanQuery, configQuery } from '@/api/queries';
+import { inspectProject, scanQuery, configQuery } from '@/api/queries';
 
 interface StepFormData {
   label: string;
   path: string;
-  buildSystem: 'maven' | 'npm';
-  mavenGoals: string;
-  mavenFlags: string;
-  npmScript: string;
+  buildSystem: 'maven' | 'node' | null;
+  mavenModulePath: string;
+  mavenGoals: string[];
+  mavenOptionKeys: MavenOptionKey[];
+  mavenProfileStates: Record<string, MavenProfileState>;
+  mavenExtraOptions: string[];
+  commandType: NodeCommandType;
+  script: string;
+  args: string;
+  executionMode: ExecutionMode;
   javaVersion: string;
+  mavenMetadata?: MavenMetadata;
+  packageManager?: PackageManager;
+  availableScripts: NodeScriptChoice[];
+  inspectionError?: string;
 }
 
 export interface PipelineFormData {
@@ -36,27 +49,42 @@ interface PipelineDialogProps {
   mode: 'create' | 'edit';
 }
 
-function createEmptyStep(mavenGoals: string, npmScript: string): StepFormData {
+function createEmptyStep(mavenGoals: string): StepFormData {
   return {
     label: '',
     path: '',
-    buildSystem: 'maven',
-    mavenGoals: mavenGoals || 'clean install',
-    mavenFlags: '',
-    npmScript: npmScript || 'build',
+    buildSystem: null,
+    mavenModulePath: '',
+    mavenGoals: mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install'],
+    mavenOptionKeys: [],
+    mavenProfileStates: {},
+    mavenExtraOptions: [],
+    commandType: 'script',
+    script: '',
+    args: '',
+    executionMode: 'internal',
     javaVersion: '',
+    availableScripts: [],
   };
 }
 
-function fromApiStep(step: PipelineStep, mavenGoals: string, npmScript: string): StepFormData {
+function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
   return {
     label: step.label,
     path: step.path,
-    buildSystem: step.buildSystem ?? 'maven',
-    mavenGoals: step.goals.join(' ') || mavenGoals || 'clean install',
-    mavenFlags: step.flags.join(' '),
-    npmScript: step.npmScript ?? npmScript ?? 'build',
+    buildSystem: step.buildSystem ?? null,
+    mavenModulePath: step.modulePath ?? '',
+    mavenGoals: step.goals ?? (mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install']),
+    mavenOptionKeys: step.optionKeys ?? [],
+    mavenProfileStates: step.profileStates ?? {},
+    mavenExtraOptions: step.extraOptions ?? [],
+    commandType: step.commandType ?? 'script',
+    script: step.script ?? '',
+    args: step.args?.join(' ') ?? '',
+    executionMode: step.executionMode ?? 'internal',
     javaVersion: step.javaVersion ?? '',
+    packageManager: step.packageManager,
+    availableScripts: [],
   };
 }
 
@@ -68,83 +96,14 @@ function getRelativePath(project: Project, roots: Record<string, string>): strin
   return norm.startsWith(rootNorm) ? norm.slice(rootNorm.length + 1) : project.path;
 }
 
-function BuildSystemToggle({
-  value,
-  onChange,
-}: {
-  value: 'maven' | 'npm';
-  onChange: (v: 'maven' | 'npm') => void;
-}) {
-  return (
-    <div className="segmented-control">
-      {(['maven', 'npm'] as const).map((sys) => (
-        <button
-          key={sys}
-          type="button"
-          aria-pressed={value === sys}
-          onClick={() => onChange(sys)}
-          className={cn(
-            'segmented-control-button',
-            value === sys && 'is-active',
-          )}
-        >
-          {sys === 'maven' ? 'Maven' : 'npm'}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function JavaVersionSelect({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const { data: configData } = useQuery(configQuery);
-  const jdkVersions = configData ? Object.keys(configData.config.jdkRegistry) : [];
-
-  if (jdkVersions.length === 0) {
-    return (
-      <Input
-        label="Java version"
-        placeholder="e.g. 17"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-        Java version
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="field-select h-11 rounded-2xl border px-4 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
-      >
-        <option value="">Default</option>
-        {jdkVersions.map((version) => (
-          <option key={version} value={version}>
-            Java {version}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 function ProjectPathPicker({
   value,
   onChange,
-  onProjectSelect,
+  onResolvedPath,
 }: {
   value: string;
   onChange: (v: string) => void;
-  onProjectSelect?: (project: Project) => void;
+  onResolvedPath?: (path: string, project?: Project) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -175,7 +134,7 @@ function ProjectPathPicker({
           project.name.toLowerCase().includes(q) ||
           project.path.toLowerCase().includes(q) ||
           (project.maven?.artifactId ?? '').toLowerCase().includes(q) ||
-          (project.npm?.name ?? '').toLowerCase().includes(q),
+          (project.node?.name ?? '').toLowerCase().includes(q),
       )
       .slice(0, 30);
   }, [scanData, query]);
@@ -197,6 +156,7 @@ function ProjectPathPicker({
     const dir = await pickDirectory();
     if (dir) {
       onChange(dir);
+      onResolvedPath?.(dir);
       setOpen(false);
       setQuery('');
     }
@@ -204,7 +164,7 @@ function ProjectPathPicker({
 
   function selectProject(project: Project) {
     onChange(project.path);
-    onProjectSelect?.(project);
+    onResolvedPath?.(project.path, project);
     setOpen(false);
     setQuery('');
   }
@@ -221,6 +181,7 @@ function ProjectPathPicker({
       const trimmed = query.trim();
       if (trimmed && /^([A-Za-z]:[/\\]|\/)/.test(trimmed)) {
         onChange(trimmed);
+        onResolvedPath?.(trimmed);
         setOpen(false);
         setQuery('');
       } else if (filtered.length > 0 && filtered[0]) {
@@ -282,7 +243,7 @@ function ProjectPathPicker({
                             : 'bg-success/10 text-success',
                         )}
                       >
-                        {project.buildSystem === 'maven' ? 'Maven' : 'npm'}
+                        {project.buildSystem === 'maven' ? 'Maven' : 'Node'}
                       </span>
                       <span className="shrink-0 text-sm font-medium text-foreground">{project.name}</span>
                       <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
@@ -318,41 +279,30 @@ function StepCard({
   index,
   total,
   onUpdate,
+  onResolvePath,
   onRemove,
   onMoveUp,
   onMoveDown,
-  defaultMavenGoals,
-  defaultNpmScript,
 }: {
   step: StepFormData;
   index: number;
   total: number;
   onUpdate: (updater: (current: StepFormData) => StepFormData) => void;
+  onResolvePath: (path: string, project?: Project) => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-  defaultMavenGoals: string;
-  defaultNpmScript: string;
 }) {
-  function handleBuildSystemChange(next: 'maven' | 'npm') {
-    onUpdate((current) => ({
-      ...current,
-      buildSystem: next,
-      mavenGoals: next === 'maven' && !current.mavenGoals ? defaultMavenGoals : current.mavenGoals,
-      npmScript: next === 'npm' && !current.npmScript ? defaultNpmScript : current.npmScript,
-    }));
-  }
+  const { data: configData } = useQuery(configQuery);
+  const jdkVersions = useMemo(() => Object.keys(configData?.config.jdkRegistry ?? {}), [configData]);
 
-  function handleProjectSelect(project: Project) {
+  function handleResolvedPath(path: string, project?: Project) {
     onUpdate((current) => ({
       ...current,
-      path: project.path,
-      buildSystem: project.buildSystem,
-      npmScript:
-        project.buildSystem === 'npm' && !current.npmScript ? defaultNpmScript : current.npmScript,
-      mavenGoals:
-        project.buildSystem === 'maven' && !current.mavenGoals ? defaultMavenGoals : current.mavenGoals,
+      path,
+      inspectionError: undefined,
     }));
+    onResolvePath(path, project);
   }
 
   return (
@@ -364,8 +314,18 @@ function StepCard({
               Step {index + 1}
             </span>
             <span className="pill-meta rounded-full bg-secondary text-muted-foreground">
-              {step.buildSystem === 'maven' ? 'Maven' : 'npm'}
+              {step.buildSystem === 'maven' ? 'Maven' : step.buildSystem === 'node' ? 'Node' : 'Awaiting project'}
             </span>
+            {step.packageManager && (
+              <span className="pill-meta rounded-full bg-secondary text-muted-foreground uppercase">
+                {step.packageManager}
+              </span>
+            )}
+            {step.buildSystem === 'node' && (
+              <span className="pill-meta rounded-full bg-secondary text-muted-foreground">
+                {step.commandType === 'install' ? 'Install' : 'Script'}
+              </span>
+            )}
           </div>
           <p className="mt-2 truncate text-sm font-medium text-foreground">
             {step.label || 'Untitled step'}
@@ -416,11 +376,8 @@ function StepCard({
           value={step.label}
           onChange={(e) => onUpdate((current) => ({ ...current, label: e.target.value }))}
         />
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            Build system
-          </span>
-          <BuildSystemToggle value={step.buildSystem} onChange={handleBuildSystemChange} />
+        <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
+          Build system is detected from the selected project path.
         </div>
       </div>
 
@@ -428,40 +385,133 @@ function StepCard({
         <ProjectPathPicker
           value={step.path}
           onChange={(value) => onUpdate((current) => ({ ...current, path: value }))}
-          onProjectSelect={handleProjectSelect}
+          onResolvedPath={handleResolvedPath}
         />
       </div>
 
+      {step.inspectionError && (
+        <div className="mt-4 rounded-[18px] border border-destructive/20 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+          {step.inspectionError}
+        </div>
+      )}
+
       {step.buildSystem === 'maven' ? (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px] lg:items-end">
-          <Input
-            label="Goals"
-            placeholder="e.g. clean install"
-            value={step.mavenGoals}
-            onChange={(e) => onUpdate((current) => ({ ...current, mavenGoals: e.target.value }))}
-          />
-          <Input
-            label="Flags"
-            placeholder="e.g. -DskipTests -T4"
-            value={step.mavenFlags}
-            onChange={(e) => onUpdate((current) => ({ ...current, mavenFlags: e.target.value }))}
-          />
-          <JavaVersionSelect
-            value={step.javaVersion}
-            onChange={(value) => onUpdate((current) => ({ ...current, javaVersion: value }))}
+        <div className="mt-4">
+          <MavenCommandFields
+            metadata={step.mavenMetadata}
+            value={toMavenCommandValue(step)}
+            onChange={(nextValue) =>
+              onUpdate((current) => ({
+                ...current,
+                mavenModulePath: nextValue.modulePath,
+                mavenGoals: nextValue.goals,
+                mavenOptionKeys: nextValue.optionKeys,
+                mavenProfileStates: nextValue.profileStates,
+                mavenExtraOptions: nextValue.extraOptions,
+                javaVersion: nextValue.javaVersion,
+                executionMode: nextValue.executionMode,
+              }))
+            }
+            jdkVersions={jdkVersions}
           />
         </div>
-      ) : (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)] lg:items-end">
-          <Input
-            label="Script"
-            placeholder="e.g. build"
-            value={step.npmScript}
-            onChange={(e) => onUpdate((current) => ({ ...current, npmScript: e.target.value }))}
-          />
-          <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
-            npm steps run `npm run &lt;script&gt;`.
+      ) : step.buildSystem === 'node' ? (
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end">
+          <div className="flex flex-col gap-2">
+            <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Command
+            </label>
+            <div className="segmented-control w-fit">
+              {([
+                { value: 'script', label: 'Run script' },
+                { value: 'install', label: 'Install deps' },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={step.commandType === option.value}
+                  onClick={() =>
+                    onUpdate((current) => ({
+                      ...current,
+                      commandType: option.value,
+                      script:
+                        option.value === 'script'
+                          ? current.script || current.availableScripts[0]?.name || ''
+                          : current.script,
+                      inspectionError:
+                        option.value === 'script' && current.availableScripts.length === 0
+                          ? 'No scripts were found in this package.json.'
+                          : undefined,
+                    }))
+                  }
+                  className={cn('segmented-control-button', step.commandType === option.value && 'is-active')}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
+          {step.commandType === 'script' ? (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Script
+            </label>
+            {step.availableScripts.length > 0 ? (
+              <ComboboxField
+                value={step.script}
+                options={getNodeScriptComboboxOptions(
+                  Object.fromEntries(step.availableScripts.map((scriptEntry) => [scriptEntry.name, scriptEntry.command])),
+                )}
+                onValueChange={(value) => onUpdate((current) => ({ ...current, script: value }))}
+                placeholder="Select a script"
+                emptyText="No matching scripts"
+              />
+            ) : (
+              <div className="rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
+                No scripts were found in this package.json.
+              </div>
+            )}
+          </div>
+          ) : (
+            <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
+              Uses the detected package manager install command.
+            </div>
+          )}
+          <Input
+            label={step.commandType === 'install' ? 'Install args' : 'Optional args'}
+            placeholder={step.commandType === 'install' ? 'e.g. --frozen-lockfile' : 'e.g. --host 0.0.0.0'}
+            value={step.args}
+            onChange={(e) => onUpdate((current) => ({ ...current, args: e.target.value }))}
+          />
+          <div className="lg:col-span-2 flex flex-col gap-2">
+            <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Execution mode
+            </label>
+            <div className="segmented-control w-fit">
+              {(['internal', 'external'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={step.executionMode === mode}
+                  onClick={() => onUpdate((current) => ({ ...current, executionMode: mode }))}
+                  className={cn('segmented-control-button', step.executionMode === mode && 'is-active')}
+                >
+                  {mode === 'internal' ? 'In app' : 'External terminal'}
+                </button>
+              ))}
+            </div>
+            {step.executionMode === 'external' && (
+              <p className="text-xs leading-relaxed text-warning">
+                External steps launch a new terminal window and the pipeline continues immediately.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {step.buildSystem === 'node' && step.availableScripts.length === 0 && !step.inspectionError && step.commandType === 'install' && (
+        <div className="mt-4 rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
+          Install is still available even though no scripts were found in this package.json.
         </div>
       )}
     </div>
@@ -477,35 +527,142 @@ export function PipelineDialog({
 }: PipelineDialogProps) {
   const { data: configData } = useQuery(configQuery);
   const defaultMavenGoals = configData?.config.maven.defaultGoals.join(' ') ?? 'clean install';
-  const defaultNpmScript = configData?.config.npm.defaultBuildScript ?? 'build';
+  const registeredJdkVersions = useMemo(
+    () => Object.keys(configData?.config.jdkRegistry ?? {}),
+    [configData],
+  );
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [failFast, setFailFast] = useState(true);
-  const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals, defaultNpmScript)]);
+  const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals)]);
 
-  useEffect(() => {
-    if (!open) return;
-    if (initialData) {
-      setName(initialData.name);
-      setDescription(initialData.description ?? '');
-      setFailFast(initialData.failFast);
-      setSteps(
-        initialData.steps.length > 0
-          ? initialData.steps.map((step) => fromApiStep(step, defaultMavenGoals, defaultNpmScript))
-          : [createEmptyStep(defaultMavenGoals, defaultNpmScript)],
+  async function resolveStepPath(index: number, path: string, project?: Project) {
+    const applyInspection = (current: StepFormData, resolvedProject: Project | null, error?: string): StepFormData => {
+      if (!resolvedProject) {
+        return {
+          ...current,
+          buildSystem: null,
+          mavenMetadata: undefined,
+          packageManager: undefined,
+          availableScripts: [],
+          script: '',
+          commandType: current.commandType,
+          inspectionError: error ?? 'No supported build manifest was found at this path.',
+        };
+      }
+
+      if (resolvedProject.buildSystem === 'node') {
+        const availableScripts = getNodeScriptChoices(resolvedProject.node?.scripts);
+        const nextScript =
+          current.script && availableScripts.some((scriptEntry) => scriptEntry.name === current.script)
+            ? current.script
+            : availableScripts[0]?.name ?? '';
+        return {
+          ...current,
+          label: current.label || resolvedProject.name,
+          buildSystem: 'node',
+          packageManager: resolvedProject.node?.packageManager,
+          availableScripts,
+          script: nextScript,
+          inspectionError:
+            current.commandType === 'script' && current.script && !availableScripts.some((scriptEntry) => scriptEntry.name === current.script)
+              ? `Script "${current.script}" is no longer defined in package.json.`
+              : current.commandType === 'script' && availableScripts.length === 0
+                ? 'No scripts were found in this package.json.'
+                : undefined,
+        };
+      }
+
+      return {
+        ...current,
+        label: current.label || resolvedProject.name,
+        buildSystem: 'maven',
+        mavenMetadata: resolvedProject.maven,
+        packageManager: undefined,
+        availableScripts: [],
+        script: '',
+        inspectionError: undefined,
+        mavenGoals: current.mavenGoals.length > 0 ? current.mavenGoals : defaultMavenGoals.split(/\s+/).filter(Boolean),
+        mavenProfileStates: Object.fromEntries(
+          (resolvedProject.maven?.profiles ?? []).map((profile) => [
+            profile.id,
+            current.mavenProfileStates[profile.id] ?? 'default',
+          ]),
+        ),
+        javaVersion:
+          current.javaVersion && registeredJdkVersions.includes(current.javaVersion)
+            ? current.javaVersion
+            : getSuggestedJavaOverride(resolvedProject.maven, registeredJdkVersions),
+      };
+    };
+
+    if (project) {
+      setSteps((current) =>
+        current.map((step, stepIndex) =>
+          stepIndex === index ? applyInspection(step, project) : step,
+        ),
       );
       return;
     }
 
-    setName('');
-    setDescription('');
-    setFailFast(true);
-    setSteps([createEmptyStep(defaultMavenGoals, defaultNpmScript)]);
-  }, [open, initialData, defaultMavenGoals, defaultNpmScript]);
+    try {
+      const result = await inspectProject(path);
+      setSteps((current) =>
+        current.map((step, stepIndex) =>
+          stepIndex === index ? applyInspection(step, result.project) : step,
+        ),
+      );
+    } catch (error) {
+      setSteps((current) =>
+        current.map((step, stepIndex) =>
+          stepIndex === index
+            ? {
+                ...step,
+                buildSystem: null,
+                mavenMetadata: undefined,
+                packageManager: undefined,
+                availableScripts: [],
+                script: '',
+                commandType: step.commandType,
+                inspectionError: error instanceof Error ? error.message : 'Could not inspect project path.',
+              }
+            : step,
+        ),
+      );
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    const nextSteps =
+      initialData?.steps.length
+        ? initialData.steps.map((step) => fromApiStep(step, defaultMavenGoals))
+        : [createEmptyStep(defaultMavenGoals)];
+
+    setName(initialData?.name ?? '');
+    setDescription(initialData?.description ?? '');
+    setFailFast(initialData?.failFast ?? true);
+    setSteps(nextSteps);
+
+    void (async () => {
+      for (let index = 0; index < nextSteps.length; index++) {
+        if (cancelled) return;
+        const step = nextSteps[index];
+        if (!step?.path) continue;
+        await resolveStepPath(index, step.path);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, initialData, defaultMavenGoals, registeredJdkVersions]);
 
   function addStep() {
-    setSteps((current) => [...current, createEmptyStep(defaultMavenGoals, defaultNpmScript)]);
+    setSteps((current) => [...current, createEmptyStep(defaultMavenGoals)]);
   }
 
   function removeStep(index: number) {
@@ -536,9 +693,10 @@ export function PipelineDialog({
     steps.length > 0 &&
     steps.every((step) => {
       if (!step.path.trim()) return false;
-      return step.buildSystem === 'maven'
-        ? step.mavenGoals.trim().length > 0
-        : step.npmScript.trim().length > 0;
+      if (step.inspectionError) return false;
+      if (step.buildSystem === 'maven') return step.mavenGoals.length > 0;
+      if (step.buildSystem === 'node') return step.commandType === 'install' || step.script.trim().length > 0;
+      return false;
     });
 
   return (
@@ -546,7 +704,7 @@ export function PipelineDialog({
       <DialogContent className="max-w-5xl">
         <DialogTitle>{mode === 'create' ? 'Create pipeline' : `Edit "${name}"`}</DialogTitle>
         <DialogDescription>
-          Build a multi-step pipeline with separate Maven and npm step behavior.
+          Build a multi-step pipeline with detected Maven and Node step behavior.
         </DialogDescription>
 
         <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-visible">
@@ -586,11 +744,10 @@ export function PipelineDialog({
                   index={index}
                   total={steps.length}
                   onUpdate={(updater) => updateStep(index, updater)}
+                  onResolvePath={(path, project) => void resolveStepPath(index, path, project)}
                   onRemove={() => removeStep(index)}
                   onMoveUp={() => moveStep(index, -1)}
                   onMoveDown={() => moveStep(index, 1)}
-                  defaultMavenGoals={defaultMavenGoals}
-                  defaultNpmScript={defaultNpmScript}
                 />
               ))}
             </div>
@@ -614,4 +771,16 @@ export function PipelineDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function toMavenCommandValue(step: StepFormData): MavenCommandValue {
+  return {
+    modulePath: step.mavenModulePath,
+    goals: step.mavenGoals,
+    optionKeys: step.mavenOptionKeys,
+    profileStates: step.mavenProfileStates,
+    extraOptions: step.mavenExtraOptions,
+    javaVersion: step.javaVersion,
+    executionMode: step.executionMode,
+  };
 }

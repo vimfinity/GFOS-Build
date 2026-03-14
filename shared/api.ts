@@ -1,5 +1,14 @@
 // REST API response types — must stay in sync with src/cli/commands/serve.ts
-import type { Project, BuildEvent, ScanEvent } from './types.js';
+import type {
+  BuildEvent,
+  ExecutionMode,
+  MavenOptionKey,
+  MavenProfileState,
+  NodeCommandType,
+  PackageManager,
+  Project,
+  ScanEvent,
+} from './types.js';
 
 export interface HealthResponse {
   version: string;
@@ -12,23 +21,36 @@ export interface ConfigResponse {
   config: {
     roots: Record<string, string>;
     pipelines: Record<string, unknown>;
-    maven: { executable: string; defaultGoals: string[]; defaultFlags: string[] };
-    npm: { executable: string; defaultBuildScript: string; defaultInstallArgs: string[] };
+    maven: {
+      executable: string;
+      defaultGoals: string[];
+      defaultOptionKeys: MavenOptionKey[];
+      defaultExtraOptions: string[];
+    };
+    node: { executables: Record<PackageManager, string> };
     jdkRegistry: Record<string, string>;
-    scan: { maxDepth: number; includeHidden: boolean; exclude: string[] };
+    scan: { includeHidden: boolean; exclude: string[] };
   };
   configPath: string;
+  error?: string;
 }
 
 /** A single step as returned by GET /api/pipelines */
 export interface PipelineStep {
   label: string;
   path: string;
-  buildSystem: 'maven' | 'npm';
-  goals: string[];
-  flags: string[];
-  mavenExecutable: string;
-  npmScript?: string;
+  buildSystem: 'maven' | 'node';
+  packageManager?: PackageManager;
+  executionMode?: ExecutionMode;
+  commandType?: NodeCommandType;
+  modulePath?: string;
+  goals?: string[];
+  optionKeys?: MavenOptionKey[];
+  profileStates?: Record<string, MavenProfileState>;
+  extraOptions?: string[];
+  mavenExecutable?: string;
+  script?: string;
+  args?: string[];
   javaVersion?: string;
   javaHome?: string;
 }
@@ -53,6 +75,8 @@ export interface BuildRunRowApi {
   project_path: string;
   project_name: string;
   build_system: string;
+  package_manager: PackageManager | null;
+  execution_mode: ExecutionMode | null;
   command: string;
   java_home: string | null;
   pipeline_name: string | null;
@@ -92,6 +116,20 @@ export interface ScanResponse {
   projects: Project[];
   durationMs: number;
   fromCache: boolean;
+}
+
+export interface ProjectInspectionResponse {
+  project: Project | null;
+}
+
+export interface DetectedJdkApi {
+  version: string;
+  path: string;
+}
+
+export interface JdkDetectionResponse {
+  baseDir: string;
+  jdks: DetectedJdkApi[];
 }
 
 /** WebSocket message envelope sent from server → client */

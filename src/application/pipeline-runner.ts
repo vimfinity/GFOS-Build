@@ -1,6 +1,7 @@
 import type { BuildRunner } from './build-runner.js';
 import type { IDatabase } from '../infrastructure/database.js';
-import type { Pipeline, BuildEvent, BuildStepResult, RunResult } from '../core/types.js';
+import type { BuildCompletionStatus, Pipeline, BuildEvent, BuildStepResult, RunResult } from '../core/types.js';
+import { buildCommandString } from '../core/build-command.js';
 
 export class PipelineRunner {
   constructor(
@@ -24,30 +25,29 @@ export class PipelineRunner {
       const step = stepsToRun[i]!;
       const displayIndex = fromIndex + i;
       let logSeq = 0;
-
       let stepRunId: number | undefined;
-      try {
-        const command =
-          step.buildSystem === 'npm'
-            ? [step.npmExecutable ?? 'npm', 'run', step.npmScript ?? 'build'].join(' ')
-            : [step.mavenExecutable, ...step.goals, ...step.flags].join(' ');
-        stepRunId = this.db.startBuildRun({
-          jobId,
-          projectPath: step.path,
-          projectName: step.label,
-          buildSystem: step.buildSystem,
-          command,
-          javaHome: step.javaHome,
-          pipelineName: pipeline.name,
-          stepIndex: displayIndex,
-        });
-      } catch {
-        // non-fatal DB error
-      }
 
       for await (const event of this.buildRunner.run(step, displayIndex, total, pipeline.name, signal)) {
-        if (event.type === 'step:start' && stepRunId !== undefined) {
-          yield { ...event, runId: stepRunId };
+        if (event.type === 'step:start') {
+          if (stepRunId === undefined) {
+            try {
+              stepRunId = this.db.startBuildRun({
+                jobId,
+                projectPath: event.step.path,
+                projectName: event.step.label,
+                buildSystem: event.step.buildSystem,
+                packageManager: event.step.buildSystem === 'node' ? event.step.packageManager : undefined,
+                executionMode: event.step.buildSystem === 'node' ? event.step.executionMode : undefined,
+                command: buildCommandString(event.step),
+                javaHome: event.step.buildSystem === 'maven' ? event.step.javaHome : undefined,
+                pipelineName: pipeline.name,
+                stepIndex: displayIndex,
+              });
+            } catch {
+              // non-fatal DB error
+            }
+          }
+          yield stepRunId !== undefined ? { ...event, runId: stepRunId } : event;
         } else {
           yield event;
         }
@@ -65,6 +65,7 @@ export class PipelineRunner {
             step: event.step,
             exitCode: event.exitCode,
             durationMs: event.durationMs,
+            status: event.status,
             success: event.success,
           });
 
@@ -74,14 +75,14 @@ export class PipelineRunner {
                 id: stepRunId,
                 exitCode: event.exitCode,
                 durationMs: event.durationMs,
-                status: event.success ? 'success' : 'failed',
+                status: event.status,
               });
             } catch {
               // non-fatal
             }
           }
 
-          if (!event.success && pipeline.failFast) {
+          if (event.status === 'failed' && pipeline.failFast) {
             failedAt = displayIndex;
           }
         }
@@ -90,16 +91,17 @@ export class PipelineRunner {
       if (failedAt !== undefined) break;
     }
 
-    const success = failedAt === undefined && results.every((r) => r.success);
+    const status = deriveRunStatus(results, failedAt);
     const runResult: RunResult = {
       results,
-      success,
+      status,
+      success: status !== 'failed',
       durationMs: Date.now() - startTime,
       stoppedAt: failedAt,
     };
 
     try {
-      this.db.upsertPipelineState(pipeline.name, success ? null : (failedAt ?? fromIndex));
+      this.db.upsertPipelineState(pipeline.name, status === 'failed' ? (failedAt ?? fromIndex) : null);
     } catch {
       // non-fatal
     }
@@ -118,4 +120,14 @@ export class PipelineRunner {
     }
     return 0;
   }
+}
+
+function deriveRunStatus(results: BuildStepResult[], failedAt: number | undefined): BuildCompletionStatus {
+  if (failedAt !== undefined || results.some((result) => result.status === 'failed')) {
+    return 'failed';
+  }
+  if (results.some((result) => result.status === 'launched')) {
+    return 'launched';
+  }
+  return 'success';
 }
