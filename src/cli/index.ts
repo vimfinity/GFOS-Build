@@ -119,7 +119,18 @@ async function main(): Promise<void> {
       const nodeExecutor = new NodeExecutor(processRunner);
       const buildRunner = new BuildRunner(executor, nodeExecutor, fileSystem);
       const pipelineRunner = new PipelineRunner(buildRunner, db);
-      server = await runServe({ port: command.port, config, configPath, configError: serveConfigError, db, scanner, buildRunner, pipelineRunner, fs: fileSystem });
+      server = await runServe({
+        port: command.port,
+        version: VERSION,
+        config,
+        configPath,
+        configError: serveConfigError,
+        db,
+        scanner,
+        buildRunner,
+        pipelineRunner,
+        fs: fileSystem,
+      });
       process.stdout.write(`${SIDECAR_READY_PREFIX}${server.port}\n`);
       await new Promise<void>((resolve) => {
         process.on('SIGINT', resolve);

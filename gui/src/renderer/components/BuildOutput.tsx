@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { memo, useMemo, useRef, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { AnsiLine } from '@/lib/ansi';
 import type { BuildEvent } from '@shared/types';
 import { ChevronsDown, Copy, Check } from 'lucide-react';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,36 +42,24 @@ export interface BuildOutputProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function BuildOutput({
+export const BuildOutput = memo(function BuildOutput({
   events,
   isRunning,
   showLineNumbers = false,
 }: BuildOutputProps) {
-  const lines = extractLines(events);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const lines = useMemo(() => extractLines(events), [events]);
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  // Auto-scroll when new lines arrive, as long as the user hasn't scrolled up
-  useEffect(() => {
-    if (isRunning && atBottom && lines.length > 0 && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [lines.length, isRunning, atBottom]);
-
   const scrollToBottom = useCallback(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
+    if (lines.length === 0) return;
+    virtuosoRef.current?.scrollToIndex({
+      index: lines.length - 1,
+      align: 'end',
       behavior: 'smooth',
     });
-  }, []);
-
-  const handleScroll = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element) return;
-    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
-    setAtBottom(distanceFromBottom < 24);
-  }, []);
+  }, [lines.length]);
 
   async function handleCopyAll() {
     // Strip ANSI before copying to clipboard — keep only the raw text
@@ -133,23 +122,26 @@ export function BuildOutput({
       </div>
 
       {/* ── Virtualized line list ─────────────────────────────────────────── */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="h-full min-h-0 overflow-y-auto"
+      <Virtuoso
+        ref={virtuosoRef}
+        className="h-full min-h-0"
         style={{ backgroundColor: 'var(--terminal-bg)' }}
-      >
-        <div className="min-h-full py-10">
-          {lines.map((item, index) => (
-            <OutputLineRow
-              key={`${index}-${item.stream}-${item.line}`}
-              index={index}
-              item={item}
-              showLineNumbers={showLineNumbers}
-            />
-          ))}
-        </div>
-      </div>
+        data={lines}
+        atBottomStateChange={setAtBottom}
+        followOutput={isRunning && atBottom ? 'smooth' : false}
+        increaseViewportBy={{ top: 400, bottom: 800 }}
+        components={{
+          Header: () => <div className="h-10" aria-hidden="true" />,
+          Footer: () => <div className="h-10" aria-hidden="true" />,
+        }}
+        itemContent={(index, item) => (
+          <OutputLineRow
+            index={index}
+            item={item}
+            showLineNumbers={showLineNumbers}
+          />
+        )}
+      />
 
       {/* ── Scroll-to-bottom button ───────────────────────────────────────── */}
       {!atBottom && (
@@ -173,7 +165,7 @@ export function BuildOutput({
       )}
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Individual line row — extracted to avoid closure capture issues in Virtuoso

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { scanQuery, configQuery, useRefreshScan, useAdHocBuild } from '@/api/queries';
+import { waitForJobCompletion } from '@/api/ws';
 import { useState, useMemo, useEffect } from 'react';
 import {
   FolderSearch,
@@ -473,6 +474,7 @@ function ProjectsView() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [buildTarget, setBuildTarget] = useState<Project | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const projects = scanData?.projects ?? [];
   const roots = configData?.config.roots ?? {};
@@ -560,9 +562,13 @@ function ProjectsView() {
 
   async function handleRefresh() {
     setIsRefreshing(true);
+    setRefreshError(null);
     try {
-      await refreshScan.mutateAsync();
+      const { jobId } = await refreshScan.mutateAsync();
+      await waitForJobCompletion(jobId);
       await queryClient.invalidateQueries({ queryKey: ['scan'] });
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : 'Refresh scan failed.');
     } finally {
       setIsRefreshing(false);
     }
@@ -651,6 +657,13 @@ function ProjectsView() {
             <RefreshCw size={13} />
             Try again
           </Button>
+        </div>
+      )}
+
+      {refreshError && !isError && (
+        <div className="glass-card flex items-center gap-3 rounded-[24px] border border-destructive/20 px-5 py-4 text-sm">
+          <AlertCircle size={16} className="shrink-0 text-destructive" />
+          <span className="text-destructive">{refreshError}</span>
         </div>
       )}
 

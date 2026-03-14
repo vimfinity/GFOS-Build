@@ -1,10 +1,10 @@
-import { queryOptions, useMutation } from '@tanstack/react-query';
+import { queryOptions, useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import { apiGet, apiPost, apiPut, apiDelete } from './client';
 import type {
   HealthResponse,
   PipelineListItem,
   BuildRunRowApi,
-  BuildLogEntry,
+  BuildLogPage,
   BuildStatsApi,
   StartJobResponse,
   ConfigResponse,
@@ -60,14 +60,6 @@ export const buildStatsQuery = queryOptions({
   gcTime: 120_000,
 });
 
-export const buildLogsQuery = (runId: number) =>
-  queryOptions({
-    queryKey: ['builds', runId, 'logs'],
-    queryFn: () => apiGet<BuildLogEntry[]>(`/api/builds/${runId}/logs`),
-    staleTime: Infinity,
-    gcTime: 300_000,
-  });
-
 export const scanQuery = queryOptions({
   queryKey: ['scan'],
   queryFn: () => apiGet<ScanResponse>('/api/scan'),
@@ -117,6 +109,25 @@ export function useSaveConfig() {
 export function useRefreshScan() {
   return useMutation({
     mutationFn: () => apiPost<StartJobResponse>('/api/scan/refresh'),
+  });
+}
+
+export function useBuildLogs(runId: number, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ['builds', runId, 'logs'],
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      params.set('limit', '500');
+      if (pageParam !== undefined) {
+        params.set('beforeSeq', String(pageParam));
+      }
+      return apiGet<BuildLogPage>(`/api/builds/${runId}/logs?${params}`);
+    },
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextBeforeSeq ?? undefined,
+    enabled,
+    staleTime: Infinity,
+    gcTime: 300_000,
   });
 }
 

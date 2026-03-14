@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { buildsQuery, buildLogsQuery, useClearBuildLogs, useClearAllBuilds } from '@/api/queries';
+import { buildsQuery, useBuildLogs, useClearBuildLogs, useClearAllBuilds } from '@/api/queries';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SearchField } from '@/components/ui/search-field';
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { BuildRunRowApi, BuildLogEntry } from '@shared/api';
 import { AnsiLine } from '@/lib/ansi';
+import { Virtuoso } from 'react-virtuoso';
 
 export const Route = createFileRoute('/builds/')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -30,6 +31,7 @@ export const Route = createFileRoute('/builds/')({
 
 interface PipelineGroup {
   type: 'pipeline';
+  jobId: string;
   pipelineName: string;
   steps: BuildRunRowApi[];
   startedAt: string;
@@ -56,37 +58,51 @@ function deriveGroupStatus(steps: BuildRunRowApi[]): string {
 }
 
 function groupBuilds(rows: BuildRunRowApi[]): GroupedItem[] {
-  const chronological = [...rows].reverse();
-  const resultChron: GroupedItem[] = [];
-  const openGroups = new Map<string, PipelineGroup>();
+  const groupsByJobId = new Map<string, PipelineGroup>();
+  const standalone: StandaloneItem[] = [];
 
-  for (const row of chronological) {
-    if (row.pipeline_name !== null && row.step_index !== null) {
-      if (row.step_index === 0) {
-        const group: PipelineGroup = {
+  for (const row of rows) {
+    if (row.pipeline_name !== null && row.step_index !== null && row.job_id) {
+      let group = groupsByJobId.get(row.job_id);
+      if (!group) {
+        group = {
           type: 'pipeline',
+          jobId: row.job_id,
           pipelineName: row.pipeline_name,
-          steps: [row],
+          steps: [],
           startedAt: row.started_at,
           finishedAt: row.finished_at,
         };
-        openGroups.set(row.pipeline_name, group);
-        resultChron.push(group);
-      } else {
-        const group = openGroups.get(row.pipeline_name);
-        if (group) {
-          group.steps.push(row);
-          if (row.finished_at) group.finishedAt = row.finished_at;
-        } else {
-          resultChron.push({ type: 'standalone', row });
-        }
+        groupsByJobId.set(row.job_id, group);
       }
-    } else {
-      resultChron.push({ type: 'standalone', row });
+      group.steps.push(row);
+      if (row.started_at < group.startedAt) group.startedAt = row.started_at;
+      if (row.finished_at && (!group.finishedAt || row.finished_at > group.finishedAt)) {
+        group.finishedAt = row.finished_at;
+      }
+      continue;
     }
+
+    standalone.push({ type: 'standalone', row });
   }
 
-  return resultChron.reverse();
+  const grouped: GroupedItem[] = [
+    ...Array.from(groupsByJobId.values()).map((group) => ({
+      ...group,
+      steps: [...group.steps].sort((left, right) => {
+        const leftIndex = left.step_index ?? Number.MAX_SAFE_INTEGER;
+        const rightIndex = right.step_index ?? Number.MAX_SAFE_INTEGER;
+        return leftIndex - rightIndex || left.started_at.localeCompare(right.started_at);
+      }),
+    })),
+    ...standalone,
+  ];
+
+  return grouped.sort((left, right) => {
+    const leftStartedAt = left.type === 'pipeline' ? left.startedAt : left.row.started_at;
+    const rightStartedAt = right.type === 'pipeline' ? right.startedAt : right.row.started_at;
+    return rightStartedAt.localeCompare(leftStartedAt);
+  });
 }
 
 const STATUS_PILLS = ['All', 'Success', 'Failed', 'Launched', 'Running'] as const;
@@ -263,9 +279,9 @@ function BuildsView() {
                       </td>
                     </tr>
                   ) : (
-                    grouped.map((item, index) =>
+                    grouped.map((item) =>
                       item.type === 'pipeline'
-                        ? <PipelineGroupRows key={`pg-${index}`} group={item} targetRunId={runId} />
+                        ? <PipelineGroupRows key={item.jobId} group={item} targetRunId={runId} />
                         : <BuildRow key={item.row.id} build={item.row} isTarget={runId === String(item.row.id)} />,
                     )
                   )}
@@ -364,10 +380,15 @@ function PipelineStepRow({ step, isTarget = false }: { step: BuildRunRowApi; isT
   const [showLogs, setShowLogs] = useState(false);
   const isRunning = step.status === 'running';
 
-  const { data: logs, isLoading: logsLoading, isError: logsError } = useQuery({
-    ...buildLogsQuery(step.id),
-    enabled: showLogs,
-  });
+  const {
+    data: logsData,
+    isLoading: logsLoading,
+    isError: logsError,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useBuildLogs(step.id, showLogs);
+  const logs = logsData?.pages.flatMap((page) => page.entries) ?? [];
 
   return (
     <>
@@ -426,7 +447,14 @@ function PipelineStepRow({ step, isTarget = false }: { step: BuildRunRowApi; isT
       {showLogs && (
         <tr className="bg-secondary/20">
           <td colSpan={4} className="px-5 pb-4 pt-2">
-            <LogPanel logs={logs} logsLoading={logsLoading} logsError={logsError} />
+            <LogPanel
+              logs={logs}
+              logsLoading={logsLoading}
+              logsError={logsError}
+              hasOlderLogs={hasNextPage}
+              isLoadingOlderLogs={isFetchingNextPage}
+              onLoadOlder={() => void fetchNextPage()}
+            />
           </td>
         </tr>
       )}
@@ -441,10 +469,15 @@ function BuildRow({ build, isTarget = false }: { build: BuildRunRowApi; isTarget
   const rowRef = useRef<HTMLTableRowElement | null>(null);
   const isRunning = build.status === 'running';
 
-  const { data: logs, isLoading: logsLoading, isError: logsError } = useQuery({
-    ...buildLogsQuery(build.id),
-    enabled: showLogs,
-  });
+  const {
+    data: logsData,
+    isLoading: logsLoading,
+    isError: logsError,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useBuildLogs(build.id, showLogs);
+  const logs = logsData?.pages.flatMap((page) => page.entries) ?? [];
 
   useEffect(() => {
     if (isTarget) setExpanded(true);
@@ -531,7 +564,16 @@ function BuildRow({ build, isTarget = false }: { build: BuildRunRowApi; isTarget
                 </Button>
               </div>
 
-              {showLogs && <LogPanel logs={logs} logsLoading={logsLoading} logsError={logsError} />}
+              {showLogs && (
+                <LogPanel
+                  logs={logs}
+                  logsLoading={logsLoading}
+                  logsError={logsError}
+                  hasOlderLogs={hasNextPage}
+                  isLoadingOlderLogs={isFetchingNextPage}
+                  onLoadOlder={() => void fetchNextPage()}
+                />
+              )}
             </div>
           </td>
         </tr>
@@ -544,10 +586,16 @@ function LogPanel({
   logs,
   logsLoading,
   logsError,
+  hasOlderLogs,
+  isLoadingOlderLogs,
+  onLoadOlder,
 }: {
   logs: BuildLogEntry[] | undefined;
   logsLoading: boolean;
   logsError: boolean;
+  hasOlderLogs: boolean;
+  isLoadingOlderLogs: boolean;
+  onLoadOlder: () => void;
 }) {
   return (
     <div
@@ -569,10 +617,20 @@ function LogPanel({
           No logs stored for this build.
         </div>
       ) : (
-        <div className="max-h-96 overflow-y-auto">
-          {logs.map((entry) => (
-            <LogLine key={entry.seq} entry={entry} />
-          ))}
+        <div className="flex flex-col">
+          {hasOlderLogs && (
+            <div className="border-b border-border px-4 py-3">
+              <Button variant="outline" size="sm" onClick={onLoadOlder} disabled={isLoadingOlderLogs}>
+                {isLoadingOlderLogs ? <Loader2 size={11} className="animate-spin" /> : null}
+                Load older logs
+              </Button>
+            </div>
+          )}
+          <Virtuoso
+            style={{ height: 384 }}
+            data={logs}
+            itemContent={(_index, entry) => <LogLine entry={entry} />}
+          />
         </div>
       )}
     </div>

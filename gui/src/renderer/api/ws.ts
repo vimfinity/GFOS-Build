@@ -11,6 +11,8 @@ export interface UseJobEventsResult {
   error: string | null;
   /** Wall-clock ms when the first event for this job was received. Stable across remounts. */
   startMs: number;
+  /** Monotonic revision for cache updates without cloning the full event array. */
+  eventVersion: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,12 +48,9 @@ function getCacheEntry(id: string): CacheEntry {
 
 export function useJobEvents(jobId: string | null): UseJobEventsResult {
   const cached = jobId ? jobCache.get(jobId) : undefined;
-
-  // Initialise from cache so a re-mount sees the existing log immediately
-  const [events,  setEvents]  = useState<JobEvent[]>(() => cached?.events  ?? []);
-  const [done,    setDone]    = useState<boolean>(    () => cached?.done    ?? false);
   const [error,   setError]   = useState<string | null>(null);
   const [startMs, setStartMs] = useState<number>(     () => cached?.startMs ?? Date.now());
+  const [eventVersion, setEventVersion] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
 
   const connect = useCallback(async (id: string) => {
@@ -85,16 +84,19 @@ export function useJobEvents(jobId: string | null): UseJobEventsResult {
           }
 
           if (entry.events.length < MAX_EVENTS_PER_JOB) {
-            entry.events = [...entry.events, ev];
+            entry.events.push(ev);
+          } else {
+            entry.events.shift();
+            entry.events.push(ev);
           }
-          setEvents(entry.events);
+          setEventVersion((version) => version + 1);
         } else if (envelope.type === 'done') {
           getCacheEntry(id).done = true;
-          setDone(true);
+          setEventVersion((version) => version + 1);
         } else if (envelope.type === 'error') {
           setError(envelope.message ?? 'Unknown error');
           getCacheEntry(id).done = true;
-          setDone(true);
+          setEventVersion((version) => version + 1);
         }
       } catch {
         // ignore malformed frames
@@ -112,15 +114,12 @@ export function useJobEvents(jobId: string | null): UseJobEventsResult {
     const entry = jobCache.get(jobId);
     if (entry) {
       setStartMs(entry.startMs);
-      setEvents(entry.events);
-      setDone(entry.done);
       setError(null);
     } else {
       setStartMs(Date.now());
-      setEvents([]);
-      setDone(false);
       setError(null);
     }
+    setEventVersion((version) => version + 1);
 
     // If the job is already done and cached, skip reconnecting
     if (entry?.done) {
@@ -137,5 +136,73 @@ export function useJobEvents(jobId: string | null): UseJobEventsResult {
     };
   }, [jobId, connect]);
 
-  return { events, done, error, startMs };
+  return {
+    events: cached?.events ?? [],
+    done: cached?.done ?? false,
+    error,
+    startMs,
+    eventVersion,
+  };
+}
+
+export async function waitForJobCompletion(jobId: string): Promise<void> {
+  const cached = jobCache.get(jobId);
+  if (cached?.done) return;
+
+  const base = await getSidecarUrl();
+  const wsUrl = base.replace(/^http/, 'ws') + '/api/ws';
+
+  await new Promise<void>((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+
+    const cleanup = () => {
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe', jobId }));
+    };
+
+    ws.onmessage = (event: MessageEvent<string>) => {
+      try {
+        const envelope = JSON.parse(event.data) as WsEnvelope;
+        if (envelope.jobId !== jobId) return;
+
+        if (envelope.type === 'done') {
+          getCacheEntry(jobId).done = true;
+          cleanup();
+          resolve();
+          return;
+        }
+
+        if (envelope.type === 'error') {
+          getCacheEntry(jobId).done = true;
+          cleanup();
+          reject(new Error(envelope.message ?? 'Job failed.'));
+        }
+      } catch {
+        // Ignore malformed frames and wait for a terminal event.
+      }
+    };
+
+    ws.onerror = () => {
+      cleanup();
+      reject(new Error('WebSocket connection error while waiting for job completion.'));
+    };
+
+    ws.onclose = () => {
+      const entry = jobCache.get(jobId);
+      if (entry?.done) {
+        resolve();
+      } else {
+        reject(new Error('WebSocket closed before job completion.'));
+      }
+    };
+  });
 }

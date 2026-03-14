@@ -196,7 +196,7 @@ process.on('unhandledRejection', (reason) => {
 app.whenReady().then(async () => {
   try {
     registerIpcHandlers();
-    server = await startServer();
+    server = await startServer(app.getVersion());
     updater = createUpdaterService({
       getActiveJobCount: () => server?.getActiveJobCount() ?? 0,
       sendState: (state) => {

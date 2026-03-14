@@ -53,6 +53,7 @@ No Java runtime, Node.js, or other dependencies required — the app is fully se
 
 - [Bun](https://bun.sh) >= 1.1
 - Node.js >= 20 (for `electron-rebuild`)
+- Visual Studio 2022 with the `Desktop development with C++` workload when native Electron dependencies need a local rebuild on Windows
 - Windows (packaging target is win32-x64)
 
 ### Setup
@@ -81,6 +82,7 @@ bun run start:desktop
 bun run build:desktop        # build Electron main/preload/renderer
 bun run check:desktop        # typecheck + desktop build
 bun run dist:desktop:win     # create the Windows desktop release
+bun run smoke:desktop        # smoke-test the packaged Windows desktop app
 ```
 
 The release outputs will be in `release/desktop/`:

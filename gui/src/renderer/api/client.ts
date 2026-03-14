@@ -17,7 +17,7 @@ export async function getSidecarUrl(): Promise<string> {
 export async function apiGet<T>(path: string): Promise<T> {
   const base = await getSidecarUrl();
   const res = await fetch(`${base}${path}`);
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  await ensureOk(res, 'GET', path);
   return res.json() as Promise<T>;
 }
 
@@ -28,7 +28,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
+  await ensureOk(res, 'POST', path);
   return res.json() as Promise<T>;
 }
 
@@ -39,11 +39,28 @@ export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`);
+  await ensureOk(res, 'PUT', path);
   return res.json() as Promise<T>;
 }
 
 export async function apiDelete(path: string): Promise<void> {
   const base = await getSidecarUrl();
-  await fetch(`${base}${path}`, { method: 'DELETE' });
+  const res = await fetch(`${base}${path}`, { method: 'DELETE' });
+  await ensureOk(res, 'DELETE', path);
+}
+
+async function ensureOk(res: Response, method: string, path: string): Promise<void> {
+  if (res.ok) return;
+
+  let errorMessage = `${method} ${path} failed: ${res.status}`;
+  try {
+    const payload = (await res.json()) as { error?: string };
+    if (payload.error) {
+      errorMessage = payload.error;
+    }
+  } catch {
+    // Fall back to the generic status-based message.
+  }
+
+  throw new Error(errorMessage);
 }

@@ -18,8 +18,6 @@ import { inspectMavenProject } from '../../core/maven-project.js';
 import { inspectNodeProject } from '../../core/node-project.js';
 import { buildCommandString } from '../../core/build-command.js';
 
-const VERSION = '2.0.0';
-
 interface ActiveJob {
   controller: AbortController;
   startedAt: number;
@@ -32,6 +30,7 @@ interface JobHistory {
 
 export interface ServeOptions {
   port: number;
+  version: string;
   config: AppConfig;
   configPath: string;
   configError?: string;
@@ -71,6 +70,7 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
   const jobHistory = new Map<string, JobHistory>();
   const startTime = Date.now();
   const MAX_JOB_HISTORY = 30;
+  const MAX_JOB_FRAMES = 5_000;
 
   db.reconcileRunningBuilds([]);
 
@@ -142,7 +142,12 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     if (history) {
       const parsed = JSON.parse(msg) as { type: string };
       if (parsed.type === 'done' || parsed.type === 'error') history.terminalFrame = msg;
-      else history.frames.push(msg);
+      else {
+        history.frames.push(msg);
+        if (history.frames.length > MAX_JOB_FRAMES) {
+          history.frames.shift();
+        }
+      }
     }
     const subs = subscriptions.get(channel);
     if (!subs) return;
@@ -192,7 +197,11 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
 
     // GET /api/health
     if (req.method === 'GET' && pathname === '/api/health') {
-      return json({ version: VERSION, uptime: Math.floor((Date.now() - startTime) / 1000), platform: process.platform });
+      return json({
+        version: options.version,
+        uptime: Math.floor((Date.now() - startTime) / 1000),
+        platform: process.platform,
+      });
     }
 
     // GET /api/config
@@ -327,7 +336,12 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     const logsMatch = pathname.match(/^\/api\/builds\/(\d+)\/logs$/);
     if (req.method === 'GET' && logsMatch) {
       const runId = parseInt(logsMatch[1]!, 10);
-      const logs = db.getBuildLogs(runId);
+      const limit = parseLogLimit(url.searchParams.get('limit'));
+      const beforeSeq = parseLogCursor(url.searchParams.get('beforeSeq'));
+      const logs = db.getBuildLogs(runId, {
+        limit,
+        beforeSeq,
+      });
       return json(logs);
     }
 
@@ -664,4 +678,16 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     close: () => { httpServer.close(); wss.close(); },
     getActiveJobCount: () => activeJobs.size,
   };
+}
+
+function parseLogLimit(rawLimit: string | null): number | undefined {
+  if (!rawLimit) return undefined;
+  const parsed = Number.parseInt(rawLimit, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseLogCursor(rawCursor: string | null): number | undefined {
+  if (!rawCursor) return undefined;
+  const parsed = Number.parseInt(rawCursor, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
