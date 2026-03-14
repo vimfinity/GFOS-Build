@@ -10,7 +10,7 @@ import { Input, NumberField } from '@/components/ui/input';
 import { TagInput } from '@/components/ui/tag-input';
 import { Tooltip } from '@/components/ui/tooltip';
 import { cn, formatDate } from '@/lib/utils';
-import { Settings, Plus, Trash2, FolderOpen, Save, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Settings, Plus, Trash2, FolderOpen, Save, Loader2, CheckCircle2, AlertCircle, ArrowUpCircle } from 'lucide-react';
 import {
   getStoredThemePreference,
   setStoredThemePreference,
@@ -529,7 +529,7 @@ function SettingsView() {
           <ConfigCard
             title="Updates"
             description="Managed installs can update in place. Portable builds stay manual but can still point to the latest release."
-            icon={<Settings size={14} className="text-primary" />}
+            icon={<ArrowUpCircle size={14} className="text-primary" />}
           >
             <div className="space-y-1">
               <p className="text-sm text-foreground">
@@ -549,6 +549,11 @@ function SettingsView() {
                 </p>
               ) : null}
               {updateState.error ? <p className="text-sm text-destructive">{updateState.error}</p> : null}
+              {import.meta.env.DEV ? (
+                <p className="text-xs text-muted-foreground">
+                  Development mode uses a local updater simulation. Click `Check now` to trigger the nav-pill flow without packaging the app.
+                </p>
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => void checkForUpdates()} disabled={busyAction !== null}>
@@ -673,18 +678,27 @@ function ConfigCard({
   title,
   description,
   icon,
+  iconVariant = 'default',
   children,
 }: {
   title: string;
   description?: string;
   icon: React.ReactNode;
+  iconVariant?: 'default' | 'accent';
   children: React.ReactNode;
 }) {
   return (
     <Card>
       <CardHeader className="border-b border-border">
         <div className="flex items-start gap-2">
-          <div className="icon-chip mt-0.5 flex h-9 w-9 items-center justify-center rounded-full">{icon}</div>
+          <div
+            className={cn(
+              'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+              iconVariant === 'accent' ? 'icon-chip-accent' : 'icon-chip',
+            )}
+          >
+            {icon}
+          </div>
           <div className="min-w-0">
             <CardTitle className="text-sm">{title}</CardTitle>
             {description && (

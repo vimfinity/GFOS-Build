@@ -206,9 +206,11 @@ app.whenReady().then(async () => {
       },
     });
     createWindow();
-    void updater.checkForUpdates().catch((error) => {
-      console.error('Automatic update check failed:', error);
-    });
+    if (app.isPackaged) {
+      void updater.checkForUpdates().catch((error) => {
+        console.error('Automatic update check failed:', error);
+      });
+    }
   } catch (error) {
     fatalExit('Failed to start desktop app', error);
   }
