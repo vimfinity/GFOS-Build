@@ -1,7 +1,7 @@
 {
   "name": "gfos-build-gui",
   "productName": "GFOS Build",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.4",
   "description": "GFOS Build — Desktop GUI",
   "author": "GFOS",
   "private": true,
