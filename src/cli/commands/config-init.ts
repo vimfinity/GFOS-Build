@@ -12,7 +12,15 @@ const EXAMPLE_CONFIG = (rootPath: string, jdkBasePath: string) =>
       maven: {
         executable: 'mvn',
         defaultGoals: ['clean', 'install'],
-        defaultFlags: [],
+        defaultOptionKeys: [],
+        defaultExtraOptions: [],
+      },
+      node: {
+        executables: {
+          npm: 'npm',
+          pnpm: 'pnpm',
+          bun: 'bun',
+        },
       },
       jdkRegistry: jdkBasePath
         ? {
@@ -23,7 +31,6 @@ const EXAMPLE_CONFIG = (rootPath: string, jdkBasePath: string) =>
           }
         : {},
       scan: {
-        maxDepth: 4,
         includeHidden: false,
         exclude: [],
       },

@@ -42,6 +42,7 @@ export function Badge({ variant = 'default', size = 'control', className, childr
 export function StatusBadge({ status }: { status: string }) {
   if (status === 'success') return <Badge variant="success">Success</Badge>;
   if (status === 'failed') return <Badge variant="destructive">Failed</Badge>;
+  if (status === 'launched') return <Badge variant="warning">Launched</Badge>;
   if (status === 'running') return <Badge variant="default">Running</Badge>;
   return <Badge variant="secondary">{status}</Badge>;
 }

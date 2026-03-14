@@ -4,9 +4,10 @@ import type { BuildRunner } from '../../application/build-runner.js';
 import type { IDatabase } from '../../infrastructure/database.js';
 import type { FileSystem } from '../../infrastructure/file-system.js';
 import { resolveStepPath } from '../../config/resolver.js';
-import { resolveJavaHome } from '../../core/jdk-resolver.js';
+import { requireRegisteredJavaHome } from '../../core/jdk-resolver.js';
 import { renderBuildEvent, renderDryRunStep } from '../renderer.js';
-import type { BuildStep } from '../../core/types.js';
+import { buildCommandString } from '../../core/build-command.js';
+import type { MavenBuildStep } from '../../core/types.js';
 
 export interface BuildCommandOptions {
   path: string;
@@ -27,16 +28,18 @@ export async function runBuild(
 ): Promise<boolean> {
   const resolvedPath = resolveStepPath(options.path, config.roots);
   const goals = options.goals ?? config.maven.defaultGoals;
-  const flags = options.flags ?? config.maven.defaultFlags;
   const mavenExecutable = options.maven ?? config.maven.executable;
   const javaVersion = options.java;
-  const javaHome = resolveJavaHome(config, javaVersion);
+  const javaHome = requireRegisteredJavaHome(config, javaVersion);
 
-  const step: BuildStep = {
+  const step: MavenBuildStep = {
     path: resolvedPath,
     buildSystem: 'maven',
     goals,
-    flags,
+    optionKeys: config.maven.defaultOptionKeys,
+    profileStates: {},
+    extraOptions: options.flags ?? config.maven.defaultExtraOptions,
+    executionMode: 'internal',
     label: path.basename(resolvedPath),
     mavenExecutable,
     javaVersion,
@@ -52,7 +55,7 @@ export async function runBuild(
 
   let stepRunId: number | undefined;
   try {
-    const command = [step.mavenExecutable, ...step.goals, ...step.flags].join(' ');
+    const command = buildCommandString(step);
     stepRunId = db.startBuildRun({
       jobId: undefined,
       projectPath: step.path,
@@ -69,14 +72,14 @@ export async function runBuild(
   for await (const event of buildRunner.run(step, 0, 1)) {
     renderBuildEvent(event, options.json);
     if (event.type === 'step:done') {
-      success = event.success;
+      success = event.status !== 'failed';
       if (stepRunId !== undefined) {
         try {
           db.finishBuildRun({
             id: stepRunId,
             exitCode: event.exitCode,
             durationMs: event.durationMs,
-            status: event.success ? 'success' : 'failed',
+            status: event.status,
           });
         } catch {
           // non-fatal

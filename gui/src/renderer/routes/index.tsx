@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { buildStatsQuery, buildsQuery, pipelinesQuery, useAdHocBuild, useRunPipeline } from '@/api/queries';
+import { buildStatsQuery, buildsQuery, configQuery, pipelinesQuery, useAdHocBuild, useRunPipeline } from '@/api/queries';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import type { BuildRunRowApi, PipelineListItem } from '@shared/api';
+import type { MavenOptionKey, MavenProfileState } from '@shared/types';
 
 export const Route = createFileRoute('/')({
   component: Dashboard,
@@ -94,6 +95,7 @@ function StatusDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
     success: 'bg-success',
     failed: 'bg-destructive',
+    launched: 'bg-warning',
     running: 'bg-primary animate-pulse',
   };
   return <div className={cn('h-2 w-2 rounded-full shrink-0', colors[status] ?? 'bg-muted-foreground')} />;
@@ -103,39 +105,126 @@ interface AdHocQuickRunItem {
   key: string;
   projectName: string;
   projectPath: string;
-  buildSystem: 'maven' | 'npm';
+  buildSystem: 'maven' | 'node';
   label: string;
   meta: string;
   count: number;
   body:
-    | { path: string; buildSystem: 'npm'; npmScript: string }
-    | { path: string; buildSystem: 'maven'; goals: string[]; flags?: string[] };
+    | { path: string; buildSystem: 'node'; commandType: 'script' | 'install'; script?: string; args?: string[]; executionMode?: 'internal' | 'external' }
+    | {
+        path: string;
+        buildSystem: 'maven';
+        modulePath?: string;
+        goals: string[];
+        optionKeys?: MavenOptionKey[];
+        profileStates?: Record<string, MavenProfileState>;
+        extraOptions?: string[];
+      };
 }
+
+const MAVEN_OPTION_KEY_BY_FLAG: Record<string, MavenOptionKey> = {
+  '-DskipTests': 'skipTests',
+  '-Dmaven.test.skip=true': 'skipTestCompile',
+  '-U': 'updateSnapshots',
+  '-o': 'offline',
+  '-q': 'quiet',
+  '-X': 'debug',
+  '-e': 'errors',
+  '-fae': 'failAtEnd',
+  '-fn': 'failNever',
+};
 
 function parseAdHocCommand(build: BuildRunRowApi): AdHocQuickRunItem['body'] | null {
   const command = build.command.trim();
-  if (build.build_system === 'npm') {
+  if (build.build_system === 'node') {
+    const installMatch = command.match(/^\S+\s+install(?:\s+(.*))?$/);
+    if (installMatch) {
+      return {
+        path: build.project_path,
+        buildSystem: 'node',
+        commandType: 'install',
+        args: installMatch[1] ? installMatch[1].split(/\s+/).filter(Boolean) : undefined,
+        executionMode: build.execution_mode ?? 'internal',
+      };
+    }
+
     const npmMatch = command.match(/^\S+\s+run\s+(.+)$/);
-    const npmScript = npmMatch?.[1]?.trim();
-    if (!npmScript) return null;
+    const remainder = npmMatch?.[1]?.trim();
+    if (!remainder) return null;
+    const [scriptPart, argsPart] = remainder.split(/\s+--\s+/, 2);
+    const script = scriptPart.trim().split(/\s+/)[0];
+    if (!script) return null;
     return {
       path: build.project_path,
-      buildSystem: 'npm',
-      npmScript,
+      buildSystem: 'node',
+      commandType: 'script',
+      script,
+      args: argsPart ? argsPart.split(/\s+/).filter(Boolean) : undefined,
+      executionMode: build.execution_mode ?? 'internal',
     };
   }
 
   if (build.build_system === 'maven') {
     const parts = command.split(/\s+/).slice(1);
     if (parts.length === 0) return null;
-    const goals = parts.filter((part) => !part.startsWith('-'));
-    const flags = parts.filter((part) => part.startsWith('-'));
+
+    const goals: string[] = [];
+    const optionKeys: MavenOptionKey[] = [];
+    const profileStates: Record<string, MavenProfileState> = {};
+    const extraOptions: string[] = [];
+    let modulePath: string | undefined;
+    let parsingExtraOptions = false;
+
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index]!;
+      if (part === '-pl') {
+        modulePath = parts[index + 1];
+        index += 1;
+        parsingExtraOptions = true;
+        continue;
+      }
+
+      if (part.startsWith('-P')) {
+        const rawProfiles = part === '-P' ? parts[index + 1] : part.slice(2);
+        if (part === '-P') {
+          index += 1;
+        }
+        for (const profileToken of (rawProfiles ?? '').split(',').map((token) => token.trim()).filter(Boolean)) {
+          if (profileToken.startsWith('!')) {
+            profileStates[profileToken.slice(1)] = 'disabled';
+          } else {
+            profileStates[profileToken] = 'enabled';
+          }
+        }
+        parsingExtraOptions = true;
+        continue;
+      }
+
+      const optionKey = MAVEN_OPTION_KEY_BY_FLAG[part];
+      if (optionKey) {
+        optionKeys.push(optionKey);
+        parsingExtraOptions = true;
+        continue;
+      }
+
+      if (!parsingExtraOptions && !part.startsWith('-')) {
+        goals.push(part);
+        continue;
+      }
+
+      extraOptions.push(part);
+      parsingExtraOptions = true;
+    }
+
     if (goals.length === 0) return null;
     return {
       path: build.project_path,
       buildSystem: 'maven',
+      modulePath,
       goals,
-      flags: flags.length > 0 ? flags : undefined,
+      optionKeys: optionKeys.length > 0 ? optionKeys : undefined,
+      profileStates: Object.keys(profileStates).length > 0 ? profileStates : undefined,
+      extraOptions: extraOptions.length > 0 ? extraOptions : undefined,
     };
   }
 
@@ -169,18 +258,38 @@ function deriveAdHocQuickRuns(builds: BuildRunRowApi[]): AdHocQuickRunItem[] {
     .slice(0, 4)
     .map(([key, entry]) => {
       const { build, count, body } = entry;
+      const profileTokens =
+        body.buildSystem === 'maven'
+          ? Object.entries(body.profileStates ?? {}).reduce<string[]>((tokens, [profileId, state]) => {
+              if (state === 'enabled') tokens.push(profileId);
+              if (state === 'disabled') tokens.push(`!${profileId}`);
+              return tokens;
+            }, [])
+          : [];
       const label =
-        build.build_system === 'npm'
-          ? `npm ${'npmScript' in body ? body.npmScript : ''}`.trim()
+        body.buildSystem === 'node'
+          ? body.commandType === 'install'
+            ? [build.package_manager ?? 'npm', 'install', ...(body.args ?? [])].join(' ').trim()
+            : [
+                build.package_manager ?? 'npm',
+                'run',
+                body.script ?? '',
+                ...(body.args ? ['--', ...body.args] : []),
+              ].join(' ').trim()
           : [
-              ...(body.buildSystem === 'maven' ? body.goals : []),
-              ...(body.buildSystem === 'maven' ? body.flags ?? [] : []),
+              ...body.goals,
+              ...((body.optionKeys ?? []).map((optionKey) =>
+                Object.entries(MAVEN_OPTION_KEY_BY_FLAG).find(([, key]) => key === optionKey)?.[0] ?? optionKey,
+              )),
+              ...(profileTokens.length > 0 ? ['-P', profileTokens.join(',')] : []),
+              ...(body.modulePath ? ['-pl', body.modulePath] : []),
+              ...(body.extraOptions ?? []),
             ].join(' ');
       return {
         key,
         projectName: build.project_name,
         projectPath: build.project_path,
-        buildSystem: build.build_system as 'maven' | 'npm',
+        buildSystem: build.build_system as 'maven' | 'node',
         label,
         meta: `${count} recent runs`,
         count,
@@ -194,6 +303,7 @@ function Dashboard() {
   const queryClient = useQueryClient();
 
   const { data: stats, isLoading: statsLoading } = useQuery(buildStatsQuery);
+  const { data: configData } = useQuery(configQuery);
   const {
     data: builds,
     isLoading: buildsLoading,
@@ -213,6 +323,7 @@ function Dashboard() {
   const activeBuilds = builds?.filter((b) => b.status === 'running') ?? [];
   const recentBuilds = builds?.filter((b) => b.status !== 'running').slice(0, 8) ?? [];
   const adHocQuickRuns = deriveAdHocQuickRuns(builds ?? []);
+  const configError = configData?.error;
 
   const successRate =
     stats && stats.totalBuilds > 0
@@ -220,6 +331,7 @@ function Dashboard() {
       : null;
 
   async function handleRun(name: string) {
+    if (configError) return;
     setRunningPipelines((s) => new Set(s).add(name));
     try {
       const { jobId } = await runPipeline.mutateAsync(name);
@@ -234,6 +346,7 @@ function Dashboard() {
   }
 
   async function handleRunAdHoc(item: AdHocQuickRunItem) {
+    if (configError) return;
     setRunningAdHoc((s) => new Set(s).add(item.key));
     try {
       const { jobId } = await adHocBuild.mutateAsync(item.body);
@@ -390,7 +503,7 @@ function Dashboard() {
                   <QuickRunPipelineRow
                     key={`pipeline-${pipeline.name}`}
                     pipeline={pipeline}
-                    isRunning={runningPipelines.has(pipeline.name)}
+                    isRunning={runningPipelines.has(pipeline.name) || Boolean(configError)}
                     onRun={handleRun}
                   />
                 ))}
@@ -398,7 +511,7 @@ function Dashboard() {
                   <QuickRunAdHocRow
                     key={`adhoc-${item.key}`}
                     item={item}
-                    isRunning={runningAdHoc.has(item.key)}
+                    isRunning={runningAdHoc.has(item.key) || Boolean(configError)}
                     onRun={handleRunAdHoc}
                   />
                 ))}

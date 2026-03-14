@@ -10,6 +10,7 @@ import { formatDuration, cn } from '@/lib/utils';
 import { useState, useEffect, useMemo } from 'react';
 import {
   ArrowLeft,
+  ArrowUpRight,
   Square,
   CheckCircle2,
   XCircle,
@@ -60,16 +61,20 @@ function LiveBuildView() {
   );
 
   const runDoneEvent = buildEvents.find((event) => event.type === 'run:done');
-  const isSuccess = runDoneEvent?.type === 'run:done' ? runDoneEvent.result.success : null;
+  const runStatus = runDoneEvent?.type === 'run:done' ? runDoneEvent.result.status : null;
   const latestStepDone = [...buildEvents].reverse().find((event) => event.type === 'step:done');
   const displayStatus = !done
     ? 'running'
-    : isSuccess === true
+    : runStatus === 'success'
       ? 'success'
-      : isSuccess === false || error || (latestStepDone?.type === 'step:done' && !latestStepDone.success)
+      : runStatus === 'launched'
+        ? 'launched'
+        : runStatus === 'failed' || error || (latestStepDone?.type === 'step:done' && latestStepDone.status === 'failed')
         ? 'failed'
-        : latestStepDone?.type === 'step:done' && latestStepDone.success
+        : latestStepDone?.type === 'step:done' && latestStepDone.status === 'success'
           ? 'success'
+          : latestStepDone?.type === 'step:done' && latestStepDone.status === 'launched'
+            ? 'launched'
           : 'done';
 
   const pipelineName = useMemo(() => {
@@ -162,18 +167,37 @@ function LiveBuildView() {
         <div
           className={cn(
             'flex flex-wrap items-center gap-3 rounded-[24px] border bg-card px-5 py-4',
-            isSuccess ? 'border-success/20' : 'border-destructive/20',
+            runStatus === 'success'
+              ? 'border-success/20'
+              : runStatus === 'launched'
+                ? 'border-warning/20'
+                : 'border-destructive/20',
           )}
         >
-          {isSuccess ? (
+          {runStatus === 'success' ? (
             <CheckCircle2 size={16} className="text-success" />
+          ) : runStatus === 'launched' ? (
+            <ArrowUpRight size={16} className="text-warning" />
           ) : (
             <XCircle size={16} className="text-destructive" />
           )}
 
           <div className="min-w-0 flex-1">
-            <p className={cn('text-sm font-semibold', isSuccess ? 'text-success' : 'text-destructive')}>
-              {isSuccess ? 'Build completed successfully' : 'Build failed'}
+            <p
+              className={cn(
+                'text-sm font-semibold',
+                runStatus === 'success'
+                  ? 'text-success'
+                  : runStatus === 'launched'
+                    ? 'text-warning'
+                    : 'text-destructive',
+              )}
+            >
+              {runStatus === 'success'
+                ? 'Build completed successfully'
+                : runStatus === 'launched'
+                  ? 'Build handed off to an external terminal'
+                  : 'Build failed'}
             </p>
             {runDoneEvent.result.stoppedAt != null && (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -189,11 +213,16 @@ function LiveBuildView() {
           {runDoneEvent.result.results.length > 0 && (
             <div className="flex items-center gap-2 text-xs">
               <span className="text-success">
-                {runDoneEvent.result.results.filter((result) => result.success).length} passed
+                {runDoneEvent.result.results.filter((result) => result.status === 'success').length} passed
               </span>
-              {runDoneEvent.result.results.some((result) => !result.success) && (
+              {runDoneEvent.result.results.some((result) => result.status === 'launched') && (
+                <span className="text-warning">
+                  {runDoneEvent.result.results.filter((result) => result.status === 'launched').length} launched
+                </span>
+              )}
+              {runDoneEvent.result.results.some((result) => result.status === 'failed') && (
                 <span className="text-destructive">
-                  {runDoneEvent.result.results.filter((result) => !result.success).length} failed
+                  {runDoneEvent.result.results.filter((result) => result.status === 'failed').length} failed
                 </span>
               )}
             </div>

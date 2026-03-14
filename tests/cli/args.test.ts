@@ -177,7 +177,6 @@ describe('parseArgs', () => {
       expect(result.command).toEqual({
         name: 'scan',
         path: undefined,
-        depth: undefined,
         noCache: false,
       });
       expect(result.global).toEqual({ json: false });
@@ -188,29 +187,28 @@ describe('parseArgs', () => {
       expect(result.command).toEqual({
         name: 'scan',
         path: 'quellen:2025',
-        depth: undefined,
         noCache: false,
       });
       expect(result.global).toEqual({ json: false });
     });
 
     it('parses scan with all options', () => {
-      const result = parseArgs(argv('scan', 'quellen:2025', '--depth', '8', '--no-cache', '--json'));
+      const result = parseArgs(argv('scan', 'quellen:2025', '--no-cache', '--json'));
       expect(result.command).toEqual({
         name: 'scan',
         path: 'quellen:2025',
-        depth: 8,
         noCache: true,
       });
       expect(result.global).toEqual({ json: true });
     });
 
-    it('does not validate depth value (passes NaN through)', () => {
+    it('ignores removed depth flags', () => {
       const result = parseArgs(argv('scan', '--depth', 'abc'));
-      expect(result.command.name).toBe('scan');
-      if (result.command.name === 'scan') {
-        expect(result.command.depth).toBeNaN();
-      }
+      expect(result.command).toEqual({
+        name: 'scan',
+        path: undefined,
+        noCache: false,
+      });
     });
   });
 

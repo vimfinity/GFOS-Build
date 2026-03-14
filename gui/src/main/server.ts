@@ -7,7 +7,7 @@ import { NodeFileSystem } from '@server/infrastructure/file-system';
 import { NodeProcessRunner } from '@server/infrastructure/process-runner';
 import { RepositoryScanner } from '@server/core/repository-scanner';
 import { BuildExecutor } from '@server/core/build-executor';
-import { NpmExecutor } from '@server/core/npm-executor';
+import { NodeExecutor } from '@server/core/node-executor';
 import { CachedScanner } from '@server/application/scanner';
 import { BuildRunner } from '@server/application/build-runner';
 import { PipelineRunner } from '@server/application/pipeline-runner';
@@ -21,7 +21,14 @@ export interface ServerHandle {
 }
 
 export async function startServer(): Promise<ServerHandle> {
-  const configResult = loadConfig(undefined);
+  let configResult: ReturnType<typeof loadConfig>;
+  let configError: string | undefined;
+  try {
+    configResult = loadConfig(undefined);
+  } catch (error) {
+    configResult = { found: false };
+    configError = error instanceof Error ? error.message : String(error);
+  }
   let config: ReturnType<typeof configSchema.parse>;
   let configPath: string;
 
@@ -40,14 +47,15 @@ export async function startServer(): Promise<ServerHandle> {
   const db = new NodeDatabase(getDbPath());
   const scanner = new CachedScanner(new RepositoryScanner(fileSystem), db);
   const executor = new BuildExecutor(processRunner);
-  const npmExecutor = new NpmExecutor(processRunner);
-  const buildRunner = new BuildRunner(executor, npmExecutor, fileSystem);
+  const nodeExecutor = new NodeExecutor(processRunner);
+  const buildRunner = new BuildRunner(executor, nodeExecutor, fileSystem);
   const pipelineRunner = new PipelineRunner(buildRunner, db);
 
   const { port, close } = await runServe({
     port: 0,
     config,
     configPath,
+    configError,
     db,
     scanner,
     buildRunner,

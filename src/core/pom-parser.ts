@@ -3,25 +3,25 @@ export interface PomMetadata {
   packaging: string;
   isAggregator: boolean;
   javaVersion?: string;
+  modules: string[];
+  profiles: Array<{ id: string; activeByDefault: boolean }>;
 }
 
 export function parsePom(content: string): PomMetadata {
+  const normalized = stripXmlComments(content);
   return {
-    artifactId: extractArtifactId(content) ?? 'unknown',
-    packaging: extractTagValue(content, 'packaging') ?? 'jar',
-    isAggregator: content.includes('<modules>'),
-    javaVersion: extractJavaVersion(content),
+    artifactId: extractArtifactId(normalized) ?? 'unknown',
+    packaging: extractTagValue(normalized, 'packaging') ?? 'jar',
+    isAggregator: extractTagBlocks(normalized, 'modules').length > 0,
+    javaVersion: extractJavaVersion(normalized),
+    modules: extractModules(normalized),
+    profiles: extractProfiles(normalized),
   };
 }
 
 function extractTagValue(content: string, tag: string): string | undefined {
-  const open = `<${tag}>`;
-  const close = `</${tag}>`;
-  const start = content.indexOf(open);
-  if (start === -1) return undefined;
-  const end = content.indexOf(close, start);
-  if (end === -1) return undefined;
-  return content.slice(start + open.length, end).trim();
+  const blocks = extractTagBlocks(content, tag);
+  return blocks[0]?.trim() || undefined;
 }
 
 function extractArtifactId(content: string): string | undefined {
@@ -35,6 +35,46 @@ function extractJavaVersion(content: string): string | undefined {
     extractTagValue(content, 'maven.compiler.source') ??
     extractTagValue(content, 'maven.compiler.release')
   );
+}
+
+function extractModules(content: string): string[] {
+  const modulesBlock = extractTagBlocks(content, 'modules')[0];
+  if (!modulesBlock) {
+    return [];
+  }
+
+  return extractTagBlocks(modulesBlock, 'module')
+    .map((modulePath) => modulePath.trim())
+    .filter(Boolean);
+}
+
+function extractProfiles(content: string): Array<{ id: string; activeByDefault: boolean }> {
+  return extractTagBlocks(content, 'profile')
+    .map((profileBlock) => {
+      const id = extractTagValue(profileBlock, 'id');
+      if (!id) {
+        return null;
+      }
+
+      return {
+        id,
+        activeByDefault: extractTagValue(profileBlock, 'activeByDefault') === 'true',
+      };
+    })
+    .filter((profile): profile is { id: string; activeByDefault: boolean } => profile !== null);
+}
+
+function extractTagBlocks(content: string, tag: string): string[] {
+  const matches = content.matchAll(new RegExp(`<(?:(?:[\\w-]+):)?${escapeRegExp(tag)}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:(?:[\\w-]+):)?${escapeRegExp(tag)}>`, 'g'));
+  return [...matches].map((match) => match[1] ?? '');
+}
+
+function stripXmlComments(content: string): string {
+  return content.replace(/<!--[\s\S]*?-->/g, '');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** Alias kept for backward compatibility. */

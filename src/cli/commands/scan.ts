@@ -5,7 +5,6 @@ import { renderScanEvent, renderProject } from '../renderer.js';
 
 export interface ScanCommandOptions {
   path?: string;
-  depth?: number;
   noCache: boolean;
   json: boolean;
 }
@@ -30,7 +29,6 @@ export async function runScan(
 
   const scanOptions = {
     roots,
-    maxDepth: options.depth ?? config.scan.maxDepth,
     includeHidden: config.scan.includeHidden,
     exclude: config.scan.exclude,
   };

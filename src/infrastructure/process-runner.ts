@@ -1,11 +1,17 @@
 import * as childProcess from 'node:child_process';
 import type { ProcessEvent } from '../core/types.js';
+import { buildChildProcessEnv } from './process-env.js';
 
 export interface ProcessRunner {
   spawn(
     executable: string,
     args: string[],
     options: { cwd: string; env?: NodeJS.ProcessEnv; signal?: AbortSignal },
+  ): AsyncIterable<ProcessEvent>;
+  launchExternal(
+    executable: string,
+    args: string[],
+    options: { cwd: string; env?: NodeJS.ProcessEnv },
   ): AsyncIterable<ProcessEvent>;
 }
 
@@ -90,7 +96,7 @@ export class NodeProcessRunner implements ProcessRunner {
 
     const proc = childProcess.spawn(executable, args, {
       cwd: options.cwd,
-      env: options.env ?? (process.env as NodeJS.ProcessEnv),
+      env: buildChildProcessEnv(options.env),
       shell: process.platform === 'win32',
       stdio: ['inherit', 'pipe', 'pipe'],
     });
@@ -154,4 +160,83 @@ export class NodeProcessRunner implements ProcessRunner {
 
     return queue;
   }
+
+  launchExternal(
+    executable: string,
+    args: string[],
+    options: { cwd: string; env?: NodeJS.ProcessEnv },
+  ): AsyncIterable<ProcessEvent> {
+    const queue = new AsyncQueue<ProcessEvent>();
+    const startMs = Date.now();
+
+    if (process.platform !== 'win32') {
+      queue.push({ type: 'stderr', line: 'External terminal launch is currently supported only on Windows.' });
+      queue.push({ type: 'done', exitCode: 1, durationMs: Date.now() - startMs });
+      queue.close();
+      return queue;
+    }
+
+    const launchCommand = buildWindowsExternalLaunchCommand(executable, args, options.cwd);
+    const launcher = childProcess.spawn(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        launchCommand,
+      ],
+      {
+        cwd: options.cwd,
+        env: buildChildProcessEnv(options.env),
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+
+    let stderr = '';
+    launcher.stderr?.setEncoding('utf8');
+    launcher.stderr?.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+
+    launcher.on('error', (error) => {
+      queue.push({ type: 'stderr', line: `Failed to launch external terminal: ${error.message}` });
+      queue.push({ type: 'done', exitCode: 1, durationMs: Date.now() - startMs });
+      queue.close();
+    });
+
+    launcher.on('close', (code) => {
+      if ((code ?? 1) === 0) {
+        queue.push({ type: 'stdout', line: 'Launched in an external terminal window.' });
+        queue.push({ type: 'done', exitCode: 0, durationMs: Date.now() - startMs });
+      } else {
+        const message = stderr.trim() || 'Failed to launch external terminal window.';
+        queue.push({ type: 'stderr', line: message });
+        queue.push({ type: 'done', exitCode: code ?? 1, durationMs: Date.now() - startMs });
+      }
+      queue.close();
+    });
+
+    return queue;
+  }
+}
+
+export function buildWindowsExternalLaunchCommand(executable: string, args: string[], cwd: string): string {
+  const commandScript = [
+    `Set-Location -LiteralPath '${escapeForPowerShell(cwd)}'`,
+    `& '${escapeForPowerShell(executable)}'${args.length > 0 ? ` ${args.map(quoteForPowerShellLiteral).join(' ')}` : ''}`,
+  ].join('; ');
+
+  return [
+    "$shell = if (Get-Command pwsh.exe -ErrorAction SilentlyContinue) { 'pwsh.exe' } else { 'powershell.exe' }",
+    `Start-Process -FilePath $shell -ArgumentList @('-NoExit', '-NoProfile', '-Command', '${escapeForPowerShell(commandScript)}') -WorkingDirectory '${escapeForPowerShell(cwd)}'`,
+  ].join('; ');
+}
+
+function quoteForPowerShellLiteral(value: string): string {
+  return `'${escapeForPowerShell(value)}'`;
+}
+
+function escapeForPowerShell(value: string): string {
+  return value.replace(/'/g, "''");
 }

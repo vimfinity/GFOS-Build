@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { PipelineRunner } from '../../src/application/pipeline-runner.js';
 import { BuildRunner } from '../../src/application/build-runner.js';
 import { BuildExecutor } from '../../src/core/build-executor.js';
-import { NpmExecutor } from '../../src/core/npm-executor.js';
+import { NodeExecutor } from '../../src/core/node-executor.js';
 import type { ProcessRunner } from '../../src/infrastructure/process-runner.js';
-import type { ProcessEvent, BuildStep, BuildEvent, Pipeline } from '../../src/core/types.js';
+import type { BuildEvent, MavenBuildStep, NodeBuildStep, Pipeline, ProcessEvent } from '../../src/core/types.js';
 import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
 import type { AppDatabase } from '../../src/infrastructure/database.js';
 import path from 'node:path';
@@ -29,13 +29,17 @@ class FakeProcessRunner implements ProcessRunner {
       },
     };
   }
+
+  launchExternal(): AsyncIterable<ProcessEvent> {
+    return this.spawn();
+  }
 }
 
-function createMockFs(existingFiles: string[]): FileSystem {
+function createMockFs(existingFiles: string[], fileContents: Record<string, string> = {}): FileSystem {
   return {
     exists: async (p: string) => existingFiles.includes(p),
     readDir: async (): Promise<DirEntry[]> => [],
-    readFile: async () => '',
+    readFile: async (p: string) => fileContents[p] ?? '',
     writeFile: async () => {},
     mkdir: async () => {},
   };
@@ -54,22 +58,41 @@ class NullDatabase {
     return null;
   }
   setScanCache(): void {}
+  getRecentBuilds(): [] {
+    return [];
+  }
+  getBuildStats() {
+    return { totalBuilds: 0, successCount: 0, failureCount: 0, avgDurationMs: null, byPipeline: [], byProject: [], slowestSteps: [] };
+  }
+  getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null }> {
+    return {};
+  }
+  appendBuildLog(): void {}
+  getBuildLogs(): [] {
+    return [];
+  }
+  clearBuildLogs(): void {}
+  clearAllBuilds(): void {}
+  reconcileRunningBuilds(): void {}
   close(): void {}
 }
 
-function makeStep(label: string, stepPath?: string): BuildStep {
+function makeStep(label: string, stepPath?: string): MavenBuildStep {
   const p = stepPath ?? path.resolve(`/project/${label}`);
   return {
     path: p,
     buildSystem: 'maven',
     goals: ['clean', 'install'],
-    flags: [],
+    optionKeys: [],
+    profileStates: {},
+    extraOptions: [],
+    executionMode: 'internal',
     label,
     mavenExecutable: 'mvn',
   };
 }
 
-function makePipeline(steps: BuildStep[], overrides: Partial<Pipeline> = {}): Pipeline {
+function makePipeline(steps: MavenBuildStep[], overrides: Partial<Pipeline> = {}): Pipeline {
   return {
     name: 'test-pipeline',
     failFast: true,
@@ -95,8 +118,8 @@ describe('PipelineRunner', () => {
     const pomFiles = steps.map((s) => path.join(s.path, 'pom.xml'));
     const fs = createMockFs(pomFiles);
     const executor = new BuildExecutor(processRunner);
-    const npmExecutor = new NpmExecutor(processRunner);
-    const buildRunner = new BuildRunner(executor, npmExecutor, fs);
+    const nodeExecutor = new NodeExecutor(processRunner);
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fs);
     const pipelineRunner = new PipelineRunner(buildRunner, new NullDatabase() as unknown as AppDatabase);
 
     const pipeline = makePipeline(steps);
@@ -109,6 +132,7 @@ describe('PipelineRunner', () => {
     expect(runDone).toBeDefined();
     if (runDone?.type === 'run:done') {
       expect(runDone.result.success).toBe(true);
+      expect(runDone.result.status).toBe('success');
     }
   });
 
@@ -120,8 +144,8 @@ describe('PipelineRunner', () => {
     const pomFiles = steps.map((s) => path.join(s.path, 'pom.xml'));
     const fs = createMockFs(pomFiles);
     const executor = new BuildExecutor(processRunner);
-    const npmExecutor = new NpmExecutor(processRunner);
-    const buildRunner = new BuildRunner(executor, npmExecutor, fs);
+    const nodeExecutor = new NodeExecutor(processRunner);
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fs);
     const pipelineRunner = new PipelineRunner(buildRunner, new NullDatabase() as unknown as AppDatabase);
 
     const pipeline = makePipeline(steps, { failFast: true });
@@ -134,6 +158,7 @@ describe('PipelineRunner', () => {
     expect(runDone).toBeDefined();
     if (runDone?.type === 'run:done') {
       expect(runDone.result.success).toBe(false);
+      expect(runDone.result.status).toBe('failed');
       expect(runDone.result.stoppedAt).toBe(0);
     }
   });
@@ -146,8 +171,8 @@ describe('PipelineRunner', () => {
     const pomFiles = steps.map((s) => path.join(s.path, 'pom.xml'));
     const fs = createMockFs(pomFiles);
     const executor = new BuildExecutor(processRunner);
-    const npmExecutor = new NpmExecutor(processRunner);
-    const buildRunner = new BuildRunner(executor, npmExecutor, fs);
+    const nodeExecutor = new NodeExecutor(processRunner);
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fs);
     const pipelineRunner = new PipelineRunner(buildRunner, new NullDatabase() as unknown as AppDatabase);
 
     const pipeline = makePipeline(steps);
@@ -158,6 +183,47 @@ describe('PipelineRunner', () => {
 
     if (startEvents[0]?.type === 'step:start') {
       expect(startEvents[0].index).toBe(2); // 0-based display index
+    }
+  });
+
+  it('reports external-only pipelines as launched', async () => {
+    const processRunner = new FakeProcessRunner();
+    processRunner.exitCodes = [0];
+
+    const step: NodeBuildStep = {
+      path: 'C:/repo/app',
+      buildSystem: 'node',
+      label: 'app',
+      commandType: 'script',
+      script: 'dev',
+      args: [],
+      executionMode: 'external',
+      nodeExecutables: { npm: 'npm', pnpm: 'pnpm', bun: 'bun' },
+    };
+    const packageJsonPath = path.join(step.path, 'package.json');
+    const fs = createMockFs(
+      [packageJsonPath],
+      { [packageJsonPath]: JSON.stringify({ name: 'app', scripts: { dev: 'next dev' } }) },
+    );
+    const executor = new BuildExecutor(processRunner);
+    const nodeExecutor = new NodeExecutor(processRunner);
+    const buildRunner = new BuildRunner(executor, nodeExecutor, fs);
+    const pipelineRunner = new PipelineRunner(buildRunner, new NullDatabase() as unknown as AppDatabase);
+
+    const pipeline: Pipeline = {
+      name: 'dev',
+      failFast: true,
+      steps: [step],
+    };
+
+    const events = await collectEvents(pipelineRunner.run(pipeline));
+    const runDone = events.find((event) => event.type === 'run:done');
+
+    expect(runDone?.type).toBe('run:done');
+    if (runDone?.type === 'run:done') {
+      expect(runDone.result.status).toBe('launched');
+      expect(runDone.result.success).toBe(true);
+      expect(runDone.result.results[0]?.status).toBe('launched');
     }
   });
 });

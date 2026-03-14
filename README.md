@@ -1,17 +1,17 @@
 # GFOS Build
 
-A desktop application for Maven project management, pipeline orchestration, and build monitoring.
+A desktop application for Maven and Node project management, pipeline orchestration, and build monitoring.
 
 > **Alpha release** — core functionality is working but rough edges remain. Feedback welcome.
 
 ## Features
 
-- **Project Scanner** — recursively discovers Maven projects across configurable root directories; distinguishes buildable modules from aggregator POMs
-- **Pipeline Builder** — define multi-step Maven build pipelines with per-step JDK, goals, and flags; resume from failed steps
+- **Project Scanner** — recursively discovers Maven and Node projects across configurable root directories; distinguishes buildable modules from aggregator POMs
+- **Pipeline Builder** — define multi-step Maven and Node build pipelines with detected package-manager scripts, per-step execution mode, and per-step JDK/goals for Maven
 - **Live Build Output** — streaming build log with ANSI rendering, `[INFO]`/`[ERROR]`/`[WARNING]` syntax highlighting, and step progress indicator
 - **Build History** — persistent log of all pipeline and ad-hoc builds including stored log output; grouped pipeline runs; searchable and filterable
 - **Statistics Dashboard** — success rate, average duration, slowest steps, per-pipeline and per-project breakdowns
-- **Settings** — configure scan roots, Maven defaults, JDK paths, and exclude patterns
+- **Settings** — configure scan roots, Maven defaults, Node package-manager executables, JDK paths, and exclude patterns
 - **Dark / Light theme**
 
 ## Download

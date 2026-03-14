@@ -1,18 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { resolveJavaHome, detectJdks } from '../../src/core/jdk-resolver.js';
+import { resolveJavaHome, requireRegisteredJavaHome, detectJdks, buildEnvWithJavaHome } from '../../src/core/jdk-resolver.js';
 import type { AppConfig } from '../../src/config/schema.js';
 import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
 
 const config: AppConfig = {
   roots: {},
-  maven: { executable: 'mvn', defaultGoals: ['clean', 'install'], defaultFlags: [] },
+  maven: { executable: 'mvn', defaultGoals: ['clean', 'install'], defaultOptionKeys: [], defaultExtraOptions: [] },
+  node: { executables: { npm: 'npm', pnpm: 'pnpm', bun: 'bun' } },
   jdkRegistry: {
     '8': 'J:/dev/java/jdk8',
     '11': 'J:/dev/java/jdk11',
     '17': 'J:/dev/java/jdk17',
     '21': 'J:/dev/java/jdk21',
   },
-  scan: { maxDepth: 4, includeHidden: false, exclude: [] },
+  scan: { includeHidden: false, exclude: [] },
   pipelines: {},
 };
 
@@ -37,6 +38,43 @@ describe('resolveJavaHome', () => {
 
   it('returns undefined for an empty registry', () => {
     expect(resolveJavaHome(emptyConfig, '21')).toBeUndefined();
+  });
+});
+
+describe('requireRegisteredJavaHome', () => {
+  it('returns the registered JAVA_HOME when a version exists', () => {
+    expect(requireRegisteredJavaHome(config, '21')).toBe('J:/dev/java/jdk21');
+  });
+
+  it('throws when a selected Java version is not registered', () => {
+    expect(() => requireRegisteredJavaHome(config, '99')).toThrow(
+      'Java version "99" is not registered in the JDK registry.',
+    );
+  });
+
+  it('returns undefined when no explicit Java version was selected', () => {
+    expect(requireRegisteredJavaHome(config, undefined)).toBeUndefined();
+  });
+});
+
+describe('buildEnvWithJavaHome', () => {
+  it('adds JAVA_HOME without forwarding NODE_ENV', () => {
+    const previousNodeEnv = process.env['NODE_ENV'];
+    process.env['NODE_ENV'] = 'gfos-build';
+
+    try {
+      const env = buildEnvWithJavaHome('J:/dev/java/jdk21');
+
+      expect(env).toBeDefined();
+      expect(env!['JAVA_HOME']).toBe('J:/dev/java/jdk21');
+      expect(env!['NODE_ENV']).toBeUndefined();
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env['NODE_ENV'];
+      } else {
+        process.env['NODE_ENV'] = previousNodeEnv;
+      }
+    }
   });
 });
 
@@ -125,5 +163,25 @@ describe('detectJdks', () => {
     const results = await detectJdks(baseDir, fs);
 
     expect(results.map((r) => r.version)).toEqual(['8', '11', '21']);
+  });
+
+  it('detects a single JDK home when the selected folder is already the JDK root', async () => {
+    const pathMod = await import('node:path');
+    const jdkDir = 'J:/dev/java/jdk21';
+    const javacPath = pathMod.join(jdkDir, 'bin', process.platform === 'win32' ? 'javac.exe' : 'javac');
+    const releasePath = pathMod.join(jdkDir, 'release');
+
+    const files: Record<string, string> = {
+      [javacPath]: '',
+      [releasePath]: 'JAVA_VERSION="21.0.2"\nOS_NAME="Windows"',
+    };
+    const dirs: Record<string, DirEntry[]> = {
+      [jdkDir]: [],
+    };
+
+    const fs = createMockFs(files, dirs);
+    const results = await detectJdks(jdkDir, fs);
+
+    expect(results).toEqual([{ version: '21', path: jdkDir }]);
   });
 });
