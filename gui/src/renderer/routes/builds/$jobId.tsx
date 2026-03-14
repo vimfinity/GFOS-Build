@@ -28,7 +28,7 @@ function LiveBuildView() {
   const { jobId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { events, done, error, startMs } = useJobEvents(jobId);
+  const { events, done, error, startMs, eventVersion } = useJobEvents(jobId);
   const cancelJob = useCancelJob();
 
   const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - startMs));
@@ -57,7 +57,7 @@ function LiveBuildView() {
         (event): event is BuildEvent =>
           'type' in event && (event.type.startsWith('step:') || event.type === 'run:done'),
       ),
-    [events],
+    [events, eventVersion],
   );
 
   const runDoneEvent = buildEvents.find((event) => event.type === 'run:done');

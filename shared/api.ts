@@ -95,6 +95,12 @@ export interface BuildLogEntry {
   line: string;
 }
 
+/** Paginated build log response, newest chunk first via beforeSeq cursor. */
+export interface BuildLogPage {
+  entries: BuildLogEntry[];
+  nextBeforeSeq: number | null;
+}
+
 /** GET /api/builds/stats */
 export interface BuildStatsApi {
   totalBuilds: number;

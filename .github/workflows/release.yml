@@ -19,7 +19,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.9
 
       - name: Setup Node.js (for electron-rebuild)
         uses: actions/setup-node@v4
@@ -29,6 +29,11 @@ jobs:
       - name: Install dependencies
         run: bun install
         # note: gui/package.json postinstall runs electron-rebuild automatically
+
+      - name: Validate codebase
+        run: |
+          bun run check
+          bun run check:desktop
 
       - name: Validate release version
         shell: bash

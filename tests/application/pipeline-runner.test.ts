@@ -68,8 +68,8 @@ class NullDatabase {
     return {};
   }
   appendBuildLog(): void {}
-  getBuildLogs(): [] {
-    return [];
+  getBuildLogs() {
+    return { entries: [], nextBeforeSeq: null };
   }
   clearBuildLogs(): void {}
   clearAllBuilds(): void {}

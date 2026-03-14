@@ -98,6 +98,11 @@ export interface BuildStats {
   slowestSteps: Array<{ label: string; path: string; avgMs: number; runs: number }>;
 }
 
+export interface BuildLogPage {
+  entries: Array<{ seq: number; stream: string; line: string }>;
+  nextBeforeSeq: number | null;
+}
+
 /** Shared interface — implemented by AppDatabase (bun:sqlite) and NodeDatabase (better-sqlite3). */
 export interface IDatabase {
   startBuildRun(params: StartBuildRunParams): number;
@@ -111,7 +116,7 @@ export interface IDatabase {
   getBuildStats(): BuildStats;
   getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null }>;
   appendBuildLog(runId: number, seq: number, stream: string, line: string): void;
-  getBuildLogs(runId: number): Array<{ seq: number; stream: string; line: string }>;
+  getBuildLogs(runId: number, opts?: { limit?: number; beforeSeq?: number }): BuildLogPage;
   clearBuildLogs(): void;
   clearAllBuilds(): void;
   close(): void;
@@ -125,6 +130,7 @@ export class AppDatabase implements IDatabase {
     mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
     this.db.exec('PRAGMA journal_mode = WAL');
+    this.db.exec('PRAGMA foreign_keys = ON');
     this.migrate();
   }
 
@@ -346,10 +352,38 @@ export class AppDatabase implements IDatabase {
       .run(runId, seq, stream, line);
   }
 
-  getBuildLogs(runId: number): Array<{ seq: number; stream: string; line: string }> {
-    return this.db
-      .prepare('SELECT seq, stream, line FROM build_logs WHERE run_id = ? ORDER BY seq ASC')
-      .all(runId) as Array<{ seq: number; stream: string; line: string }>;
+  getBuildLogs(runId: number, opts?: { limit?: number; beforeSeq?: number }): BuildLogPage {
+    const limit = clampLogLimit(opts?.limit);
+    const beforeSeq = opts?.beforeSeq;
+    const rows =
+      beforeSeq === undefined
+        ? (this.db
+            .prepare(
+              `SELECT seq, stream, line
+               FROM build_logs
+               WHERE run_id = ?
+               ORDER BY seq DESC
+               LIMIT ?`,
+            )
+            .all(runId, limit + 1) as Array<{ seq: number; stream: string; line: string }>)
+        : (this.db
+            .prepare(
+              `SELECT seq, stream, line
+               FROM build_logs
+               WHERE run_id = ?
+                 AND seq < ?
+               ORDER BY seq DESC
+               LIMIT ?`,
+            )
+            .all(runId, beforeSeq, limit + 1) as Array<{ seq: number; stream: string; line: string }>);
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const entries = [...pageRows].reverse();
+    return {
+      entries,
+      nextBeforeSeq: hasMore ? entries[0]?.seq ?? null : null,
+    };
   }
 
 
@@ -358,9 +392,15 @@ export class AppDatabase implements IDatabase {
   }
 
   clearAllBuilds(): void {
+    this.db.exec('DELETE FROM build_logs');
     this.db.exec('DELETE FROM build_runs');
   }
   close(): void {
     this.db.close();
   }
+}
+
+function clampLogLimit(limit: number | undefined): number {
+  if (limit === undefined) return 1_000;
+  return Math.min(Math.max(Math.trunc(limit), 1), 5_000);
 }

@@ -21,7 +21,7 @@ export interface ServerHandle {
   getActiveJobCount: () => number;
 }
 
-export async function startServer(): Promise<ServerHandle> {
+export async function startServer(version: string): Promise<ServerHandle> {
   let configResult: ReturnType<typeof loadConfig>;
   let configError: string | undefined;
   try {
@@ -54,6 +54,7 @@ export async function startServer(): Promise<ServerHandle> {
 
   const { port, close, getActiveJobCount } = await runServe({
     port: 0,
+    version,
     config,
     configPath,
     configError,
