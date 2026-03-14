@@ -18,10 +18,10 @@ export function DialogContent({
 }) {
   return (
     <BaseDialog.Portal>
-      <BaseDialog.Backdrop className="fixed inset-0 bg-black/34 backdrop-blur-md transition-opacity" />
+      <BaseDialog.Backdrop className="fixed inset-0 z-[70] bg-black/34 backdrop-blur-md transition-opacity" />
       <BaseDialog.Popup
         className={cn(
-          'fixed inset-0 flex items-center justify-center overflow-y-auto p-4 outline-none focus:outline-none focus-visible:outline-none',
+          'fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto p-4 outline-none focus:outline-none focus-visible:outline-none',
         )}
         {...props}
       >
