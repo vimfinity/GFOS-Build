@@ -1,14 +1,21 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { configQuery, useSaveConfig } from '@/api/queries';
 import { pickDirectory } from '@/api/bridge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Input, NumberField } from '@/components/ui/input';
 import { TagInput } from '@/components/ui/tag-input';
+import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { Settings, Plus, Trash2, FolderOpen, Save, Loader2 } from 'lucide-react';
+import { Settings, Plus, Trash2, FolderOpen, Save, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  getStoredThemePreference,
+  setStoredThemePreference,
+  type ThemePreference,
+} from '@/lib/theme';
+import { openOnboarding } from '@/lib/onboarding';
 
 export const Route = createFileRoute('/settings/')({
   component: SettingsView,
@@ -19,7 +26,60 @@ interface KvEntry {
   value: string;
 }
 
+function createConfigPayload({
+  mavenExec,
+  mavenGoals,
+  mavenFlags,
+  npmExec,
+  npmScript,
+  jdkEntries,
+  rootEntries,
+  maxDepth,
+  includeHidden,
+  excludePatterns,
+}: {
+  mavenExec: string;
+  mavenGoals: string[];
+  mavenFlags: string[];
+  npmExec: string;
+  npmScript: string;
+  jdkEntries: KvEntry[];
+  rootEntries: KvEntry[];
+  maxDepth: number;
+  includeHidden: boolean;
+  excludePatterns: string[];
+}) {
+  return {
+    maven: {
+      executable: mavenExec,
+      defaultGoals: mavenGoals,
+      defaultFlags: mavenFlags,
+    },
+    npm: {
+      executable: npmExec,
+      defaultBuildScript: npmScript,
+      defaultInstallArgs: [],
+    },
+    jdkRegistry: Object.fromEntries(
+      jdkEntries
+        .filter((entry) => entry.key.trim())
+        .map((entry) => [entry.key.trim(), entry.value]),
+    ),
+    roots: Object.fromEntries(
+      rootEntries
+        .filter((entry) => entry.key.trim())
+        .map((entry) => [entry.key.trim(), entry.value]),
+    ),
+    scan: {
+      maxDepth,
+      includeHidden,
+      exclude: excludePatterns,
+    },
+  };
+}
+
 function SettingsView() {
+  const canReopenOnboarding = import.meta.env.DEV;
   const queryClient = useQueryClient();
   const { data: configData, isLoading } = useQuery(configQuery);
   const saveConfig = useSaveConfig();
@@ -34,340 +94,558 @@ function SettingsView() {
   const [maxDepth, setMaxDepth] = useState(4);
   const [includeHidden, setIncludeHidden] = useState(false);
   const [excludePatterns, setExcludePatterns] = useState<string[]>([]);
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [themePreference, setThemePreference] = useState<ThemePreference>('system');
+  const [baselineSnapshot, setBaselineSnapshot] = useState('');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [showSavingIndicator, setShowSavingIndicator] = useState(false);
+  const savingIndicatorTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!configData) return;
     const { config } = configData;
-    setMavenExec(config.maven.executable);
-    setMavenGoals(config.maven.defaultGoals);
-    setMavenFlags(config.maven.defaultFlags);
-    setNpmExec(config.npm.executable);
-    setNpmScript(config.npm.defaultBuildScript);
-    setJdkEntries(Object.entries(config.jdkRegistry).map(([key, value]) => ({ key, value })));
-    setRootEntries(Object.entries(config.roots).map(([key, value]) => ({ key, value })));
-    setMaxDepth(config.scan.maxDepth);
-    setIncludeHidden(config.scan.includeHidden);
-    setExcludePatterns(config.scan.exclude);
+    const nextMavenExec = config.maven.executable;
+    const nextMavenGoals = config.maven.defaultGoals;
+    const nextMavenFlags = config.maven.defaultFlags;
+    const nextNpmExec = config.npm.executable;
+    const nextNpmScript = config.npm.defaultBuildScript;
+    const nextJdkEntries = Object.entries(config.jdkRegistry).map(([key, value]) => ({ key, value }));
+    const nextRootEntries = Object.entries(config.roots).map(([key, value]) => ({ key, value }));
+    const nextMaxDepth = config.scan.maxDepth;
+    const nextIncludeHidden = config.scan.includeHidden;
+    const nextExcludePatterns = config.scan.exclude;
+
+    setMavenExec(nextMavenExec);
+    setMavenGoals(nextMavenGoals);
+    setMavenFlags(nextMavenFlags);
+    setNpmExec(nextNpmExec);
+    setNpmScript(nextNpmScript);
+    setJdkEntries(nextJdkEntries);
+    setRootEntries(nextRootEntries);
+    setMaxDepth(nextMaxDepth);
+    setIncludeHidden(nextIncludeHidden);
+    setExcludePatterns(nextExcludePatterns);
+    setBaselineSnapshot(
+      JSON.stringify(
+        createConfigPayload({
+          mavenExec: nextMavenExec,
+          mavenGoals: nextMavenGoals,
+          mavenFlags: nextMavenFlags,
+          npmExec: nextNpmExec,
+          npmScript: nextNpmScript,
+          jdkEntries: nextJdkEntries,
+          rootEntries: nextRootEntries,
+          maxDepth: nextMaxDepth,
+          includeHidden: nextIncludeHidden,
+          excludePatterns: nextExcludePatterns,
+        }),
+      ),
+    );
+    setThemePreference(getStoredThemePreference());
   }, [configData]);
 
+  const currentPayload = useMemo(
+    () =>
+      createConfigPayload({
+        mavenExec,
+        mavenGoals,
+        mavenFlags,
+        npmExec,
+        npmScript,
+        jdkEntries,
+        rootEntries,
+        maxDepth,
+        includeHidden,
+        excludePatterns,
+      }),
+    [
+      mavenExec,
+      mavenGoals,
+      mavenFlags,
+      npmExec,
+      npmScript,
+      jdkEntries,
+      rootEntries,
+      maxDepth,
+      includeHidden,
+      excludePatterns,
+    ],
+  );
+  const currentSnapshot = useMemo(() => JSON.stringify(currentPayload), [currentPayload]);
+  const isDirty = baselineSnapshot !== '' && currentSnapshot !== baselineSnapshot;
+
+  useEffect(() => {
+    if ((saveState === 'saved' || saveState === 'error') && isDirty) {
+      setSaveState('idle');
+      setSaveError(null);
+    }
+  }, [isDirty, saveState]);
+
+  useEffect(() => {
+    if (savingIndicatorTimeoutRef.current !== null) {
+      window.clearTimeout(savingIndicatorTimeoutRef.current);
+      savingIndicatorTimeoutRef.current = null;
+    }
+
+    if (saveState === 'saving') {
+      setShowSavingIndicator(false);
+      savingIndicatorTimeoutRef.current = window.setTimeout(() => {
+        setShowSavingIndicator(true);
+      }, 180);
+      return () => {
+        if (savingIndicatorTimeoutRef.current !== null) {
+          window.clearTimeout(savingIndicatorTimeoutRef.current);
+          savingIndicatorTimeoutRef.current = null;
+        }
+      };
+    }
+
+    setShowSavingIndicator(false);
+    return undefined;
+  }, [saveState]);
+
+  useEffect(() => {
+    if (saveState !== 'saved' || isDirty) return;
+    const timeout = window.setTimeout(() => {
+      setSaveState('idle');
+    }, 1800);
+    return () => window.clearTimeout(timeout);
+  }, [saveState, isDirty]);
+
   async function handleSave() {
-    setSaving(true);
+    if (!isDirty) return;
+    setSaveState('saving');
+    setSaveError(null);
     try {
-      await saveConfig.mutateAsync({
-        maven: {
-          executable: mavenExec,
-          defaultGoals: mavenGoals,
-          defaultFlags: mavenFlags,
-        },
-        npm: {
-          executable: npmExec,
-          defaultBuildScript: npmScript,
-          defaultInstallArgs: [],
-        },
-        jdkRegistry: Object.fromEntries(
-          jdkEntries.filter((e) => e.key).map((e) => [e.key, e.value]),
-        ),
-        roots: Object.fromEntries(
-          rootEntries.filter((e) => e.key).map((e) => [e.key, e.value]),
-        ),
-        scan: {
-          maxDepth,
-          includeHidden,
-          exclude: excludePatterns,
-        },
-      });
+      await saveConfig.mutateAsync(currentPayload);
       void queryClient.invalidateQueries({ queryKey: ['config'] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } finally {
-      setSaving(false);
+      setBaselineSnapshot(currentSnapshot);
+      setSaveState('saved');
+    } catch (error) {
+      setSaveState('error');
+      setSaveError(
+        error instanceof Error
+          ? error.message.replace(/^POST \/api\/config failed:\s*/, 'Save failed: ')
+          : 'Save failed. Try again.',
+      );
     }
   }
 
-  // --- JDK helpers ---
   function addJdk() {
     setJdkEntries((prev) => [...prev, { key: '', value: '' }]);
   }
-  function removeJdk(idx: number) {
-    setJdkEntries((prev) => prev.filter((_, i) => i !== idx));
+  function removeJdk(index: number) {
+    setJdkEntries((prev) => prev.filter((_, i) => i !== index));
   }
-  function updateJdk(idx: number, field: 'key' | 'value', val: string) {
-    setJdkEntries((prev) => prev.map((e, i) => (i === idx ? { ...e, [field]: val } : e)));
+  function updateJdk(index: number, field: 'key' | 'value', value: string) {
+    setJdkEntries((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
   }
-  async function browseJdk(idx: number) {
+  async function browseJdk(index: number) {
     const dir = await pickDirectory();
-    if (dir) updateJdk(idx, 'value', dir);
+    if (dir) updateJdk(index, 'value', dir);
   }
 
-  // --- Root helpers ---
   function addRoot() {
     setRootEntries((prev) => [...prev, { key: '', value: '' }]);
   }
-  function removeRoot(idx: number) {
-    setRootEntries((prev) => prev.filter((_, i) => i !== idx));
+  function removeRoot(index: number) {
+    setRootEntries((prev) => prev.filter((_, i) => i !== index));
   }
-  function updateRoot(idx: number, field: 'key' | 'value', val: string) {
-    setRootEntries((prev) => prev.map((e, i) => (i === idx ? { ...e, [field]: val } : e)));
+  function updateRoot(index: number, field: 'key' | 'value', value: string) {
+    setRootEntries((prev) => prev.map((entry, i) => (i === index ? { ...entry, [field]: value } : entry)));
   }
-  async function browseRoot(idx: number) {
+  async function browseRoot(index: number) {
     const dir = await pickDirectory();
-    if (dir) updateRoot(idx, 'value', dir);
+    if (dir) updateRoot(index, 'value', dir);
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 p-8 text-muted-foreground text-sm">
+      <div className="glass-card mx-auto flex w-full max-w-5xl items-center gap-3 rounded-[24px] border border-border px-5 py-4 text-sm text-muted-foreground">
         <Loader2 size={14} className="animate-spin" />
-        <span>Loading configuration…</span>
+        Loading configuration...
       </div>
     );
   }
 
+  const saveStatus =
+    saveState === 'saving' && showSavingIndicator
+      ? {
+          tone: 'text-primary',
+          icon: <Loader2 size={12} className="animate-spin" />,
+          text: 'Applying changes...',
+        }
+      : saveState === 'error'
+        ? {
+            tone: 'text-destructive',
+            icon: <AlertCircle size={12} />,
+            text: saveError ?? 'Save failed. Try again.',
+          }
+      : saveState === 'saved' && !isDirty
+        ? {
+            tone: 'text-success',
+            icon: <CheckCircle2 size={12} />,
+            text: 'Changes applied',
+          }
+        : isDirty
+          ? {
+              tone: 'text-warning',
+              icon: <div className="h-1.5 w-1.5 rounded-full bg-warning" />,
+              text: 'Unsaved changes',
+            }
+          : null;
+
   return (
-    <div className="p-6 flex flex-col gap-5 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Settings size={18} className="text-primary" />
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Settings</h1>
-            {configData && (
-              <p className="text-[11px] font-mono text-muted-foreground mt-0.5 break-all">
-                {configData.configPath}
-              </p>
-            )}
-          </div>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="page-title text-[1.6rem] font-semibold leading-tight text-foreground">
+            Settings
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage local executables, roots, scan behavior, and appearance.
+          </p>
         </div>
-        <div className="flex items-center gap-2.5">
-          {saved && (
-            <span className="text-xs text-success font-medium">Saved!</span>
-          )}
-          <Button onClick={() => void handleSave()} disabled={saving}>
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Save Changes
-          </Button>
+
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            {canReopenOnboarding ? (
+              <Button variant="outline" onClick={openOnboarding}>
+                Open onboarding
+              </Button>
+            ) : null}
+            <Button
+              variant="default"
+              onClick={() => void handleSave()}
+              disabled={saveState === 'saving' || !isDirty}
+              className={cn(
+                'min-w-[10.75rem] justify-center disabled:opacity-100',
+                !isDirty && saveState !== 'saving'
+                  ? 'bg-primary/16 text-primary shadow-none hover:bg-primary/16 active:bg-primary/16'
+                  : undefined,
+              )}
+            >
+              <Save size={14} />
+              Save changes
+            </Button>
+          </div>
+          <div
+            className={cn(
+              'flex min-h-4 items-center gap-1.5 text-[11px] leading-none transition-all duration-200',
+              saveStatus ? `${saveStatus.tone} opacity-100` : 'opacity-0',
+            )}
+          >
+            {saveStatus ? (
+              <>
+                {saveStatus.icon}
+                <span>{saveStatus.text}</span>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      {/* Maven */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Maven</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Input
-            id="maven-exec"
-            label="Maven Executable"
-            placeholder="mvn"
-            value={mavenExec}
-            onChange={(e) => setMavenExec(e.target.value)}
-          />
-          <TagInput
-            id="maven-goals"
-            label="Default Goals"
-            value={mavenGoals}
-            onChange={setMavenGoals}
-            placeholder="e.g. clean"
-          />
-          <TagInput
-            id="maven-flags"
-            label="Default Flags"
-            value={mavenFlags}
-            onChange={setMavenFlags}
-            placeholder="e.g. -T4"
-          />
-        </CardContent>
-      </Card>
-
-      {/* npm */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">npm</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Input
-            id="npm-exec"
-            label="Executable"
-            placeholder="npm"
-            value={npmExec}
-            onChange={(e) => setNpmExec(e.target.value)}
-          />
-          <Input
-            id="npm-script"
-            label="Default Build Script"
-            placeholder="build"
-            value={npmScript}
-            onChange={(e) => setNpmScript(e.target.value)}
-          />
-        </CardContent>
-      </Card>
-
-      {/* JDK Registry */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">JDK Registry</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {jdkEntries.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              No JDK entries. Add one to enable Java version selection.
-            </p>
-          ) : (
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="flex flex-col gap-5">
+          <ConfigCard
+            title="Appearance"
+            description="Control how GFOS Build looks on this machine."
+            icon={<Settings size={14} className="text-primary" />}
+          >
             <div className="flex flex-col gap-2">
-              {jdkEntries.map((entry, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <Input
-                    placeholder="e.g. 17"
-                    value={entry.key}
-                    onChange={(e) => updateJdk(idx, 'key', e.target.value)}
-                    className="w-24 shrink-0"
-                  />
-                  <Input
-                    placeholder="/path/to/jdk"
-                    value={entry.value}
-                    onChange={(e) => updateJdk(idx, 'value', e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    title="Browse for directory"
-                    onClick={() => void browseJdk(idx)}
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Theme
+              </span>
+              <div className="segmented-control w-fit">
+                {(['system', 'light', 'dark'] as const).map((theme) => (
+                  <button
+                    key={theme}
+                    type="button"
+                    aria-pressed={themePreference === theme}
+                    onClick={() => {
+                      setThemePreference(theme);
+                      setStoredThemePreference(theme);
+                    }}
+                    className={cn(
+                      'segmented-control-button capitalize',
+                      themePreference === theme && 'is-active',
+                    )}
                   >
-                    <FolderOpen size={14} />
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    title="Remove entry"
-                    onClick={() => removeJdk(idx)}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
-              ))}
+                    {theme}
+                  </button>
+                ))}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                `System` follows the operating system appearance. `Light` and `Dark` override it for this app only.
+              </p>
             </div>
-          )}
-          <div>
+          </ConfigCard>
+
+          <ConfigCard
+            title="Maven"
+            description="Default Maven command settings used for scans, ad-hoc runs, and pipeline steps."
+            icon={<Settings size={14} className="text-primary" />}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Input
+                id="maven-exec"
+                label="Maven executable"
+                placeholder="mvn"
+                value={mavenExec}
+                onChange={(e) => setMavenExec(e.target.value)}
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Executable name or absolute path used when GFOS starts Maven builds.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <TagInput
+                id="maven-goals"
+                label="Default goals"
+                value={mavenGoals}
+                onChange={setMavenGoals}
+                placeholder="e.g. clean"
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Pre-filled Maven goals for new ad-hoc runs and Maven pipeline steps.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <TagInput
+                id="maven-flags"
+                label="Default flags"
+                value={mavenFlags}
+                onChange={setMavenFlags}
+                placeholder="e.g. -T4"
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Optional flags appended to Maven commands by default.
+              </p>
+            </div>
+          </ConfigCard>
+
+          <ConfigCard
+            title="npm"
+            description="Default npm command settings used for ad-hoc runs and npm pipeline steps."
+            icon={<Settings size={14} className="text-primary" />}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Input
+                id="npm-exec"
+                label="Executable"
+                placeholder="npm"
+                value={npmExec}
+                onChange={(e) => setNpmExec(e.target.value)}
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Executable name or absolute path used when GFOS starts npm commands.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Input
+                id="npm-script"
+                label="Default build script"
+                placeholder="build"
+                value={npmScript}
+                onChange={(e) => setNpmScript(e.target.value)}
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Default script name for new npm runs, for example `build` or `dist`.
+              </p>
+            </div>
+          </ConfigCard>
+
+          <ConfigCard
+            title="Scan settings"
+            description="Define how deeply GFOS scans your configured roots and what it skips."
+            icon={<Settings size={14} className="text-primary" />}
+          >
+            <div className="flex flex-col gap-1.5">
+              <NumberField
+                id="max-depth"
+                label="Max depth"
+                min={1}
+                max={10}
+                value={maxDepth}
+                onChange={setMaxDepth}
+                className="max-w-32"
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Maximum folder depth scanned below each configured root before search stops.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Include hidden directories
+              </span>
+              <div className="segmented-control w-fit">
+                <button
+                  type="button"
+                  aria-pressed={includeHidden}
+                  onClick={() => setIncludeHidden(true)}
+                  className={cn(
+                    'segmented-control-button',
+                    includeHidden && 'is-active',
+                  )}
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!includeHidden}
+                  onClick={() => setIncludeHidden(false)}
+                  className={cn(
+                    'segmented-control-button',
+                    !includeHidden && 'is-active',
+                  )}
+                >
+                  No
+                </button>
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Includes folders like `.git`, `.next`, or other hidden directories during project discovery.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <TagInput
+                id="exclude-patterns"
+                label="Exclude patterns"
+                value={excludePatterns}
+                onChange={setExcludePatterns}
+                placeholder="e.g. target"
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Directory names that should always be ignored while scanning project roots.
+              </p>
+            </div>
+          </ConfigCard>
+        </div>
+
+        <div className="flex flex-col gap-5">
+          <ConfigCard
+            title="JDK registry"
+            description="Register local Java installations so Maven runs can target a specific version."
+            icon={<Settings size={14} className="text-primary" />}
+          >
+            {jdkEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No JDK entries yet. Add one to enable Java version selection.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {jdkEntries.map((entry, index) => (
+                  <div key={index} className="rounded-[18px] border border-border bg-secondary/45 p-3">
+                    <div className="grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)_auto_auto]">
+                      <Input
+                        placeholder="e.g. 17"
+                        value={entry.key}
+                        onChange={(e) => updateJdk(index, 'key', e.target.value)}
+                      />
+                      <Input
+                        placeholder="C:\\Program Files\\Java\\jdk-17"
+                        value={entry.value}
+                        onChange={(e) => updateJdk(index, 'value', e.target.value)}
+                      />
+                      <Tooltip content="Browse" side="bottom">
+                        <Button variant="outline" size="icon" onClick={() => void browseJdk(index)} aria-label="Browse JDK path">
+                          <FolderOpen size={14} />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content="Remove" side="bottom">
+                        <Button variant="destructive" size="icon" onClick={() => removeJdk(index)} aria-label="Remove JDK entry">
+                          <Trash2 size={14} />
+                        </Button>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <Button variant="outline" size="sm" onClick={addJdk}>
-              <Plus size={13} /> Add JDK
+              <Plus size={13} />
+              Add JDK
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </ConfigCard>
 
-      {/* Project Roots */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Project Roots</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {rootEntries.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              No project roots configured. Add a root directory to scan for Maven and npm projects.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {rootEntries.map((entry, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <Input
-                    placeholder="Name"
-                    value={entry.key}
-                    onChange={(e) => updateRoot(idx, 'key', e.target.value)}
-                    className="w-32 shrink-0"
-                  />
-                  <Input
-                    placeholder="/path/to/root"
-                    value={entry.value}
-                    onChange={(e) => updateRoot(idx, 'value', e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    title="Browse for directory"
-                    onClick={() => void browseRoot(idx)}
-                  >
-                    <FolderOpen size={14} />
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    title="Remove entry"
-                    onClick={() => removeRoot(idx)}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div>
+          <ConfigCard
+            title="Project roots"
+            description="Choose which top-level folders GFOS scans for Maven and npm projects."
+            icon={<Settings size={14} className="text-primary" />}
+          >
+            {rootEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Add root directories to scan for Maven and npm projects.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {rootEntries.map((entry, index) => (
+                  <div key={index} className="rounded-[18px] border border-border bg-secondary/45 p-3">
+                    <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)_auto_auto]">
+                      <Input
+                        placeholder="Name"
+                        value={entry.key}
+                        onChange={(e) => updateRoot(index, 'key', e.target.value)}
+                      />
+                      <Input
+                        placeholder="C:\\dev\\projects"
+                        value={entry.value}
+                        onChange={(e) => updateRoot(index, 'value', e.target.value)}
+                      />
+                      <Tooltip content="Browse" side="bottom">
+                        <Button variant="outline" size="icon" onClick={() => void browseRoot(index)} aria-label="Browse root path">
+                          <FolderOpen size={14} />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content="Remove" side="bottom">
+                        <Button variant="destructive" size="icon" onClick={() => removeRoot(index)} aria-label="Remove root entry">
+                          <Trash2 size={14} />
+                        </Button>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <Button variant="outline" size="sm" onClick={addRoot}>
-              <Plus size={13} /> Add Root
+              <Plus size={13} />
+              Add root
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Scan Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Scan Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <Input
-            id="max-depth"
-            type="number"
-            label="Max Depth"
-            min={1}
-            max={10}
-            value={maxDepth}
-            onChange={(e) => setMaxDepth(Number(e.target.value))}
-            className="w-24"
-          />
-
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">Include Hidden</span>
-            <div className="flex rounded-md border border-input overflow-hidden w-fit">
-              <button
-                type="button"
-                onClick={() => setIncludeHidden(true)}
-                className={cn(
-                  'h-8 px-4 text-xs font-medium transition-colors',
-                  includeHidden
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                )}
-              >
-                Yes
-              </button>
-              <button
-                type="button"
-                onClick={() => setIncludeHidden(false)}
-                className={cn(
-                  'h-8 px-4 text-xs font-medium border-l border-input transition-colors',
-                  !includeHidden
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                )}
-              >
-                No
-              </button>
-            </div>
-          </div>
-
-          <TagInput
-            id="exclude-patterns"
-            label="Exclude Patterns"
-            value={excludePatterns}
-            onChange={setExcludePatterns}
-            placeholder="e.g. target"
-          />
-        </CardContent>
-      </Card>
+          </ConfigCard>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ConfigCard({
+  title,
+  description,
+  icon,
+  children,
+}: {
+  title: string;
+  description?: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader className="border-b border-border">
+        <div className="flex items-start gap-2">
+          <div className="icon-chip mt-0.5 flex h-9 w-9 items-center justify-center rounded-full">{icon}</div>
+          <div className="min-w-0">
+            <CardTitle className="text-sm">{title}</CardTitle>
+            {description && (
+              <CardDescription className="mt-1 max-w-[42rem] text-xs text-muted-foreground/75">
+                {description}
+              </CardDescription>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">{children}</CardContent>
+    </Card>
   );
 }

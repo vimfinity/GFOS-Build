@@ -1,20 +1,17 @@
-import { createRootRoute, Outlet, Link } from '@tanstack/react-router';
+import { createRootRoute, Outlet, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { healthQuery, configQuery, useSaveConfig } from '@/api/queries';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
-import {
-  LayoutDashboard,
-  Workflow,
-  FolderSearch,
-  Hammer,
-  ServerCrash,
-  BarChart3,
-  Settings,
-  Sun,
-  Moon,
-} from 'lucide-react';
+import { TooltipProvider, Tooltip, ShortcutKey } from '@/components/ui/tooltip';
+import { ServerCrash, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { OPEN_ONBOARDING_EVENT } from '@/lib/onboarding';
+import {
+  applyThemePreference,
+  getStoredThemePreference,
+  THEME_EVENT,
+} from '@/lib/theme';
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -43,14 +40,15 @@ function GfosLogo({ size = 20 }: { size?: number }) {
 // Nav tab definitions
 // ---------------------------------------------------------------------------
 
-const NAV_TABS: Array<{ to: string; icon: React.ElementType; label: string; exact: boolean }> = [
-  { to: '/',          icon: LayoutDashboard, label: 'Home',      exact: true  },
-  { to: '/pipelines', icon: Workflow,        label: 'Pipelines', exact: false },
-  { to: '/projects',  icon: FolderSearch,    label: 'Projects',  exact: false },
-  { to: '/builds',    icon: Hammer,          label: 'Builds',    exact: false },
-  { to: '/stats',     icon: BarChart3,       label: 'Stats',     exact: false },
-  { to: '/settings',  icon: Settings,        label: 'Settings',  exact: false },
+const NAV_TABS: Array<{ to: string; label: string; exact: boolean; shortcut: string }> = [
+  { to: '/', label: 'Home', exact: true, shortcut: 'Ctrl+1' },
+  { to: '/pipelines', label: 'Pipelines', exact: false, shortcut: 'Ctrl+2' },
+  { to: '/projects', label: 'Projects', exact: false, shortcut: 'Ctrl+3' },
+  { to: '/builds', label: 'Builds', exact: false, shortcut: 'Ctrl+4' },
+  { to: '/stats', label: 'Stats', exact: false, shortcut: 'Ctrl+5' },
 ];
+
+const SETTINGS_TAB = { to: '/settings', label: 'Settings', exact: false, shortcut: 'Ctrl+6' } as const;
 
 // ---------------------------------------------------------------------------
 // NavTab
@@ -58,70 +56,81 @@ const NAV_TABS: Array<{ to: string; icon: React.ElementType; label: string; exac
 
 function NavTab({
   to,
-  icon: Icon,
   label,
   exact,
+  shortcut,
+  showShortcut,
 }: {
   to: string;
-  icon: React.ElementType;
   label: string;
   exact: boolean;
+  shortcut?: string;
+  showShortcut?: boolean;
 }) {
   const base =
-    'relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors text-muted-foreground hover:text-foreground';
+    'inline-flex h-9 items-center rounded-full px-3.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:text-foreground focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
   const active = cn(
-    'relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors',
-    'text-foreground',
-    'after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-primary after:rounded-t-sm',
+    'inline-flex h-9 items-center rounded-full px-3.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+    'bg-primary/10 text-primary',
   );
 
   return (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    <Link to={to as any} className={base} activeProps={{ className: active }} activeOptions={{ exact }}>
-      <Icon size={15} />
-      {label}
-    </Link>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Theme toggle — persists to / reads from localStorage
-// ---------------------------------------------------------------------------
-
-function applyThemeAttr(t: 'dark' | 'light'): void {
-  if (t === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-}
-
-function ThemeToggle() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-
-  // Apply persisted theme once on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('theme') as 'dark' | 'light' | null;
-    const initial: 'dark' | 'light' = stored === 'light' ? 'light' : 'dark';
-    setTheme(initial);
-    applyThemeAttr(initial);
-  }, []);
-
-  function toggle() {
-    const next: 'dark' | 'light' = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    localStorage.setItem('theme', next);
-    applyThemeAttr(next);
-  }
-
-  return (
-    <button
-      onClick={toggle}
-      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+    <Tooltip
+      content={label}
+      shortcut={shortcut ? <ShortcutKey>{shortcut}</ShortcutKey> : undefined}
+      side="bottom"
     >
-      {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-    </button>
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        <Link
+          to={to as any}
+          className={base}
+          activeProps={{ className: active }}
+          activeOptions={{ exact }}
+        >
+          <span>{label}</span>
+          {shortcut ? (
+            <ShortcutKey
+              className={cn(
+                'overflow-hidden transition-[max-width,opacity,margin,padding] duration-160 ease-out',
+                showShortcut ? 'ml-1.5 max-w-14 opacity-100' : 'ml-0 max-w-0 px-0 opacity-0',
+              )}
+            >
+              {shortcut}
+            </ShortcutKey>
+          ) : null}
+        </Link>
+      }
+    </Tooltip>
+  );
+}
+
+function SettingsNavButton({
+}: {
+  shortcut: string;
+}) {
+  const base =
+    'inline-flex h-9 items-center justify-center rounded-full px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:text-foreground focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
+  const active = 'icon-chip-accent inline-flex h-9 items-center justify-center rounded-full px-3 text-primary transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
+
+  return (
+    <Tooltip
+      content="Settings"
+      side="bottom"
+    >
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        <Link
+          to={SETTINGS_TAB.to as any}
+          className={base}
+          activeProps={{ className: active }}
+          activeOptions={{ exact: SETTINGS_TAB.exact }}
+          aria-label="Settings"
+        >
+          <Settings size={15} />
+        </Link>
+      }
+    </Tooltip>
   );
 }
 
@@ -133,11 +142,11 @@ function HealthDot() {
   const { data, isError } = useQuery(healthQuery);
 
   const dotClass = cn(
-    'w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors cursor-default',
+    'h-2.5 w-2.5 rounded-full flex-shrink-0 cursor-default transition-colors',
     isError
-      ? 'bg-destructive ring-2 ring-destructive/20 ring-offset-1 ring-offset-background'
+      ? 'bg-destructive ring-2 ring-destructive/20'
       : data
-        ? 'bg-success ring-2 ring-success/20 ring-offset-1 ring-offset-background'
+        ? 'bg-success ring-2 ring-success/20'
         : 'bg-muted-foreground animate-pulse',
   );
 
@@ -148,12 +157,9 @@ function HealthDot() {
       : 'Connecting to server…';
 
   return (
-    <div
-      title={tooltip}
-      aria-label={tooltip}
-      role="status"
-      className={dotClass}
-    />
+    <Tooltip content={tooltip} side="bottom">
+      <div aria-label={tooltip} role="status" className={dotClass} />
+    </Tooltip>
   );
 }
 
@@ -184,16 +190,91 @@ function ServerOfflineOverlay() {
 // ---------------------------------------------------------------------------
 
 function RootLayout() {
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const queryClient = useQueryClient();
   const { data: configData } = useQuery(configQuery);
   const { isError: serverOffline } = useQuery(healthQuery);
   const saveConfig = useSaveConfig();
+  const isLiveBuildRoute = /^\/builds\/[^/]+$/.test(pathname);
+  const isMac = useMemo(
+    () =>
+      typeof navigator !== 'undefined' &&
+      /Mac|iPhone|iPad/.test(navigator.platform),
+    [],
+  );
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const primaryModifierLabel = isMac ? '⌘' : 'Ctrl';
+
+  useEffect(() => {
+    applyThemePreference(getStoredThemePreference());
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleMediaChange = () => {
+      if (getStoredThemePreference() === 'system') {
+        applyThemePreference('system');
+      }
+    };
+    const handleThemeEvent = () => {
+      applyThemePreference(getStoredThemePreference());
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      setShowShortcuts(isMac ? event.metaKey : event.ctrlKey);
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      if (event.target instanceof HTMLElement) {
+        const tag = event.target.tagName;
+        if (event.target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+          return;
+        }
+      }
+
+      const index = Number(event.key);
+      if (!Number.isInteger(index) || index < 1 || index > 6) return;
+
+      const target = index <= NAV_TABS.length ? NAV_TABS[index - 1] : SETTINGS_TAB;
+      if (!target) return;
+
+      event.preventDefault();
+      void navigate({ to: target.to as never });
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      setShowShortcuts(isMac ? event.metaKey : event.ctrlKey);
+    };
+    const handleBlur = () => setShowShortcuts(false);
+    const handleOpenOnboarding = () => setOnboardingOpen(true);
+
+    media.addEventListener('change', handleMediaChange);
+    window.addEventListener(THEME_EVENT, handleThemeEvent);
+    window.addEventListener('storage', handleThemeEvent);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener(OPEN_ONBOARDING_EVENT, handleOpenOnboarding);
+    document.addEventListener('visibilitychange', handleBlur);
+    return () => {
+      media.removeEventListener('change', handleMediaChange);
+      window.removeEventListener(THEME_EVENT, handleThemeEvent);
+      window.removeEventListener('storage', handleThemeEvent);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener(OPEN_ONBOARDING_EVENT, handleOpenOnboarding);
+      document.removeEventListener('visibilitychange', handleBlur);
+    };
+  }, [navigate, isMac]);
 
   // Show onboarding whenever no project roots are configured
   const needsOnboarding =
     !serverOffline &&
     configData !== undefined &&
     Object.keys(configData.config.roots).length === 0;
+
+  useEffect(() => {
+    if (needsOnboarding) {
+      setOnboardingOpen(true);
+    }
+  }, [needsOnboarding]);
 
   async function handleOnboardingComplete(config: {
     roots: Record<string, string>;
@@ -204,51 +285,82 @@ function RootLayout() {
     void queryClient.invalidateQueries({ queryKey: ['config'] });
     void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
     void queryClient.invalidateQueries({ queryKey: ['scan'] });
+    setOnboardingOpen(false);
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
-      {/* ── Top navigation bar ─────────────────────────────────────────── */}
-      <header className="flex items-center h-[52px] border-b border-border bg-card/40 shrink-0 px-4 gap-0">
-        {/* Brand wordmark */}
-        <div className="flex items-center gap-2 select-none mr-3 shrink-0">
-          <span className="text-primary">
-            <GfosLogo size={18} />
-          </span>
-          <span className="text-sm font-semibold tracking-tight text-foreground">GFOS Build</span>
-        </div>
+    <TooltipProvider>
+      <div className="flex h-screen overflow-hidden flex-col text-foreground">
+      <header className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
+        <div className="pointer-events-auto flex h-12 max-w-full items-center gap-1 rounded-full border px-2 text-foreground backdrop-blur-xl [background:var(--nav-bg)] [border-color:var(--nav-border)] [box-shadow:var(--nav-shadow)]">
+          <Tooltip content="Home" shortcut={<ShortcutKey>{`${primaryModifierLabel} 1`}</ShortcutKey>} side="bottom">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-foreground transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]"
+            >
+              <span className="text-primary">
+                <GfosLogo size={18} />
+              </span>
+              <span className="text-[13px] font-semibold tracking-[-0.01em]">GFOS Build</span>
+            </Link>
+          </Tooltip>
 
-        {/* Vertical divider */}
-        <div className="w-px h-5 bg-border mr-2 shrink-0" />
+          <div className="mx-1 hidden h-5 w-px bg-border sm:block" />
 
-        {/* Nav tabs */}
-        <nav className="flex items-center h-full gap-0.5">
-          {NAV_TABS.map((tab) => (
-            <NavTab key={tab.to} {...tab} />
-          ))}
-        </nav>
+          <nav className="hidden items-center gap-1 sm:flex">
+            {NAV_TABS.map((tab) => (
+              <NavTab
+                key={tab.to}
+                {...tab}
+                shortcut={`${primaryModifierLabel} ${tab.shortcut.slice(-1)}`}
+                showShortcut={showShortcuts}
+              />
+            ))}
+          </nav>
 
-        {/* Right-side controls */}
-        <div className="flex-1" />
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <div className="w-px h-4 bg-border" />
-          <HealthDot />
+          <div className="mx-1 h-5 w-px bg-border" />
+
+          <div className="flex items-center gap-1">
+            <SettingsNavButton
+              shortcut={`${primaryModifierLabel} 6`}
+            />
+            <div className="mx-1 h-2 w-2 rounded-full">
+              <HealthDot />
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* ── Main content ───────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-auto min-w-0">
-        {serverOffline ? <ServerOfflineOverlay /> : <Outlet />}
+      <main
+        className={cn(
+          'flex min-h-0 flex-1 flex-col px-4 pt-24 pb-6 sm:px-6 sm:pb-8 lg:px-8',
+          isLiveBuildRoute ? 'overflow-hidden' : 'overflow-auto',
+        )}
+      >
+        {serverOffline ? (
+          <div className="mx-auto flex h-full max-w-4xl items-center justify-center">
+            <div className="glass-card w-full max-w-lg rounded-[24px] border border-border p-10">
+              <ServerOfflineOverlay />
+            </div>
+          </div>
+        ) : (
+          <div className={cn('flex min-h-0 flex-1 flex-col pb-2 sm:pb-3', isLiveBuildRoute && 'overflow-hidden')}>
+            <Outlet />
+            {!isLiveBuildRoute && <div className="h-8 shrink-0 sm:h-10" aria-hidden="true" />}
+          </div>
+        )}
       </main>
 
-      {/* ── Global onboarding wizard ────────────────────────────────────── */}
-      {needsOnboarding && (
+      {onboardingOpen && (
         <OnboardingDialog
-          open={true}
+          open={onboardingOpen}
+          dismissible={!needsOnboarding}
+          onOpenChange={setOnboardingOpen}
+          initialConfig={configData?.config}
           onComplete={(config) => void handleOnboardingComplete(config)}
         />
       )}
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

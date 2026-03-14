@@ -24,9 +24,11 @@ export interface ConfigResponse {
 export interface PipelineStep {
   label: string;
   path: string;
+  buildSystem: 'maven' | 'npm';
   goals: string[];
   flags: string[];
   mavenExecutable: string;
+  npmScript?: string;
   javaVersion?: string;
   javaHome?: string;
 }
@@ -47,6 +49,7 @@ export interface PipelineListItem {
 /** A single build_runs row as returned by GET /api/builds */
 export interface BuildRunRowApi {
   id: number;
+  job_id: string | null;
   project_path: string;
   project_name: string;
   build_system: string;

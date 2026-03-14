@@ -18,14 +18,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { cn, formatDuration } from '@/lib/utils';
+import { SearchField } from '@/components/ui/search-field';
+import { Tooltip } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import type { Project } from '@shared/types';
 
 export const Route = createFileRoute('/projects/')({
   component: ProjectsView,
 });
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type SysFilter = 'all' | 'maven' | 'npm';
 type SortBy = 'name-asc' | 'name-desc' | 'path-asc' | 'sys';
@@ -37,8 +37,6 @@ interface GroupData {
   projects: Project[];
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function getRelativePath(project: Project, roots: Record<string, string>): string {
   const rootPath = roots[project.rootName];
   if (!rootPath) return project.path;
@@ -47,24 +45,20 @@ function getRelativePath(project: Project, roots: Record<string, string>): strin
   return norm.startsWith(rootNorm) ? norm.slice(rootNorm.length + 1) : project.path;
 }
 
-// ─── System badge ─────────────────────────────────────────────────────────────
-
 function SystemBadge({ system }: { system: 'maven' | 'npm' }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center text-[10px] px-1.5 py-0 rounded font-semibold shrink-0 leading-[18px]',
+        'pill-meta',
         system === 'maven'
-          ? 'bg-primary/20 text-primary'
-          : 'bg-emerald-500/20 text-emerald-400',
+          ? 'bg-primary/10 text-primary'
+          : 'bg-success/10 text-success',
       )}
     >
-      {system === 'maven' ? 'mvn' : 'npm'}
+      {system === 'maven' ? 'Maven' : 'npm'}
     </span>
   );
 }
-
-// ─── Ad-hoc build dialog ──────────────────────────────────────────────────────
 
 function AdHocBuildDialog({
   project,
@@ -74,7 +68,7 @@ function AdHocBuildDialog({
 }: {
   project: Project | null;
   onClose: () => void;
-  onRun: (goals: string[], flags: string[], java?: string) => void;
+  onRun: (payload: { buildSystem: 'maven' | 'npm'; goals?: string[]; flags?: string[]; java?: string; npmScript?: string }) => void;
   isRunning: boolean;
 }) {
   const { data: configData } = useQuery(configQuery);
@@ -83,90 +77,104 @@ function AdHocBuildDialog({
     () => configData?.config.maven.defaultGoals.join(' ') ?? 'clean install',
     [configData],
   );
+  const defaultNpmScript = useMemo(
+    () => configData?.config.npm.defaultBuildScript ?? 'build',
+    [configData],
+  );
   const jdkVersions = useMemo(
     () => Object.keys(configData?.config.jdkRegistry ?? {}),
     [configData],
   );
 
-  const [goals, setGoals] = useState(defaultGoals);
+  const [commandValue, setCommandValue] = useState(defaultGoals);
   const [flags, setFlags] = useState('');
   const [javaVersion, setJavaVersion] = useState('');
 
   useEffect(() => {
     if (project !== null) {
-      setGoals(defaultGoals);
+      setCommandValue(project.buildSystem === 'npm' ? defaultNpmScript : defaultGoals);
       setFlags('');
       setJavaVersion('');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.path, defaultGoals]);
+  }, [project, defaultGoals, defaultNpmScript]);
 
   function handleRun() {
-    onRun(
-      goals.split(/\s+/).filter(Boolean),
-      flags.split(/\s+/).filter(Boolean),
-      javaVersion.trim() || undefined,
-    );
+    if (!project) return;
+    if (project.buildSystem === 'npm') {
+      onRun({
+        buildSystem: 'npm',
+        npmScript: commandValue.trim() || defaultNpmScript,
+      });
+      return;
+    }
+    onRun({
+      buildSystem: 'maven',
+      goals: commandValue.split(/\s+/).filter(Boolean),
+      flags: flags.split(/\s+/).filter(Boolean),
+      java: javaVersion.trim() || undefined,
+    });
   }
 
   return (
     <Dialog open={project !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-xl">
         <DialogTitle>Run build</DialogTitle>
         <DialogDescription>
-          {project?.name ?? ''} — {project?.buildSystem === 'maven' ? 'Maven' : 'npm'}
+          {project?.name ?? ''} · {project?.buildSystem === 'maven' ? 'Maven' : 'npm'}
         </DialogDescription>
 
-        <div className="flex flex-col gap-4 mt-3">
+        <div className="mt-5 flex flex-col gap-4 overflow-y-auto">
           {project && (
-            <div className="rounded-md bg-secondary/50 px-3 py-2 text-xs font-mono text-muted-foreground break-all">
+            <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs font-mono text-muted-foreground break-all">
               {project.path}
             </div>
           )}
 
           <Input
-            label="Goals"
-            placeholder="e.g. clean install"
-            value={goals}
-            onChange={(e) => setGoals(e.target.value)}
+            label={project?.buildSystem === 'npm' ? 'Script' : 'Goals'}
+            placeholder={project?.buildSystem === 'npm' ? 'e.g. build' : 'e.g. clean install'}
+            value={commandValue}
+            onChange={(e) => setCommandValue(e.target.value)}
           />
 
-          <Input
-            label="Flags (optional)"
-            placeholder="e.g. -DskipTests -T4"
-            value={flags}
-            onChange={(e) => setFlags(e.target.value)}
-          />
+          {project?.buildSystem === 'maven' && (
+            <Input
+              label="Flags"
+              placeholder="e.g. -DskipTests -T4"
+              value={flags}
+              onChange={(e) => setFlags(e.target.value)}
+            />
+          )}
 
-          {jdkVersions.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                Java version (optional)
+          {project?.buildSystem === 'maven' && jdkVersions.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Java version
               </label>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setJavaVersion('')}
                   className={cn(
-                    'px-2.5 py-1 rounded-md text-xs border transition-colors',
+                    'pill-control border transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
                     javaVersion === ''
-                      ? 'bg-primary/15 text-primary border-primary/30'
-                      : 'border-border text-muted-foreground hover:text-foreground hover:border-border/80',
+                      ? 'border-primary/20 bg-primary/10 text-primary'
+                      : 'border-border bg-card/70 text-muted-foreground hover:bg-accent/60 hover:text-foreground active:bg-accent/80',
                   )}
                 >
                   default
                 </button>
-                {jdkVersions.map((v) => (
+                {jdkVersions.map((version) => (
                   <button
-                    key={v}
-                    onClick={() => setJavaVersion(v)}
+                    key={version}
+                    onClick={() => setJavaVersion(version)}
                     className={cn(
-                      'px-2.5 py-1 rounded-md text-xs border transition-colors',
-                      javaVersion === v
-                        ? 'bg-primary/15 text-primary border-primary/30'
-                        : 'border-border text-muted-foreground hover:text-foreground hover:border-border/80',
+                      'pill-control border transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+                      javaVersion === version
+                        ? 'border-primary/20 bg-primary/10 text-primary'
+                        : 'border-border bg-card/70 text-muted-foreground hover:bg-accent/60 hover:text-foreground active:bg-accent/80',
                     )}
                   >
-                    {v}
+                    Java {version}
                   </button>
                 ))}
               </div>
@@ -174,18 +182,20 @@ function AdHocBuildDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-border">
+        <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleRun} disabled={isRunning || !goals.trim()}>
+          <Button size="sm" onClick={handleRun} disabled={isRunning || !commandValue.trim()}>
             {isRunning ? (
               <>
-                <Loader2 size={12} className="animate-spin" /> Starting…
+                <Loader2 size={12} className="animate-spin" />
+                Starting
               </>
             ) : (
               <>
-                <Play size={12} /> Run build
+                <Play size={12} />
+                Run build
               </>
             )}
           </Button>
@@ -194,8 +204,6 @@ function AdHocBuildDialog({
     </Dialog>
   );
 }
-
-// ─── Group header ─────────────────────────────────────────────────────────────
 
 function GroupHeader({
   label,
@@ -211,20 +219,18 @@ function GroupHeader({
   return (
     <button
       onClick={onToggle}
-      className="flex items-center gap-1.5 w-full h-8 px-2 rounded-md hover:bg-accent/30 transition-colors text-left"
+      className="flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]"
     >
       {isExpanded ? (
-        <ChevronDown size={12} className="text-muted-foreground shrink-0" />
+        <ChevronDown size={13} className="shrink-0 text-muted-foreground" />
       ) : (
-        <ChevronRight size={12} className="text-muted-foreground shrink-0" />
+        <ChevronRight size={13} className="shrink-0 text-muted-foreground" />
       )}
       <span className="text-sm font-medium text-foreground">{label}/</span>
-      <span className="ml-0.5 text-xs text-muted-foreground tabular-nums">({count})</span>
+      <span className="text-xs text-muted-foreground">({count})</span>
     </button>
   );
 }
-
-// ─── Project row (grouped) ────────────────────────────────────────────────────
 
 function ProjectRow({
   project,
@@ -233,67 +239,47 @@ function ProjectRow({
 }: {
   project: Project;
   subPath: string;
-  onBuild: (p: Project) => void;
+  onBuild: (project: Project) => void;
 }) {
   const isAggregator = project.maven?.isAggregator ?? false;
   const version = project.npm?.version;
   const javaVersion = project.maven?.javaVersion;
 
   return (
-    <div className="flex items-center h-9 gap-2.5 pl-8 pr-2 rounded-md hover:bg-accent/20 transition-colors group/row">
-      {/* Status dot */}
-      <span
-        className={cn(
-          'w-1.5 h-1.5 rounded-full shrink-0',
-          isAggregator ? 'bg-muted-foreground/40' : 'bg-success',
-        )}
-        title={isAggregator ? 'Maven aggregator — parent POM, no build artifact' : 'Buildable module'}
-      />
-
-      {/* Name */}
-      <span className="font-medium text-sm text-foreground shrink-0 truncate max-w-[220px]">
+    <div className="group/row flex items-center gap-3 rounded-[18px] px-4 py-3 transition-colors hover:bg-accent/55">
+      <Tooltip content={isAggregator ? 'Maven aggregator' : 'Buildable module'} side="bottom">
+        <span
+          className={cn(
+            'h-2 w-2 rounded-full shrink-0',
+            isAggregator ? 'bg-muted-foreground/40' : 'bg-success',
+          )}
+        />
+      </Tooltip>
+      <span className="max-w-[220px] shrink-0 truncate text-sm font-medium text-foreground">
         {project.name}
       </span>
-
-      {/* Sub-path breadcrumb */}
       {subPath ? (
-        <span className="text-xs text-muted-foreground font-mono truncate flex-1 min-w-0">
+        <span className="min-w-0 flex-1 truncate text-xs font-mono text-muted-foreground">
           {subPath}
         </span>
       ) : (
         <div className="flex-1" />
       )}
-
-      {/* System badge */}
       <SystemBadge system={project.buildSystem} />
-
-      {/* Version */}
-      {version && (
-        <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-          v{version}
-        </span>
-      )}
-
-      {/* Java version */}
-      {javaVersion && (
-        <span className="text-xs text-muted-foreground shrink-0">Java {javaVersion}</span>
-      )}
-
-      {/* Build button — appears on row hover */}
+      {version && <span className="text-xs text-muted-foreground">v{version}</span>}
+      {javaVersion && <span className="text-xs text-muted-foreground">Java {javaVersion}</span>}
       <Button
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity"
+        variant="outline"
+        size="sm"
+        className="shrink-0"
         onClick={() => onBuild(project)}
-        title="Run build"
       >
         <Play size={11} />
+        Run
       </Button>
     </div>
   );
 }
-
-// ─── Project row (flat search results) ───────────────────────────────────────
 
 function FlatProjectRow({
   project,
@@ -302,7 +288,7 @@ function FlatProjectRow({
 }: {
   project: Project;
   roots: Record<string, string>;
-  onBuild: (p: Project) => void;
+  onBuild: (project: Project) => void;
 }) {
   const relPath = getRelativePath(project, roots);
   const isAggregator = project.maven?.isAggregator ?? false;
@@ -310,56 +296,34 @@ function FlatProjectRow({
   const javaVersion = project.maven?.javaVersion;
 
   return (
-    <div className="flex items-center h-9 gap-2.5 px-2 rounded-md hover:bg-accent/20 transition-colors group/row">
-      {/* Status dot */}
+    <div className="group/row flex items-center gap-3 rounded-[18px] px-4 py-3 transition-colors hover:bg-accent/55">
       <span
         className={cn(
-          'w-1.5 h-1.5 rounded-full shrink-0',
+          'h-2 w-2 rounded-full shrink-0',
           isAggregator ? 'bg-muted-foreground/40' : 'bg-success',
         )}
-        title={isAggregator ? 'Maven aggregator — parent POM, no build artifact' : 'Buildable module'}
       />
-
-      {/* Name */}
-      <span className="font-medium text-sm text-foreground shrink-0 truncate max-w-[220px]">
+      <span className="max-w-[220px] shrink-0 truncate text-sm font-medium text-foreground">
         {project.name}
       </span>
-
-      {/* Full relative path */}
-      <span className="text-xs text-muted-foreground font-mono truncate flex-1 min-w-0">
+      <span className="min-w-0 flex-1 truncate text-xs font-mono text-muted-foreground">
         {relPath}
       </span>
-
-      {/* System badge */}
       <SystemBadge system={project.buildSystem} />
-
-      {/* Version */}
-      {version && (
-        <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-          v{version}
-        </span>
-      )}
-
-      {/* Java version */}
-      {javaVersion && (
-        <span className="text-xs text-muted-foreground shrink-0">Java {javaVersion}</span>
-      )}
-
-      {/* Build button */}
+      {version && <span className="text-xs text-muted-foreground">v{version}</span>}
+      {javaVersion && <span className="text-xs text-muted-foreground">Java {javaVersion}</span>}
       <Button
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity"
+        variant="outline"
+        size="sm"
+        className="shrink-0"
         onClick={() => onBuild(project)}
-        title="Run build"
       >
         <Play size={11} />
+        Run
       </Button>
     </div>
   );
 }
-
-// ─── Main view ────────────────────────────────────────────────────────────────
 
 function ProjectsView() {
   const navigate = useNavigate();
@@ -380,46 +344,40 @@ function ProjectsView() {
   const projects = scanData?.projects ?? [];
   const roots = configData?.config.roots ?? {};
 
-  // ── Filtered list ─────────────────────────────────────────────────────────
-
   const filtered = useMemo(() => {
-    return projects.filter((p) => {
-      if (sysFilter !== 'all' && p.buildSystem !== sysFilter) return false;
+    return projects.filter((project) => {
+      if (sysFilter !== 'all' && project.buildSystem !== sysFilter) return false;
       if (search.trim()) {
-        const q = search.trim().toLowerCase();
+        const query = search.trim().toLowerCase();
         return (
-          p.name.toLowerCase().includes(q) ||
-          p.path.toLowerCase().includes(q) ||
-          (p.maven?.artifactId ?? '').toLowerCase().includes(q) ||
-          p.rootName.toLowerCase().includes(q)
+          project.name.toLowerCase().includes(query) ||
+          project.path.toLowerCase().includes(query) ||
+          (project.maven?.artifactId ?? '').toLowerCase().includes(query) ||
+          project.rootName.toLowerCase().includes(query)
         );
       }
       return true;
     });
   }, [projects, sysFilter, search]);
 
-  // ── Sorted list ───────────────────────────────────────────────────────────
-
   const sorted = useMemo(() => {
-    const arr = [...filtered];
+    const list = [...filtered];
     switch (sortBy) {
-      case 'name-asc':  return arr.sort((a, b) => a.name.localeCompare(b.name));
-      case 'name-desc': return arr.sort((a, b) => b.name.localeCompare(a.name));
-      case 'path-asc':  return arr.sort((a, b) => {
-        const ra = getRelativePath(a, roots);
-        const rb = getRelativePath(b, roots);
-        return ra.localeCompare(rb);
-      });
-      case 'sys': return arr.sort((a, b) =>
-        a.buildSystem.localeCompare(b.buildSystem) || a.name.localeCompare(b.name));
-      default: return arr;
+      case 'name-asc':
+        return list.sort((a, b) => a.name.localeCompare(b.name));
+      case 'name-desc':
+        return list.sort((a, b) => b.name.localeCompare(a.name));
+      case 'path-asc':
+        return list.sort((a, b) => getRelativePath(a, roots).localeCompare(getRelativePath(b, roots)));
+      case 'sys':
+        return list.sort((a, b) => a.buildSystem.localeCompare(b.buildSystem) || a.name.localeCompare(b.name));
+      default:
+        return list;
     }
   }, [filtered, sortBy, roots]);
 
-  // ── Groups (one level: first path segment) ────────────────────────────────
-
   const groups = useMemo((): GroupData[] => {
-    const multipleRoots = new Set(sorted.map((p) => p.rootName)).size > 1;
+    const multipleRoots = new Set(sorted.map((project) => project.rootName)).size > 1;
     const map = new Map<string, GroupData>();
 
     for (const project of sorted) {
@@ -435,23 +393,18 @@ function ProjectsView() {
           projects: [],
         });
       }
+
       map.get(key)!.projects.push(project);
     }
 
     for (const group of map.values()) {
-      group.projects.sort((a, b) => {
-        const ra = getRelativePath(a, roots);
-        const rb = getRelativePath(b, roots);
-        return ra.localeCompare(rb);
-      });
+      group.projects.sort((a, b) => getRelativePath(a, roots).localeCompare(getRelativePath(b, roots)));
     }
 
     return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
   }, [sorted, roots]);
 
-  const allGroupKeys = useMemo(() => groups.map((g) => g.key), [groups]);
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  const allGroupKeys = useMemo(() => groups.map((group) => group.key), [groups]);
 
   function toggleGroup(key: string) {
     setExpanded((prev) => {
@@ -480,262 +433,226 @@ function ProjectsView() {
     }
   }
 
-  async function handleBuildRun(goals: string[], flags: string[], java?: string) {
+  async function handleBuildRun(payload: { buildSystem: 'maven' | 'npm'; goals?: string[]; flags?: string[]; java?: string; npmScript?: string }) {
     if (!buildTarget) return;
     try {
       const { jobId } = await adHocBuild.mutateAsync({
         path: buildTarget.path,
-        goals,
-        flags: flags.length > 0 ? flags : undefined,
-        java,
+        buildSystem: payload.buildSystem,
+        goals: payload.goals,
+        flags: payload.flags && payload.flags.length > 0 ? payload.flags : undefined,
+        java: payload.java,
+        npmScript: payload.npmScript,
       });
       setBuildTarget(null);
       void navigate({ to: '/builds/$jobId', params: { jobId } });
     } catch {
-      // keep dialog open on error
+      // Keep dialog open on error.
     }
   }
 
   const isSearchActive = search.trim().length > 0;
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const canToggleGroups = !isSearchActive && groups.length > 0;
 
   return (
-    <div className="p-6 flex flex-col gap-4 max-w-5xl mx-auto">
-
-      {/* ── Header ── */}
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <FolderSearch size={18} className="text-primary mt-0.5 shrink-0" />
-          <div>
-            <h1 className="text-lg font-semibold text-foreground leading-tight">Projects</h1>
-            {!isLoading && !isError && scanData && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {projects.length} project{projects.length !== 1 ? 's' : ''}
-                {scanData.fromCache && <span className="opacity-70"> · from cache</span>}
-                {scanData.durationMs != null && (
-                  <span className="opacity-70"> · {formatDuration(scanData.durationMs)}</span>
-                )}
-              </p>
-            )}
-          </div>
+        <div>
+          <h1 className="page-title text-[1.6rem] font-semibold leading-tight text-foreground">
+            Projects
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Browse scanned Maven and npm codebases and run ad-hoc builds.
+          </p>
         </div>
         <Button
           variant="outline"
           size="sm"
           onClick={() => void handleRefresh()}
           disabled={isRefreshing || isLoading}
-          className="shrink-0"
         >
           <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-          Refresh
+          Refresh scan
         </Button>
       </div>
 
-      {/* ── Loading ── */}
       {isLoading && (
-        <div className="flex flex-col items-center gap-3 py-24 text-muted-foreground">
-          <Loader2 size={24} className="animate-spin text-primary/50" />
-          <p className="text-sm">Scanning projects…</p>
+        <div className="glass-card flex flex-col items-center gap-4 rounded-[24px] border border-border px-8 py-16 text-center">
+          <Loader2 size={26} className="animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Scanning projects...</p>
         </div>
       )}
 
-      {/* ── Error ── */}
       {isError && !isLoading && (
-        <div className="flex flex-col items-center gap-3 py-24 text-muted-foreground">
-          <AlertCircle size={28} className="text-destructive/60" />
-          <p className="text-sm text-destructive">Failed to scan projects</p>
+        <div className="glass-card flex flex-col items-center gap-4 rounded-[24px] border border-border px-8 py-16 text-center">
+          <div className="rounded-full bg-destructive/10 p-4">
+            <AlertCircle size={28} className="text-destructive" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-foreground">Failed to scan projects</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The background server could not return a project inventory.
+            </p>
+          </div>
           <Button variant="outline" size="sm" onClick={() => void handleRefresh()}>
-            <RefreshCw size={13} /> Try again
+            <RefreshCw size={13} />
+            Try again
           </Button>
         </div>
       )}
 
-      {/* ── Main content (data loaded, no error) ── */}
       {!isLoading && !isError && (
         <>
-          {/* Filters row — only when there are projects */}
           {projects.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Search */}
-              <div className="relative">
-                <Search
-                  size={12}
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filter projects…"
-                  className="h-9 w-64 rounded-md border border-input bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
+            <div className="glass-card flex flex-wrap items-center gap-3 rounded-[24px] border border-border p-4">
+              <SearchField value={search} onChange={setSearch} placeholder="Filter projects..." />
 
-              {/* Build system segmented control */}
-              <div className="flex rounded-md border border-border overflow-hidden h-9">
-                {(['all', 'maven', 'npm'] as const).map((sys) => (
+              <div className="segmented-control">
+                {(['all', 'maven', 'npm'] as const).map((system) => (
                   <button
-                    key={sys}
-                    onClick={() => setSysFilter(sys)}
+                    key={system}
+                    aria-pressed={sysFilter === system}
+                    onClick={() => setSysFilter(system)}
                     className={cn(
-                      'px-3 text-xs font-medium transition-colors border-r border-border last:border-r-0',
-                      sysFilter === sys
-                        ? 'bg-primary/15 text-primary'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+                      'segmented-control-button',
+                      sysFilter === system && 'is-active',
                     )}
                   >
-                    {sys === 'all' ? 'All' : sys === 'maven' ? 'Maven' : 'npm'}
+                    {system === 'all' ? 'All' : system === 'maven' ? 'Maven' : 'npm'}
                   </button>
                 ))}
               </div>
 
-              {/* Sort control */}
-              <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border text-xs text-muted-foreground focus-within:ring-2 focus-within:ring-ring">
-                <ArrowUpDown size={11} className="shrink-0" />
+              <div className="field-shell field-shell-pill field-shell-soft">
+                <ArrowUpDown size={12} />
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortBy)}
-                  className="bg-transparent text-xs text-muted-foreground focus:outline-none cursor-pointer"
+                  className="field-select text-xs text-muted-foreground"
                 >
-                  <option value="name-asc">Name A→Z</option>
-                  <option value="name-desc">Name Z→A</option>
-                  <option value="path-asc">Path A→Z</option>
+                  <option value="name-asc">Name A-Z</option>
+                  <option value="name-desc">Name Z-A</option>
+                  <option value="path-asc">Path A-Z</option>
                   <option value="sys">Build system</option>
                 </select>
               </div>
 
-              {/* Expand / Collapse all — only in grouped mode */}
-              {!isSearchActive && groups.length > 0 && (
-                <div className="flex items-center rounded-md border border-border overflow-hidden h-9 ml-auto">
-                  <button
-                    onClick={collapseAll}
-                    title="Collapse all groups"
-                    className="flex items-center gap-1 px-2.5 h-full text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors border-r border-border"
-                  >
+              <div className="ml-auto flex min-w-[190px] items-center justify-end gap-2">
+                  <Button variant="ghost" size="sm" onClick={collapseAll} disabled={!canToggleGroups}>
                     <ChevronsUp size={12} />
                     Collapse
-                  </button>
-                  <button
-                    onClick={expandAll}
-                    title="Expand all groups"
-                    className="flex items-center gap-1 px-2.5 h-full text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-                  >
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={expandAll} disabled={!canToggleGroups}>
                     <ChevronsDown size={12} />
                     Expand
-                  </button>
-                </div>
-              )}
+                  </Button>
+              </div>
             </div>
           )}
 
-          {/* ── Empty: no roots ── */}
-          {projects.length === 0 &&
-            configData &&
-            Object.keys(configData.config.roots).length === 0 && (
-              <div className="flex flex-col items-center gap-2 py-24 text-muted-foreground">
-                <FolderSearch size={28} className="text-border" />
-                <p className="text-sm font-medium">No project roots configured</p>
-                <p className="text-xs text-center max-w-xs">
-                  Configure project roots in Settings to get started
-                </p>
-              </div>
-            )}
+          {projects.length === 0 && configData && Object.keys(configData.config.roots).length === 0 && (
+            <EmptyState
+              icon={<FolderSearch size={28} className="text-primary" />}
+              title="No project roots configured"
+              description="Configure project roots in Settings before scanning for Maven or npm projects."
+            />
+          )}
 
-          {/* ── Empty: roots exist but no projects ── */}
-          {projects.length === 0 &&
-            configData &&
-            Object.keys(configData.config.roots).length > 0 && (
-              <div className="flex flex-col items-center gap-2 py-24 text-muted-foreground">
-                <AlertCircle size={28} className="text-border" />
-                <p className="text-sm font-medium">No projects found</p>
-                <p className="text-xs text-center max-w-xs">
-                  No <code className="font-mono">pom.xml</code> or{' '}
-                  <code className="font-mono">package.json</code> found within{' '}
-                  {configData.config.scan.maxDepth} levels deep
-                </p>
+          {projects.length === 0 && configData && Object.keys(configData.config.roots).length > 0 && (
+            <EmptyState
+              icon={<AlertCircle size={28} className="text-primary" />}
+              title="No projects found"
+              description={`No pom.xml or package.json files were found within ${configData.config.scan.maxDepth} scan levels.`}
+              action={
                 <Button variant="outline" size="sm" onClick={() => void handleRefresh()}>
-                  <RefreshCw size={13} /> Scan now
+                  <RefreshCw size={13} />
+                  Scan now
                 </Button>
-              </div>
-            )}
-
-          {/* ── Empty: config not loaded yet ── */}
-          {projects.length === 0 && !configData && (
-            <div className="flex flex-col items-center gap-2 py-24 text-muted-foreground">
-              <AlertCircle size={28} className="text-border" />
-              <p className="text-sm">No projects found</p>
-            </div>
+              }
+            />
           )}
 
-          {/* ── Project list ── */}
+          {projects.length === 0 && !configData && (
+            <EmptyState
+              icon={<AlertCircle size={28} className="text-primary" />}
+              title="No projects found"
+              description="Configuration data is still loading."
+            />
+          )}
+
           {projects.length > 0 && (
             <>
-              {/* No filter results */}
               {sorted.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-24 text-muted-foreground">
-                  <Search size={28} className="text-border" />
-                  <p className="text-sm">
-                    No projects match &ldquo;{search}&rdquo;
-                  </p>
-                  <button
-                    onClick={() => { setSearch(''); setSysFilter('all'); }}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                </div>
+                <EmptyState
+                  icon={<Search size={24} className="text-primary" />}
+                  title={`No projects match "${search}"`}
+                  description="Try removing the search term or build system filter."
+                  action={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSearch('');
+                        setSysFilter('all');
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  }
+                />
               ) : isSearchActive ? (
-                /* ── Flat list (search mode) ── */
-                <div className="flex flex-col">
-                  <p className="text-xs text-muted-foreground px-2 mb-1">
+                <div className="glass-card rounded-[24px] border border-border p-3">
+                  <p className="px-3 pb-2 text-xs text-muted-foreground">
                     {sorted.length} result{sorted.length !== 1 ? 's' : ''}
                   </p>
-                  {sorted.map((project) => (
-                    <FlatProjectRow
-                      key={project.path}
-                      project={project}
-                      roots={roots}
-                      onBuild={setBuildTarget}
-                    />
-                  ))}
+                  <div className="flex flex-col gap-1">
+                    {sorted.map((project) => (
+                      <FlatProjectRow
+                        key={project.path}
+                        project={project}
+                        roots={roots}
+                        onBuild={setBuildTarget}
+                      />
+                    ))}
+                  </div>
                 </div>
               ) : (
-                /* ── Grouped list ── */
-                <div className="flex flex-col gap-0.5">
-                  {groups.map((group) => {
-                    const isExpanded = expanded.has(group.key);
-                    return (
-                      <div key={group.key}>
-                        <GroupHeader
-                          label={group.label}
-                          count={group.projects.length}
-                          isExpanded={isExpanded}
-                          onToggle={() => toggleGroup(group.key)}
-                        />
-                        {isExpanded && (
-                          <div className="ml-3 border-l border-border/40 mt-0.5 mb-1">
-                            {group.projects.map((project) => {
-                              const relPath = getRelativePath(project, roots);
-                              const subPath = relPath.startsWith(group.segment + '/')
-                                ? relPath.slice(group.segment.length + 1)
-                                : relPath === group.segment
-                                  ? ''
-                                  : relPath;
-                              return (
-                                <ProjectRow
-                                  key={project.path}
-                                  project={project}
-                                  subPath={subPath}
-                                  onBuild={setBuildTarget}
-                                />
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="glass-card rounded-[24px] border border-border p-3">
+                  <div className="flex flex-col gap-1">
+                    {groups.map((group) => {
+                      const isExpanded = expanded.has(group.key);
+                      return (
+                        <div key={group.key} className="rounded-[20px] border border-transparent">
+                          <GroupHeader
+                            label={group.label}
+                            count={group.projects.length}
+                            isExpanded={isExpanded}
+                            onToggle={() => toggleGroup(group.key)}
+                          />
+                          {isExpanded && (
+                            <div className="ml-4 flex flex-col gap-1 border-l border-border/80 py-1 pl-3">
+                              {group.projects.map((project) => {
+                                const relPath = getRelativePath(project, roots);
+                                const subPath = relPath.startsWith(group.segment + '/')
+                                  ? relPath.slice(group.segment.length + 1)
+                                  : relPath === group.segment
+                                    ? ''
+                                    : relPath;
+                                return (
+                                  <ProjectRow
+                                    key={project.path}
+                                    project={project}
+                                    subPath={subPath}
+                                    onBuild={setBuildTarget}
+                                  />
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </>
@@ -743,13 +660,35 @@ function ProjectsView() {
         </>
       )}
 
-      {/* ── Ad-hoc build dialog ── */}
       <AdHocBuildDialog
         project={buildTarget}
         onClose={() => setBuildTarget(null)}
-        onRun={(goals, flags, java) => void handleBuildRun(goals, flags, java)}
+        onRun={(payload) => void handleBuildRun(payload)}
         isRunning={adHocBuild.isPending}
       />
+    </div>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="glass-card flex flex-col items-center gap-4 rounded-[24px] border border-border px-8 py-16 text-center">
+      <div className="icon-chip flex h-14 w-14 items-center justify-center rounded-full">{icon}</div>
+      <div>
+        <p className="text-base font-semibold text-foreground">{title}</p>
+        <p className="mt-2 max-w-xl text-sm text-muted-foreground">{description}</p>
+      </div>
+      {action}
     </div>
   );
 }

@@ -54,6 +54,7 @@ export async function runBuild(
   try {
     const command = [step.mavenExecutable, ...step.goals, ...step.flags].join(' ');
     stepRunId = db.startBuildRun({
+      jobId: undefined,
       projectPath: step.path,
       projectName: step.label,
       buildSystem: 'maven',

@@ -46,22 +46,22 @@ const icons: Record<StepStatus, React.ReactNode> = {
 };
 
 const pillColors: Record<StepStatus, string> = {
-  pending: 'border-border bg-secondary/50 text-muted-foreground',
-  running: 'border-warning/40 bg-warning/10 text-warning',
-  success: 'border-success/40 bg-success/10 text-success',
-  failed:  'border-destructive/40 bg-destructive/10 text-destructive',
+  pending: 'border-border bg-card/70 text-muted-foreground',
+  running: 'border-primary/20 bg-primary/10 text-primary',
+  success: 'border-success/20 bg-success/10 text-success',
+  failed: 'border-destructive/20 bg-destructive/10 text-destructive',
 };
 
 export function StepTimeline({ events, stepLabels }: StepTimelineProps) {
   const steps = deriveSteps(events as BuildEvent[], stepLabels.length, stepLabels);
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-3">
       {steps.map((step, i) => (
         <div
           key={i}
           className={cn(
-            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors duration-200',
+            'pill-control border transition-colors duration-200',
             pillColors[step.status],
           )}
         >

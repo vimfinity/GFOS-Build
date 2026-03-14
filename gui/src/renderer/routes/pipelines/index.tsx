@@ -10,6 +10,7 @@ import {
 import { PipelineCard } from '@/components/PipelineCard';
 import { PipelineDialog, type PipelineFormData } from '@/components/PipelineDialog';
 import { Button } from '@/components/ui/button';
+import { SearchField } from '@/components/ui/search-field';
 import { SkeletonCard } from '@/components/ui/skeleton';
 import { useState } from 'react';
 import { Plus, Workflow, Search, AlertCircle, RefreshCw } from 'lucide-react';
@@ -33,9 +34,9 @@ function PipelinesView() {
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
   const [searchText, setSearchText] = useState('');
 
-  const filtered = (pipelines ?? []).filter((p) => {
+  const filtered = (pipelines ?? []).filter((pipeline) => {
     if (!searchText.trim()) return true;
-    return p.name.toLowerCase().includes(searchText.trim().toLowerCase());
+    return pipeline.name.toLowerCase().includes(searchText.trim().toLowerCase());
   });
 
   async function handleRun(name: string) {
@@ -45,9 +46,9 @@ function PipelinesView() {
       void navigate({ to: '/builds/$jobId', params: { jobId } });
     } finally {
       setRunningPipelines((s) => {
-        const n = new Set(s);
-        n.delete(name);
-        return n;
+        const next = new Set(s);
+        next.delete(name);
+        return next;
       });
     }
   }
@@ -66,14 +67,23 @@ function PipelinesView() {
     const payload = {
       description: data.description || undefined,
       failFast: data.failFast,
-      steps: data.steps.map((s) => ({
-        path: s.path,
-        label: s.label || undefined,
-        goals: s.goals.split(/\s+/).filter(Boolean),
-        flags: s.flags.split(/\s+/).filter(Boolean),
-        javaVersion: s.javaVersion || undefined,
-        buildSystem: s.buildSystem as 'maven' | 'npm',
-      })),
+      steps: data.steps.map((step) =>
+        step.buildSystem === 'npm'
+          ? {
+              path: step.path,
+              label: step.label || undefined,
+              buildSystem: 'npm' as const,
+              npmScript: step.npmScript.trim() || undefined,
+            }
+          : {
+              path: step.path,
+              label: step.label || undefined,
+              goals: step.mavenGoals.split(/\s+/).filter(Boolean),
+              flags: step.mavenFlags.split(/\s+/).filter(Boolean),
+              javaVersion: step.javaVersion || undefined,
+              buildSystem: 'maven' as const,
+            },
+      ),
     };
 
     if (editTarget) {
@@ -87,71 +97,73 @@ function PipelinesView() {
   }
 
   return (
-    <div className="p-6 flex flex-col gap-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Workflow size={18} className="text-primary" />
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Pipelines</h1>
-            <p className="text-xs text-muted-foreground">
-              {isLoading
-                ? 'Loading…'
-                : isError
-                  ? 'Failed to load'
-                  : `${pipelines?.length ?? 0} pipeline${(pipelines?.length ?? 0) !== 1 ? 's' : ''} configured`}
-            </p>
-          </div>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="page-title text-[1.6rem] font-semibold leading-tight text-foreground">
+            Pipelines
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Create and manage reusable build sequences for your projects.
+          </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditTarget(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus size={14} /> Create pipeline
-        </Button>
+        {(pipelines?.length ?? 0) > 0 ? (
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditTarget(null);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus size={14} />
+            Create pipeline
+          </Button>
+        ) : null}
       </div>
 
-      {/* Search bar — only visible when pipelines are loaded and non-empty */}
       {!isLoading && !isError && (pipelines?.length ?? 0) > 0 && (
-        <div className="relative max-w-sm">
-          <Search
-            size={13}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-          />
-          <input
-            type="text"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            placeholder="Search pipelines…"
-            className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+        <SearchField
+          value={searchText}
+          onChange={setSearchText}
+          placeholder="Search pipelines..."
+          className="max-w-sm"
+        />
       )}
 
-      {/* Pipeline cards */}
       {isLoading ? (
-        <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
+          <SkeletonCard />
+          <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
-          <AlertCircle size={32} className="text-destructive/50" />
-          <p className="text-sm text-destructive">Failed to load pipelines.</p>
-          <p className="text-xs text-center max-w-xs">
-            The server may be unavailable. Check the app status and try again.
-          </p>
+        <div className="glass-card flex flex-col items-center gap-4 rounded-[24px] border border-border px-8 py-16 text-center">
+          <div className="rounded-full bg-destructive/10 p-4">
+            <AlertCircle size={28} className="text-destructive" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-foreground">Failed to load pipelines</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The server may be unavailable. Retry after the connection is restored.
+            </p>
+          </div>
           <Button variant="outline" size="sm" onClick={() => void refetch()}>
-            <RefreshCw size={13} /> Retry
+            <RefreshCw size={13} />
+            Retry
           </Button>
         </div>
       ) : !pipelines?.length ? (
-        <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
-          <Workflow size={32} className="text-border" />
-          <p className="text-sm">No pipelines configured yet.</p>
+        <div className="glass-card flex flex-col items-center gap-4 rounded-[24px] border border-border px-8 py-16 text-center">
+          <div className="icon-chip flex h-14 w-14 items-center justify-center rounded-full">
+            <Workflow size={28} className="text-primary" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-foreground">No pipelines yet</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Create your first reusable flow for Maven or npm projects.
+            </p>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -160,30 +172,33 @@ function PipelinesView() {
               setDialogOpen(true);
             }}
           >
-            <Plus size={14} /> Create your first pipeline
+            <Plus size={14} />
+            Create your first pipeline
           </Button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-          <Search size={28} className="text-border" />
-          <p className="text-sm">No pipelines match &quot;{searchText}&quot;.</p>
+        <div className="glass-card flex flex-col items-center gap-3 rounded-[24px] border border-border px-8 py-14 text-center">
+          <Search size={24} className="text-muted-foreground" />
+          <p className="text-base font-semibold text-foreground">
+            No pipelines match &quot;{searchText}&quot;
+          </p>
           <button
-            className="text-xs text-primary hover:underline"
+            className="text-sm font-medium text-primary"
             onClick={() => setSearchText('')}
           >
             Clear search
           </button>
         </div>
       ) : (
-        <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
-          {filtered.map((p) => (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {filtered.map((pipeline) => (
             <PipelineCard
-              key={p.name}
-              pipeline={p}
+              key={pipeline.name}
+              pipeline={pipeline}
               onRun={handleRun}
-              onEdit={() => handleEdit(p)}
-              onDelete={() => void handleDelete(p.name)}
-              isRunning={runningPipelines.has(p.name)}
+              onEdit={() => handleEdit(pipeline)}
+              onDelete={() => void handleDelete(pipeline.name)}
+              isRunning={runningPipelines.has(pipeline.name)}
             />
           ))}
         </div>

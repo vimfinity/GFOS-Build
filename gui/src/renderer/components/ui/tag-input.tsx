@@ -39,15 +39,15 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
   return (
     <div className="flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+        <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {label}
         </label>
       )}
       <div
         className={cn(
-          'flex flex-wrap gap-1.5 rounded-md border border-input bg-background px-3 py-2',
-          'focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent',
-          'min-h-9 cursor-text',
+          'flex min-h-11 flex-wrap gap-1.5 rounded-[18px] border px-4 py-3 [background:var(--field-bg)] [border-color:var(--field-border)]',
+          'focus-within:border-ring focus-within:[box-shadow:0_0_0_1px_var(--color-ring)]',
+          'cursor-text',
           className,
         )}
         onClick={() => inputRef.current?.focus()}
@@ -55,7 +55,7 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
         {value.map((tag, i) => (
           <span
             key={i}
-            className="text-xs bg-secondary text-secondary-foreground rounded px-2 py-0.5 flex items-center gap-1 shrink-0"
+            className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs text-secondary-foreground transition-colors focus-within:border-ring focus-within:[box-shadow:0_0_0_1px_var(--color-ring)]"
           >
             {tag}
             <button
@@ -64,7 +64,7 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
                 e.stopPropagation();
                 removeTag(i);
               }}
-              className="leading-none hover:text-destructive transition-colors focus:outline-none"
+              className="rounded-full px-0.5 leading-none transition-colors hover:text-destructive focus-visible:outline-none focus-visible:text-destructive"
               aria-label={`Remove ${tag}`}
             >
               ×
@@ -79,7 +79,7 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={value.length === 0 ? placeholder : undefined}
-          className="text-xs text-foreground bg-transparent flex-1 min-w-[8rem] outline-none placeholder:text-muted-foreground/50"
+          className="field-input min-w-[8rem] flex-1"
         />
       </div>
     </div>

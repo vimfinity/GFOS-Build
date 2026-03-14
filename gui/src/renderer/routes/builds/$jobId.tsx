@@ -5,10 +5,18 @@ import { useJobEvents } from '@/api/ws';
 import { StepTimeline } from '@/components/StepTimeline';
 import { BuildOutput } from '@/components/BuildOutput';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Badge, StatusBadge } from '@/components/ui/badge';
 import { formatDuration, cn } from '@/lib/utils';
 import { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Square, CheckCircle2, XCircle, Loader2, Clock } from 'lucide-react';
+import {
+  ArrowLeft,
+  Square,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Clock3,
+  Activity,
+} from 'lucide-react';
 import type { BuildEvent } from '@shared/types';
 
 export const Route = createFileRoute('/builds/$jobId')({
@@ -22,8 +30,7 @@ function LiveBuildView() {
   const { events, done, error, startMs } = useJobEvents(jobId);
   const cancelJob = useCancelJob();
 
-  // Elapsed timer — anchored to when the first WS event arrived (from cache if remounting)
-  const [elapsedMs, setElapsedMs] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - startMs));
 
   useEffect(() => {
     if (done) return;
@@ -33,181 +40,170 @@ function LiveBuildView() {
     return () => clearInterval(interval);
   }, [done, startMs]);
 
-  // Invalidate the builds list so the Builds page reflects the new result
+  useEffect(() => {
+    setElapsedMs(Math.max(0, Date.now() - startMs));
+  }, [startMs]);
+
   useEffect(() => {
     if (done) {
       void queryClient.invalidateQueries({ queryKey: ['builds'] });
     }
   }, [done, queryClient]);
 
-  // Narrow events to BuildEvent subtypes only
   const buildEvents = useMemo(
-    () => events.filter(
-      (e): e is BuildEvent =>
-        'type' in e && (e.type.startsWith('step:') || e.type === 'run:done'),
-    ),
+    () =>
+      events.filter(
+        (event): event is BuildEvent =>
+          'type' in event && (event.type.startsWith('step:') || event.type === 'run:done'),
+      ),
     [events],
   );
 
-  const runDoneEvent = buildEvents.find((e) => e.type === 'run:done');
-  const isSuccess =
-    runDoneEvent?.type === 'run:done' ? runDoneEvent.result.success : null;
+  const runDoneEvent = buildEvents.find((event) => event.type === 'run:done');
+  const isSuccess = runDoneEvent?.type === 'run:done' ? runDoneEvent.result.success : null;
+  const latestStepDone = [...buildEvents].reverse().find((event) => event.type === 'step:done');
+  const displayStatus = !done
+    ? 'running'
+    : isSuccess === true
+      ? 'success'
+      : isSuccess === false || error || (latestStepDone?.type === 'step:done' && !latestStepDone.success)
+        ? 'failed'
+        : latestStepDone?.type === 'step:done' && latestStepDone.success
+          ? 'success'
+          : 'done';
 
-  // Identify the pipeline name from the event stream
   const pipelineName = useMemo(() => {
-    const ev = buildEvents.find((e) => e.type === 'step:start');
-    return ev?.type === 'step:start' ? ev.pipelineName : undefined;
+    const event = buildEvents.find((item) => item.type === 'step:start');
+    return event?.type === 'step:start' ? event.pipelineName : undefined;
   }, [buildEvents]);
 
-  // Derive step labels directly from events (works for both pipeline and ad-hoc builds)
   const stepLabels = useMemo(() => {
-    const total = buildEvents.find((e) => e.type === 'step:start')?.total ?? 0;
+    const total = buildEvents.find((event) => event.type === 'step:start')?.total ?? 0;
     const labels = new Array<string>(total).fill('Step');
-    for (const e of buildEvents) {
-      if (e.type === 'step:start') labels[e.index] = e.step.label;
+    for (const event of buildEvents) {
+      if (event.type === 'step:start') labels[event.index] = event.step.label;
     }
     return labels;
   }, [buildEvents]);
 
-  // Build title: pipeline name or first step's label for ad-hoc builds
   const buildTitle = useMemo(() => {
     if (pipelineName) return pipelineName;
-    const firstStep = buildEvents.find((e) => e.type === 'step:start');
+    const firstStep = buildEvents.find((event) => event.type === 'step:start');
     return firstStep?.type === 'step:start' ? firstStep.step.label : null;
   }, [pipelineName, buildEvents]);
 
-  // Final duration: use the server-reported value when available
+  const showStepTimeline = Boolean(pipelineName) || stepLabels.length > 1;
+
   const finalDurationMs =
     runDoneEvent?.type === 'run:done' ? runDoneEvent.result.durationMs : elapsedMs;
 
   async function handleCancel() {
     await cancelJob.mutateAsync(jobId);
-    void navigate({ to: '/builds' });
+    void navigate({ to: '/builds', search: { runId: undefined } });
   }
 
   return (
-    <div className="flex flex-col h-full p-6 gap-4">
-
-      {/* ── Header row ────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 shrink-0">
-        <Button variant="ghost" size="sm" onClick={() => void navigate({ to: '/builds' })}>
+    <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-5 overflow-hidden">
+      <div className="flex flex-wrap items-center gap-3 rounded-[24px] border border-border bg-card px-5 py-4">
+        <Button variant="ghost" size="sm" onClick={() => void navigate({ to: '/builds', search: { runId: undefined } })}>
           <ArrowLeft size={14} />
+          Back
         </Button>
 
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="flex flex-col min-w-0">
-            <h1 className="text-base font-semibold text-foreground truncate leading-tight">
-              {buildTitle ?? 'Build'}
-            </h1>
-            <span className="text-[10px] text-muted-foreground font-mono">
-              job&nbsp;{jobId}
-            </span>
-          </div>
+        <div className="min-w-0 flex-1">
+          <h1 className="page-title truncate text-[1.6rem] font-semibold leading-tight text-foreground">
+            {buildTitle ?? 'Build'}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Streaming output for job {jobId}.
+          </p>
+        </div>
 
-          {done ? (
-            isSuccess === true ? (
-              <Badge variant="success">
-                <CheckCircle2 size={11} /> Success
-              </Badge>
-            ) : isSuccess === false ? (
-              <Badge variant="destructive">
-                <XCircle size={11} /> Failed
-              </Badge>
-            ) : (
-              <Badge variant="secondary">Done</Badge>
-            )
-          ) : (
-            <Badge variant="warning">
-              <Loader2 size={11} className="animate-spin" /> Running
-            </Badge>
-          )}
+        {displayStatus === 'running' ? (
+          <Badge variant="default">
+            <Loader2 size={11} className="animate-spin" />
+            Running
+          </Badge>
+        ) : (
+          <StatusBadge status={displayStatus} />
+        )}
 
-          <span className="text-xs text-muted-foreground font-mono ml-auto shrink-0 flex items-center gap-1">
-            <Clock size={11} />
-            {formatDuration(done ? finalDurationMs : elapsedMs)}
-          </span>
+        <div className="pill-control rounded-full bg-secondary font-mono text-muted-foreground">
+          <Clock3 size={11} />
+          {formatDuration(done ? finalDurationMs : elapsedMs)}
         </div>
 
         {!done && (
           <Button variant="destructive" size="sm" onClick={() => void handleCancel()}>
-            <Square size={12} /> Cancel
+            <Square size={12} />
+            Cancel
           </Button>
         )}
       </div>
 
-      {/* ── Step timeline ─────────────────────────────────────────────────── */}
-      {stepLabels.length > 0 && (
-        <div className="shrink-0">
+      {showStepTimeline && (
+        <div className="rounded-[24px] border border-border bg-card px-5 py-4">
+          <div className="mb-4 flex items-center gap-2">
+            <Activity size={14} className="text-primary" />
+            <p className="text-sm font-semibold text-foreground">Pipeline steps</p>
+          </div>
           <StepTimeline events={buildEvents} stepLabels={stepLabels} />
         </div>
       )}
 
-      {/* ── WebSocket error ───────────────────────────────────────────────── */}
       {error && (
-        <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive text-sm shrink-0 flex items-center gap-2">
+        <div className="flex items-center gap-3 rounded-[24px] border border-destructive/20 bg-card px-5 py-4 text-sm text-destructive">
           <XCircle size={14} className="shrink-0" />
           {error}
         </div>
       )}
 
-      {/* ── Completion summary banner ─────────────────────────────────────── */}
       {done && runDoneEvent?.type === 'run:done' && (
         <div
           className={cn(
-            'shrink-0 rounded-lg border px-4 py-3 flex items-center gap-3',
-            isSuccess
-              ? 'border-success/30 bg-success/10'
-              : 'border-destructive/30 bg-destructive/10',
+            'flex flex-wrap items-center gap-3 rounded-[24px] border bg-card px-5 py-4',
+            isSuccess ? 'border-success/20' : 'border-destructive/20',
           )}
         >
           {isSuccess ? (
-            <CheckCircle2 size={16} className="text-success shrink-0" />
+            <CheckCircle2 size={16} className="text-success" />
           ) : (
-            <XCircle size={16} className="text-destructive shrink-0" />
+            <XCircle size={16} className="text-destructive" />
           )}
 
-          <div className="flex-1 min-w-0">
-            <span
-              className={cn(
-                'text-sm font-medium',
-                isSuccess ? 'text-success' : 'text-destructive',
-              )}
-            >
+          <div className="min-w-0 flex-1">
+            <p className={cn('text-sm font-semibold', isSuccess ? 'text-success' : 'text-destructive')}>
               {isSuccess ? 'Build completed successfully' : 'Build failed'}
-            </span>
+            </p>
             {runDoneEvent.result.stoppedAt != null && (
-              <span className="text-xs text-muted-foreground ml-2">
-                · stopped at step {runDoneEvent.result.stoppedAt + 1}
-              </span>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Stopped at step {runDoneEvent.result.stoppedAt + 1}
+              </p>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono shrink-0">
-            <Clock size={11} />
+          <div className="pill-control rounded-full bg-secondary font-mono text-muted-foreground">
             {formatDuration(runDoneEvent.result.durationMs)}
           </div>
 
-          {/* Per-step pass/fail summary */}
           {runDoneEvent.result.results.length > 0 && (
-            <div className="flex items-center gap-1.5 text-xs shrink-0">
+            <div className="flex items-center gap-2 text-xs">
               <span className="text-success">
-                {runDoneEvent.result.results.filter((r) => r.success).length} passed
+                {runDoneEvent.result.results.filter((result) => result.success).length} passed
               </span>
-              {runDoneEvent.result.results.some((r) => !r.success) && (
-                <>
-                  <span className="text-muted-foreground">/</span>
-                  <span className="text-destructive">
-                    {runDoneEvent.result.results.filter((r) => !r.success).length} failed
-                  </span>
-                </>
+              {runDoneEvent.result.results.some((result) => !result.success) && (
+                <span className="text-destructive">
+                  {runDoneEvent.result.results.filter((result) => !result.success).length} failed
+                </span>
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* ── Build output ──────────────────────────────────────────────────── */}
-      <BuildOutput events={buildEvents} isRunning={!done} />
+      <div className="min-h-0 flex-1">
+        <BuildOutput events={buildEvents} isRunning={!done} />
+      </div>
     </div>
   );
 }

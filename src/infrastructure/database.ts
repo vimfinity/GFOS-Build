@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 CREATE TABLE IF NOT EXISTS build_runs (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id        TEXT,
   project_path  TEXT    NOT NULL,
   project_name  TEXT    NOT NULL,
   build_system  TEXT    NOT NULL DEFAULT 'maven',
@@ -46,6 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_build_logs_run_id ON build_logs(run_id);
 `;
 
 export interface StartBuildRunParams {
+  jobId?: string;
   projectPath: string;
   projectName: string;
   buildSystem: string;
@@ -64,6 +66,7 @@ export interface FinishBuildRunParams {
 
 export interface BuildRunRow {
   id: number;
+  job_id: string | null;
   project_path: string;
   project_name: string;
   build_system: string;
@@ -92,6 +95,7 @@ export interface BuildStats {
 export interface IDatabase {
   startBuildRun(params: StartBuildRunParams): number;
   finishBuildRun(params: FinishBuildRunParams): void;
+  reconcileRunningBuilds(activeJobIds: string[], staleAfterMs?: number): void;
   getPipelineState(pipelineName: string): { last_failed_step: number | null } | null;
   upsertPipelineState(pipelineName: string, lastFailedStep: number | null): void;
   getScanCache(cacheKey: string, ttlMs: number): Project[] | null;
@@ -119,6 +123,10 @@ export class AppDatabase implements IDatabase {
 
   private migrate(): void {
     this.db.exec(SCHEMA_SQL);
+    const columns = this.db.prepare('PRAGMA table_info(build_runs)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'job_id')) {
+      this.db.exec('ALTER TABLE build_runs ADD COLUMN job_id TEXT');
+    }
     const row = this.db
       .prepare('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')
       .get() as { version: number } | undefined;
@@ -132,10 +140,11 @@ export class AppDatabase implements IDatabase {
     this.db
       .prepare(
         `INSERT INTO build_runs
-          (project_path, project_name, build_system, command, java_home, pipeline_name, step_index, started_at, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running')`,
+          (job_id, project_path, project_name, build_system, command, java_home, pipeline_name, step_index, started_at, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')`,
       )
       .run(
+        params.jobId ?? null,
         params.projectPath,
         params.projectName,
         params.buildSystem,
@@ -152,6 +161,29 @@ export class AppDatabase implements IDatabase {
     this.db
       .prepare('UPDATE build_runs SET finished_at = ?, duration_ms = ?, exit_code = ?, status = ? WHERE id = ?')
       .run(new Date().toISOString(), params.durationMs, params.exitCode, params.status, params.id);
+  }
+
+  reconcileRunningBuilds(activeJobIds: string[], staleAfterMs = 30_000): void {
+    const now = new Date();
+    const finishedAt = now.toISOString();
+    const staleBefore = new Date(now.getTime() - staleAfterMs).toISOString();
+    const activeClause =
+      activeJobIds.length > 0
+        ? `job_id IS NULL OR job_id NOT IN (${activeJobIds.map(() => '?').join(', ')})`
+        : '1 = 1';
+
+    this.db
+      .prepare(
+        `UPDATE build_runs
+         SET finished_at = ?,
+             duration_ms = CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER),
+             exit_code = COALESCE(exit_code, 1),
+             status = 'failed'
+         WHERE status = 'running'
+           AND started_at <= ?
+           AND (${activeClause})`,
+      )
+      .run(finishedAt, finishedAt, staleBefore, ...activeJobIds);
   }
 
   getPipelineState(pipelineName: string): { last_failed_step: number | null } | null {
@@ -201,7 +233,7 @@ export class AppDatabase implements IDatabase {
   }
 
   getRecentBuilds(opts: { limit: number; pipeline?: string; project?: string }): BuildRunRow[] {
-    const SELECT = `SELECT id, project_path, project_name, build_system, command, java_home,
+    const SELECT = `SELECT id, job_id, project_path, project_name, build_system, command, java_home,
                 pipeline_name, step_index, started_at, finished_at, duration_ms, exit_code, status
          FROM build_runs`;
     if (opts.pipeline) {

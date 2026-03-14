@@ -8,7 +8,12 @@ export class PipelineRunner {
     private readonly db: IDatabase,
   ) {}
 
-  async *run(pipeline: Pipeline, fromIndex = 0): AsyncGenerator<BuildEvent> {
+  async *run(
+    pipeline: Pipeline,
+    fromIndex = 0,
+    jobId?: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<BuildEvent> {
     const startTime = Date.now();
     const results: BuildStepResult[] = [];
     const stepsToRun = pipeline.steps.slice(fromIndex);
@@ -22,11 +27,15 @@ export class PipelineRunner {
 
       let stepRunId: number | undefined;
       try {
-        const command = [step.mavenExecutable, ...step.goals, ...step.flags].join(' ');
+        const command =
+          step.buildSystem === 'npm'
+            ? [step.npmExecutable ?? 'npm', 'run', step.npmScript ?? 'build'].join(' ')
+            : [step.mavenExecutable, ...step.goals, ...step.flags].join(' ');
         stepRunId = this.db.startBuildRun({
+          jobId,
           projectPath: step.path,
           projectName: step.label,
-          buildSystem: 'maven',
+          buildSystem: step.buildSystem,
           command,
           javaHome: step.javaHome,
           pipelineName: pipeline.name,
@@ -36,7 +45,7 @@ export class PipelineRunner {
         // non-fatal DB error
       }
 
-      for await (const event of this.buildRunner.run(step, displayIndex, total, pipeline.name)) {
+      for await (const event of this.buildRunner.run(step, displayIndex, total, pipeline.name, signal)) {
         if (event.type === 'step:start' && stepRunId !== undefined) {
           yield { ...event, runId: stepRunId };
         } else {

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { cn } from '@/lib/utils';
 import { AnsiLine } from '@/lib/ansi';
 import type { BuildEvent } from '@shared/types';
@@ -48,26 +47,30 @@ export function BuildOutput({
   showLineNumbers = false,
 }: BuildOutputProps) {
   const lines = extractLines(events);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [copied, setCopied] = useState(false);
 
   // Auto-scroll when new lines arrive, as long as the user hasn't scrolled up
   useEffect(() => {
-    if (isRunning && atBottom && lines.length > 0) {
-      virtuosoRef.current?.scrollToIndex({
-        index: lines.length - 1,
-        behavior: 'auto',
-      });
+    if (isRunning && atBottom && lines.length > 0 && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [lines.length, isRunning, atBottom]);
 
   const scrollToBottom = useCallback(() => {
-    virtuosoRef.current?.scrollToIndex({
-      index: lines.length - 1,
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
       behavior: 'smooth',
     });
-  }, [lines.length]);
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    setAtBottom(distanceFromBottom < 24);
+  }, []);
 
   async function handleCopyAll() {
     // Strip ANSI before copying to clipboard — keep only the raw text
@@ -81,11 +84,11 @@ export function BuildOutput({
   if (lines.length === 0) {
     return (
       <div
-        className="flex-1 flex items-center justify-center rounded-lg border border-zinc-800"
-        style={{ backgroundColor: '#0d1117' }}
+        className="flex h-full min-h-0 flex-1 items-center justify-center rounded-[24px] border border-zinc-800/70"
+        style={{ backgroundColor: 'var(--terminal-bg)', borderColor: 'var(--terminal-border)' }}
       >
-        <span className="text-zinc-600 text-sm font-mono">
-          {isRunning ? 'Starting build…' : 'No output'}
+        <span className="text-sm font-mono" style={{ color: 'var(--terminal-muted)' }}>
+          {isRunning ? 'Starting build...' : 'No output'}
         </span>
       </div>
     );
@@ -94,21 +97,26 @@ export function BuildOutput({
   // ── Output view ──────────────────────────────────────────────────────────
   return (
     <div
-      className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden relative"
-      style={{ backgroundColor: '#0d1117' }}
+      className="relative h-full min-h-0 flex-1 overflow-hidden rounded-[24px] border border-zinc-800/70"
+      style={{ backgroundColor: 'var(--terminal-bg)', borderColor: 'var(--terminal-border)' }}
     >
       {/* ── Toolbar (top-right overlay) ─────────────────────────────────── */}
       <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
         <button
           onClick={() => void handleCopyAll()}
-          title="Copy all output"
           className={cn(
             'flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all',
-            'bg-zinc-800/80 backdrop-blur-sm border border-zinc-700/60',
+            'backdrop-blur-sm border rounded-full',
+            'focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
             copied
-              ? 'text-emerald-400 border-emerald-700/50'
-              : 'text-zinc-400 hover:text-zinc-200 hover:border-zinc-600',
+              ? 'text-emerald-500'
+              : 'hover:opacity-100',
           )}
+          style={{
+            backgroundColor: 'var(--terminal-toolbar-bg)',
+            borderColor: copied ? 'rgb(22 163 74 / 0.35)' : 'var(--terminal-toolbar-border)',
+            color: copied ? undefined : 'var(--terminal-toolbar-fg)',
+          }}
         >
           {copied ? (
             <>
@@ -125,20 +133,23 @@ export function BuildOutput({
       </div>
 
       {/* ── Virtualized line list ─────────────────────────────────────────── */}
-      <Virtuoso
-        ref={virtuosoRef}
-        data={lines}
-        style={{ height: '100%', backgroundColor: '#0d1117' }}
-        atBottomStateChange={setAtBottom}
-        atBottomThreshold={80}
-        itemContent={(index, item) => (
-          <OutputLineRow
-            index={index}
-            item={item}
-            showLineNumbers={showLineNumbers}
-          />
-        )}
-      />
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="h-full min-h-0 overflow-y-auto"
+        style={{ backgroundColor: 'var(--terminal-bg)' }}
+      >
+        <div className="min-h-full py-10">
+          {lines.map((item, index) => (
+            <OutputLineRow
+              key={`${index}-${item.stream}-${item.line}`}
+              index={index}
+              item={item}
+              showLineNumbers={showLineNumbers}
+            />
+          ))}
+        </div>
+      </div>
 
       {/* ── Scroll-to-bottom button ───────────────────────────────────────── */}
       {!atBottom && (
@@ -146,12 +157,15 @@ export function BuildOutput({
           onClick={scrollToBottom}
           className={cn(
             'absolute bottom-3 right-3 flex items-center gap-1.5',
-            'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-            'bg-zinc-800 hover:bg-zinc-700',
-            'border border-zinc-600/70 hover:border-zinc-500',
-            'text-zinc-300 hover:text-zinc-100',
+            'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
             'shadow-lg',
+            'focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
           )}
+          style={{
+            backgroundColor: 'var(--terminal-toolbar-bg)',
+            border: '1px solid var(--terminal-toolbar-border)',
+            color: 'var(--terminal-toolbar-fg)',
+          }}
         >
           <ChevronsDown size={12} />
           Scroll to bottom
@@ -167,29 +181,52 @@ export function BuildOutput({
 
 type MavenLevel = 'info' | 'warn' | 'error' | 'debug' | 'success' | 'failure';
 
+function isDarkTheme(): boolean {
+  if (typeof document === 'undefined') return true;
+  return document.documentElement.dataset.theme === 'dark';
+}
+
 const MAVEN_TAG_RE = /^\[(INFO|WARNING|WARN|ERROR|DEBUG|FATAL)\] /;
 
-const TAG_COLORS: Record<string, string> = {
-  INFO:    '#89b4fa',
-  WARNING: '#f9e2af',
-  WARN:    '#f9e2af',
-  ERROR:   '#f38ba8',
-  FATAL:   '#ff6e6e',
-  DEBUG:   '#7c7fa6',
-};
+function getTagColors(): Record<string, string> {
+  return isDarkTheme()
+    ? {
+        INFO: '#89b4fa',
+        WARNING: '#f9e2af',
+        WARN: '#f9e2af',
+        ERROR: '#f38ba8',
+        FATAL: '#ff6e6e',
+        DEBUG: '#7c7fa6',
+      }
+    : {
+        INFO: '#1d4ed8',
+        WARNING: '#a16207',
+        WARN: '#a16207',
+        ERROR: '#b91c1c',
+        FATAL: '#991b1b',
+        DEBUG: '#4b5563',
+      };
+}
 
-const KEYWORD_COLORS: Array<{ re: RegExp; color: string; bold?: boolean }> = [
-  { re: /BUILD SUCCESS/g, color: '#a6e3a1', bold: true },
-  { re: /BUILD FAILURE/g, color: '#f38ba8', bold: true },
-  { re: /BUILD SUCCESS/g, color: '#a6e3a1', bold: true },
-];
+function getKeywordColors(): Array<{ re: RegExp; color: string; bold?: boolean }> {
+  return isDarkTheme()
+    ? [
+        { re: /BUILD SUCCESS/g, color: '#a6e3a1', bold: true },
+        { re: /BUILD FAILURE/g, color: '#f38ba8', bold: true },
+      ]
+    : [
+        { re: /BUILD SUCCESS/g, color: '#166534', bold: true },
+        { re: /BUILD FAILURE/g, color: '#b91c1c', bold: true },
+      ];
+}
 
 // Splits text at keyword matches and returns JSX with the keywords colored.
 function renderWithKeywords(text: string): React.ReactNode {
   if (!text) return null;
   const stripped = text.replace(/\x1b\[[0-9;]*m/g, '');
+  const keywordColors = getKeywordColors();
 
-  for (const { re, color, bold } of KEYWORD_COLORS) {
+  for (const { re, color, bold } of keywordColors) {
     if (re.test(stripped)) {
       re.lastIndex = 0; // reset
       // Since Maven doesn't ANSI-encode these keywords, positions in stripped ≈ positions in raw text
@@ -226,7 +263,7 @@ function MavenAwareLine({ line }: { line: string }): React.ReactElement {
   if (tagMatch) {
     const rawTag  = tagMatch[1]!;         // e.g. "INFO"
     const bracket = `[${rawTag}]`;        // e.g. "[INFO]"
-    const tagColor = TAG_COLORS[rawTag] ?? '#89b4fa';
+    const tagColor = getTagColors()[rawTag] ?? (isDarkTheme() ? '#89b4fa' : '#1d4ed8');
 
     // The tag has no ANSI codes around it (Maven plain-text output), so the
     // index in `stripped` is the same as in the raw line.
@@ -269,14 +306,30 @@ function OutputLineRow({
 
   return (
     <div
-      className={cn(
-        'flex font-mono text-xs leading-5 whitespace-pre-wrap break-all',
-        isStderr && !accent && 'border-l-2 border-red-900/60 bg-red-950/10',
-        accent === 'error'   ? 'border-l-2 border-red-800/50 bg-red-950/10'  :
-        accent === 'warn'    ? 'border-l-2 border-amber-700/40'              :
-        accent === 'success' ? 'border-l-2 border-emerald-700/50'            :
-        null,
-      )}
+      className="flex font-mono text-xs leading-5 whitespace-pre-wrap break-all"
+      style={
+        accent === 'error'
+          ? {
+              borderLeft: '2px solid var(--terminal-row-error-border)',
+              backgroundColor: 'var(--terminal-row-error-bg)',
+            }
+          : accent === 'warn'
+            ? {
+                borderLeft: '2px solid var(--terminal-row-warn-border)',
+                backgroundColor: 'var(--terminal-row-warn-bg)',
+              }
+            : accent === 'success'
+              ? {
+                  borderLeft: '2px solid var(--terminal-row-success-border)',
+                  backgroundColor: 'var(--terminal-row-success-bg)',
+                }
+              : isStderr
+                ? {
+                    borderLeft: '2px solid var(--terminal-row-error-border)',
+                    backgroundColor: 'var(--terminal-row-error-bg)',
+                  }
+                : undefined
+      }
     >
       {/* ── Line number gutter ─────────────────────────────────────────── */}
       {showLineNumbers && (
@@ -285,8 +338,9 @@ function OutputLineRow({
           style={{
             width: '3.5rem',
             paddingLeft: '0.5rem',
-            backgroundColor: '#0d1117',
-            borderRight: '1px solid rgba(48,54,61,0.6)',
+            backgroundColor: 'var(--terminal-bg)',
+            borderRight: '1px solid var(--terminal-border)',
+            color: 'var(--terminal-muted)',
           }}
         >
           {index + 1}
@@ -296,9 +350,9 @@ function OutputLineRow({
       {/* ── Line content: Maven tag colored, rest uses AnsiLine ──────── */}
       <span
         className="flex-1 px-3 py-px"
-        style={{ color: isStderr ? '#fca5a5' : '#d1fae5' }}
+        style={{ color: isStderr ? 'var(--terminal-stderr)' : 'var(--terminal-fg)' }}
       >
-        <MavenAwareLine line={item.line} />
+        <MavenAwareLine line={item.line.length > 0 ? item.line : ' '} />
       </span>
 
     </div>

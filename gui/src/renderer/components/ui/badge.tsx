@@ -5,28 +5,30 @@ type BadgeVariant = 'default' | 'secondary' | 'success' | 'destructive' | 'warni
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
+  size?: 'control' | 'meta';
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
   default:
-    'bg-primary/15 text-primary border-primary/30',
+    'bg-primary/10 text-primary border-primary/20',
   secondary:
-    'bg-secondary text-secondary-foreground border-secondary',
+    'bg-secondary text-secondary-foreground border-secondary/80',
   success:
-    'bg-success/15 text-success border-success/30',
+    'bg-success/10 text-success border-success/20',
   destructive:
-    'bg-destructive/15 text-destructive border-destructive/30',
+    'bg-destructive/10 text-destructive border-destructive/20',
   warning:
-    'bg-warning/15 text-warning border-warning/30',
+    'bg-warning/10 text-warning border-warning/20',
   outline:
     'text-foreground border-border',
 };
 
-export function Badge({ variant = 'default', className, children, ...props }: BadgeProps) {
+export function Badge({ variant = 'default', size = 'control', className, children, ...props }: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors',
+        'border transition-colors',
+        size === 'control' ? 'pill-control' : 'pill-meta',
         variantStyles[variant],
         className,
       )}
@@ -40,6 +42,6 @@ export function Badge({ variant = 'default', className, children, ...props }: Ba
 export function StatusBadge({ status }: { status: string }) {
   if (status === 'success') return <Badge variant="success">Success</Badge>;
   if (status === 'failed') return <Badge variant="destructive">Failed</Badge>;
-  if (status === 'running') return <Badge variant="warning">Running</Badge>;
+  if (status === 'running') return <Badge variant="default">Running</Badge>;
   return <Badge variant="secondary">{status}</Badge>;
 }
