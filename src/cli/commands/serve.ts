@@ -22,6 +22,11 @@ interface ActiveJob {
   startedAt: number;
 }
 
+interface JobHistory {
+  frames: string[];
+  terminalFrame: string | null;
+}
+
 export interface ServeOptions {
   port: number;
   config: AppConfig;
@@ -58,7 +63,11 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
   const { db, scanner, buildRunner, pipelineRunner } = options;
   let currentConfig = options.config;
   const activeJobs = new Map<string, ActiveJob>();
+  const jobHistory = new Map<string, JobHistory>();
   const startTime = Date.now();
+  const MAX_JOB_HISTORY = 30;
+
+  db.reconcileRunningBuilds([]);
 
   /** Write current config to disk and return the updated config object. */
   function persistConfig(patch: Partial<AppConfig>): AppConfig {
@@ -73,6 +82,12 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
   const subscriptions = new Map<string, Set<WebSocket>>();
 
   function broadcast(channel: string, msg: string): void {
+    const history = jobHistory.get(channel);
+    if (history) {
+      const parsed = JSON.parse(msg) as { type: string };
+      if (parsed.type === 'done' || parsed.type === 'error') history.terminalFrame = msg;
+      else history.frames.push(msg);
+    }
     const subs = subscriptions.get(channel);
     if (!subs) return;
     for (const ws of subs) {
@@ -80,16 +95,24 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
     }
   }
 
-  function startJob(runner: () => AsyncGenerator<unknown>): string {
+  function startJob(runner: (jobId: string) => AsyncGenerator<unknown>): string {
     const jobId = randomUUID();
     const controller = new AbortController();
     const startedAt = Date.now();
     activeJobs.set(jobId, { controller, startedAt });
+    jobHistory.set(jobId, {
+      frames: [JSON.stringify({ type: 'event', jobId, event: { type: 'run:start', startedAt } })],
+      terminalFrame: null,
+    });
+    if (jobHistory.size > MAX_JOB_HISTORY) {
+      const oldest = jobHistory.keys().next().value;
+      if (oldest) jobHistory.delete(oldest);
+    }
 
     void (async () => {
       try {
         broadcast(jobId, JSON.stringify({ type: 'event', jobId, event: { type: 'run:start', startedAt } }));
-        for await (const event of runner()) {
+        for await (const event of runner(jobId)) {
           broadcast(jobId, JSON.stringify({ type: 'event', jobId, event }));
         }
         broadcast(jobId, JSON.stringify({ type: 'done', jobId }));
@@ -132,9 +155,11 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
         steps: pc.steps.map((s) => ({
           label: s.label ?? path.basename(s.path.replace(/^[^:]+:/, '')),
           path: s.path,
-          goals: s.goals ?? currentConfig.maven.defaultGoals,
-          flags: s.flags ?? currentConfig.maven.defaultFlags,
+          buildSystem: s.buildSystem ?? 'maven',
+          goals: s.buildSystem === 'npm' ? [] : (s.goals ?? currentConfig.maven.defaultGoals),
+          flags: s.buildSystem === 'npm' ? [] : (s.flags ?? currentConfig.maven.defaultFlags),
           mavenExecutable: s.maven ?? currentConfig.maven.executable,
+          npmScript: s.buildSystem === 'npm' ? (s.npmScript ?? currentConfig.npm.defaultBuildScript) : undefined,
           javaVersion: s.javaVersion,
           javaHome: undefined,
         })),
@@ -179,6 +204,7 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
 
     // GET /api/builds
     if (req.method === 'GET' && pathname === '/api/builds') {
+      db.reconcileRunningBuilds([...activeJobs.keys()]);
       const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50', 10), 500);
       const pipeline = url.searchParams.get('pipeline') ?? undefined;
       const project = url.searchParams.get('project') ?? undefined;
@@ -216,8 +242,9 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
         fromIndex = isNaN(n) ? 0 : Math.max(0, n - 1);
       }
 
-      const jobId = startJob(async function* () {
-        for await (const event of pipelineRunner.run(pipeline, fromIndex)) {
+      const jobId = startJob(async function* (jobId) {
+        const activeJob = activeJobs.get(jobId);
+        for await (const event of pipelineRunner.run(pipeline, fromIndex, jobId, activeJob?.controller.signal)) {
           yield event;
         }
       });
@@ -226,42 +253,68 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
 
     // POST /api/build
     if (req.method === 'POST' && pathname === '/api/build') {
-      let body: { path?: string; goals?: string[]; flags?: string[]; java?: string; maven?: string } = {};
+      let body: {
+        path?: string;
+        buildSystem?: 'maven' | 'npm';
+        goals?: string[];
+        flags?: string[];
+        java?: string;
+        maven?: string;
+        npmScript?: string;
+      } = {};
       try { body = (await req.json()) as typeof body; } catch { /* no body */ }
       if (!body.path) return badRequest('path is required');
 
       const resolvedPath = resolveStepPath(body.path, currentConfig.roots);
+      const buildSystem = body.buildSystem ?? 'maven';
       const goals = body.goals ?? currentConfig.maven.defaultGoals;
       const flags = body.flags ?? currentConfig.maven.defaultFlags;
       const mavenExecutable = body.maven ?? currentConfig.maven.executable;
-      const javaHome = resolveJavaHome(currentConfig, body.java);
+      const javaHome = buildSystem === 'maven' ? resolveJavaHome(currentConfig, body.java) : undefined;
 
-      const step: BuildStep = {
-        path: resolvedPath,
-        goals,
-        flags,
-        buildSystem: 'maven',
-        label: path.basename(resolvedPath),
-        mavenExecutable,
-        javaVersion: body.java,
-        javaHome,
-      };
+      const step: BuildStep =
+        buildSystem === 'npm'
+          ? {
+              path: resolvedPath,
+              goals: [],
+              flags: [],
+              buildSystem: 'npm',
+              label: path.basename(resolvedPath),
+              mavenExecutable: currentConfig.maven.executable,
+              npmExecutable: currentConfig.npm.executable,
+              npmScript: body.npmScript ?? currentConfig.npm.defaultBuildScript,
+            }
+          : {
+              path: resolvedPath,
+              goals,
+              flags,
+              buildSystem: 'maven',
+              label: path.basename(resolvedPath),
+              mavenExecutable,
+              javaVersion: body.java,
+              javaHome,
+            };
 
-      const jobId = startJob(async function* () {
+      const jobId = startJob(async function* (jobId) {
         let runId: number | undefined;
+        const activeJob = activeJobs.get(jobId);
         try {
-          const command = [mavenExecutable, ...goals, ...flags].join(' ');
+          const command =
+            step.buildSystem === 'npm'
+              ? [step.npmExecutable ?? 'npm', 'run', step.npmScript ?? 'build'].join(' ')
+              : [mavenExecutable, ...goals, ...flags].join(' ');
           runId = db.startBuildRun({
+            jobId,
             projectPath: resolvedPath,
             projectName: step.label,
-            buildSystem: 'maven',
+            buildSystem: step.buildSystem,
             command,
             javaHome: step.javaHome,
           });
         } catch { /* non-fatal DB error */ }
 
         let logSeq = 0;
-        for await (const event of buildRunner.run(step, 0, 1)) {
+        for await (const event of buildRunner.run(step, 0, 1, undefined, activeJob?.controller.signal)) {
           if (event.type === 'step:start' && runId !== undefined) {
             yield { ...event, runId };
           } else {
@@ -407,10 +460,10 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
           if (!subscriptions.has(msg.jobId)) subscriptions.set(msg.jobId, new Set());
           subscriptions.get(msg.jobId)!.add(ws);
           joined.add(msg.jobId);
-          // Replay run:start so late-joining clients get the correct server timestamp
-          const activeJob = activeJobs.get(msg.jobId);
-          if (activeJob && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'event', jobId: msg.jobId, event: { type: 'run:start', startedAt: activeJob.startedAt } }));
+          const history = jobHistory.get(msg.jobId);
+          if (history && ws.readyState === WebSocket.OPEN) {
+            for (const frame of history.frames) ws.send(frame);
+            if (history.terminalFrame) ws.send(history.terminalFrame);
           }
         } else if (msg.type === 'unsubscribe' && msg.jobId) {
           subscriptions.get(msg.jobId)?.delete(ws);

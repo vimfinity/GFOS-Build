@@ -11,24 +11,24 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   default:
-    'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
+    'rounded-full bg-primary text-primary-foreground shadow-[0_1px_2px_rgb(0_0_0_/_0.05)] hover:bg-primary/92 active:bg-primary/86',
   secondary:
-    'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
+    'rounded-full bg-secondary text-secondary-foreground hover:bg-accent active:bg-accent/80',
   ghost:
-    'hover:bg-accent hover:text-accent-foreground',
+    'rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground active:bg-accent/90',
   destructive:
-    'bg-destructive/15 text-destructive shadow-xs hover:bg-destructive/25 border-destructive/30',
+    'rounded-full border border-destructive/25 bg-destructive/10 text-destructive hover:bg-destructive/15 active:bg-destructive/20',
   outline:
-    'border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground',
+    'rounded-full border border-input bg-card/80 text-foreground shadow-[0_1px_2px_rgb(0_0_0_/_0.03)] hover:bg-accent active:bg-accent/80',
   link:
     'text-primary underline-offset-4 hover:underline',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: 'h-8 rounded-md px-3 text-xs gap-1.5',
-  default: 'h-9 rounded-md px-4 py-2 text-sm',
-  lg: 'h-10 rounded-md px-6 text-sm',
-  icon: 'h-9 w-9 rounded-md',
+  sm: 'h-9 px-4 text-[13px] gap-1.5',
+  default: 'h-10 px-5 py-2 text-sm',
+  lg: 'h-11 px-6 text-sm',
+  icon: 'h-9 w-9',
 };
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -37,8 +37,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         className={cn(
           'inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium',
-          'transition-colors duration-150 cursor-pointer',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          'cursor-pointer transition-colors duration-150',
+          'outline-none focus:outline-none focus-visible:outline-none focus-visible:[box-shadow:0_0_0_1px_var(--color-ring),0_0_0_4px_color-mix(in_oklab,var(--color-ring)_18%,transparent),inset_0_0_0_1px_color-mix(in_oklab,var(--color-foreground)_10%,transparent)]',
           'disabled:pointer-events-none disabled:opacity-50',
           variantStyles[variant],
           sizeStyles[size],

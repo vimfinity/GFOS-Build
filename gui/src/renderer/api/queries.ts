@@ -119,7 +119,14 @@ export function useRefreshScan() {
 
 export function useAdHocBuild() {
   return useMutation({
-    mutationFn: (body: { path: string; goals?: string[]; flags?: string[]; java?: string }) =>
+    mutationFn: (body: {
+      path: string;
+      buildSystem: 'maven' | 'npm';
+      goals?: string[];
+      flags?: string[];
+      java?: string;
+      npmScript?: string;
+    }) =>
       apiPost<StartJobResponse>('/api/build', body),
   });
 }

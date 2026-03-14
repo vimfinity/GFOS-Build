@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 export function SkeletonRow({ width, className }: { width?: string; className?: string }) {
   return (
-    <div className={cn('h-4 rounded-md bg-border/60 animate-pulse', width ?? 'w-full', className)} />
+    <div className={cn('h-4 rounded-full bg-border/80 animate-pulse', width ?? 'w-full', className)} />
   );
 }
 
@@ -18,7 +18,7 @@ export function SkeletonRows({ count = 3, className }: { count?: number; classNa
 
 export function SkeletonCard({ className }: { className?: string }) {
   return (
-    <div className={cn('rounded-lg border border-border bg-card p-4 flex flex-col gap-3', className)}>
+    <div className={cn('glass-card rounded-[18px] border border-border p-5 flex flex-col gap-3', className)}>
       <SkeletonRow width="w-1/3" />
       <SkeletonRow width="w-2/3" />
       <SkeletonRow width="w-1/2" />

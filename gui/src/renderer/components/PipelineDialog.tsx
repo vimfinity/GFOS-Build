@@ -3,21 +3,21 @@ import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2 } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2, Check } from 'lucide-react';
 import type { PipelineStep } from '@shared/api';
 import type { Project } from '@shared/types';
 import { pickDirectory } from '@/api/bridge';
 import { scanQuery, configQuery } from '@/api/queries';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface StepFormData {
   label: string;
   path: string;
-  goals: string;
-  flags: string;
   buildSystem: 'maven' | 'npm';
+  mavenGoals: string;
+  mavenFlags: string;
+  npmScript: string;
   javaVersion: string;
 }
 
@@ -36,20 +36,27 @@ interface PipelineDialogProps {
   mode: 'create' | 'edit';
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function emptyStep(): StepFormData {
-  return { label: '', path: '', goals: 'clean install', flags: '', buildSystem: 'maven', javaVersion: '' };
+function createEmptyStep(mavenGoals: string, npmScript: string): StepFormData {
+  return {
+    label: '',
+    path: '',
+    buildSystem: 'maven',
+    mavenGoals: mavenGoals || 'clean install',
+    mavenFlags: '',
+    npmScript: npmScript || 'build',
+    javaVersion: '',
+  };
 }
 
-function fromApiStep(s: PipelineStep): StepFormData {
+function fromApiStep(step: PipelineStep, mavenGoals: string, npmScript: string): StepFormData {
   return {
-    label: s.label,
-    path: s.path,
-    goals: s.goals.join(' '),
-    flags: s.flags.join(' '),
-    buildSystem: 'maven',
-    javaVersion: s.javaVersion ?? '',
+    label: step.label,
+    path: step.path,
+    buildSystem: step.buildSystem ?? 'maven',
+    mavenGoals: step.goals.join(' ') || mavenGoals || 'clean install',
+    mavenFlags: step.flags.join(' '),
+    npmScript: step.npmScript ?? npmScript ?? 'build',
+    javaVersion: step.javaVersion ?? '',
   };
 }
 
@@ -61,8 +68,6 @@ function getRelativePath(project: Project, roots: Record<string, string>): strin
   return norm.startsWith(rootNorm) ? norm.slice(rootNorm.length + 1) : project.path;
 }
 
-// ─── Build system toggle ──────────────────────────────────────────────────────
-
 function BuildSystemToggle({
   value,
   onChange,
@@ -71,17 +76,16 @@ function BuildSystemToggle({
   onChange: (v: 'maven' | 'npm') => void;
 }) {
   return (
-    <div className="flex rounded-md border border-border overflow-hidden shrink-0" style={{ width: 100 }}>
+    <div className="segmented-control">
       {(['maven', 'npm'] as const).map((sys) => (
         <button
           key={sys}
           type="button"
+          aria-pressed={value === sys}
           onClick={() => onChange(sys)}
           className={cn(
-            'flex-1 text-xs py-1.5 font-medium transition-colors',
-            value === sys
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+            'segmented-control-button',
+            value === sys && 'is-active',
           )}
         >
           {sys === 'maven' ? 'Maven' : 'npm'}
@@ -90,8 +94,6 @@ function BuildSystemToggle({
     </div>
   );
 }
-
-// ─── Java version select ──────────────────────────────────────────────────────
 
 function JavaVersionSelect({
   value,
@@ -106,7 +108,7 @@ function JavaVersionSelect({
   if (jdkVersions.length === 0) {
     return (
       <Input
-        label="Java version (optional)"
+        label="Java version"
         placeholder="e.g. 17"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -116,16 +118,18 @@ function JavaVersionSelect({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground">Java version</label>
+      <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        Java version
+      </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        className="field-select h-11 rounded-2xl border px-4 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
       >
         <option value="">Default</option>
-        {jdkVersions.map((v) => (
-          <option key={v} value={v}>
-            Java {v}
+        {jdkVersions.map((version) => (
+          <option key={version} value={version}>
+            Java {version}
           </option>
         ))}
       </select>
@@ -133,14 +137,14 @@ function JavaVersionSelect({
   );
 }
 
-// ─── Project path picker ──────────────────────────────────────────────────────
-
 function ProjectPathPicker({
   value,
   onChange,
+  onProjectSelect,
 }: {
   value: string;
   onChange: (v: string) => void;
+  onProjectSelect?: (project: Project) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -151,10 +155,9 @@ function ProjectPathPicker({
   const { data: configData } = useQuery(configQuery);
   const roots = configData?.config.roots ?? {};
 
-  // Display value: matched project name + location, or raw path
   const displayValue = useMemo(() => {
     if (!value) return '';
-    const match = scanData?.projects.find((p) => p.path === value);
+    const match = scanData?.projects.find((project) => project.path === value);
     if (match) {
       const relPath = getRelativePath(match, roots);
       return `${match.name} (${match.rootName}:${relPath})`;
@@ -162,26 +165,25 @@ function ProjectPathPicker({
     return value;
   }, [value, scanData, roots]);
 
-  // Filtered projects for dropdown
   const filtered = useMemo(() => {
     if (!scanData?.projects) return [];
     if (!query.trim()) return scanData.projects.slice(0, 20);
     const q = query.toLowerCase();
     return scanData.projects
       .filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.path.toLowerCase().includes(q) ||
-          (p.maven?.artifactId ?? '').toLowerCase().includes(q),
+        (project) =>
+          project.name.toLowerCase().includes(q) ||
+          project.path.toLowerCase().includes(q) ||
+          (project.maven?.artifactId ?? '').toLowerCase().includes(q) ||
+          (project.npm?.name ?? '').toLowerCase().includes(q),
       )
       .slice(0, 30);
   }, [scanData, query]);
 
-  // Close when clicking outside the picker
   useEffect(() => {
     if (!open) return;
-    function onPointerDown(e: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    function onPointerDown(event: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false);
         setQuery('');
       }
@@ -190,8 +192,8 @@ function ProjectPathPicker({
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
-  async function handleBrowse(e: React.MouseEvent) {
-    e.preventDefault();
+  async function handleBrowse(event: React.MouseEvent) {
+    event.preventDefault();
     const dir = await pickDirectory();
     if (dir) {
       onChange(dir);
@@ -202,27 +204,26 @@ function ProjectPathPicker({
 
   function selectProject(project: Project) {
     onChange(project.path);
+    onProjectSelect?.(project);
     setOpen(false);
     setQuery('');
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Escape') {
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Escape') {
       setOpen(false);
       setQuery('');
       inputRef.current?.blur();
       return;
     }
-    if (e.key === 'Enter') {
-      e.preventDefault();
+    if (event.key === 'Enter') {
+      event.preventDefault();
       const trimmed = query.trim();
-      // If the typed text looks like an absolute path, commit it directly
       if (trimmed && /^([A-Za-z]:[/\\]|\/)/.test(trimmed)) {
         onChange(trimmed);
         setOpen(false);
         setQuery('');
       } else if (filtered.length > 0 && filtered[0]) {
-        // Otherwise select the first dropdown result
         selectProject(filtered[0]);
       }
     }
@@ -230,10 +231,11 @@ function ProjectPathPicker({
 
   return (
     <div ref={containerRef} className="flex flex-col gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground">Project path</label>
+      <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        Project path
+      </label>
       <div className="flex gap-2">
-        {/* Input + dropdown wrapper */}
-        <div className="relative flex-1 min-w-0">
+        <div className="relative min-w-0 flex-1">
           <input
             ref={inputRef}
             value={open ? query : displayValue}
@@ -243,20 +245,19 @@ function ProjectPathPicker({
               setQuery('');
             }}
             onKeyDown={handleKeyDown}
-            placeholder={open ? 'Search projects or type an absolute path…' : 'Select a project…'}
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring"
+            placeholder={open ? 'Search projects or type an absolute path...' : 'Select a project...'}
+            className="field-input h-11 w-full rounded-2xl border px-4 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
           />
 
-          {/* Dropdown */}
           {open && (
-            <div className="absolute top-full left-0 right-0 mt-1 z-50 max-h-60 overflow-auto rounded-md border border-border bg-background shadow-lg">
+            <div className="glass-card listbox-panel absolute left-0 right-0 top-full z-50 mt-2 max-h-60 overflow-auto">
               {scanLoading ? (
-                <div className="flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground">
-                  <Loader2 size={12} className="animate-spin shrink-0" />
-                  Loading projects…
+                <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+                  <Loader2 size={12} className="shrink-0 animate-spin" />
+                  Loading projects...
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="px-3 py-2.5 text-xs text-muted-foreground">
+                <div className="px-4 py-3 text-xs text-muted-foreground">
                   {query.trim() ? 'No matching projects' : 'No projects found'}
                 </div>
               ) : (
@@ -266,28 +267,25 @@ function ProjectPathPicker({
                     <button
                       key={project.path}
                       type="button"
-                      // Prevent the input from blurring before the click fires
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => selectProject(project)}
                       className={cn(
-                        'flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-accent transition-colors',
-                        value === project.path && 'bg-accent/50',
+                        'listbox-option transition-colors',
+                        value === project.path && 'is-active',
                       )}
                     >
                       <span
                         className={cn(
-                          'inline-flex items-center text-[10px] px-1.5 py-0 rounded font-semibold shrink-0 leading-[18px]',
+                          'pill-meta font-semibold',
                           project.buildSystem === 'maven'
-                            ? 'bg-primary/20 text-primary'
-                            : 'bg-emerald-500/20 text-emerald-400',
+                            ? 'bg-primary/10 text-primary'
+                            : 'bg-success/10 text-success',
                         )}
                       >
-                        {project.buildSystem === 'maven' ? 'mvn' : 'npm'}
+                        {project.buildSystem === 'maven' ? 'Maven' : 'npm'}
                       </span>
-                      <span className="text-sm font-medium text-foreground shrink-0">
-                        {project.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground font-mono truncate min-w-0">
+                      <span className="shrink-0 text-sm font-medium text-foreground">{project.name}</span>
+                      <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
                         {relPath}
                       </span>
                     </button>
@@ -298,23 +296,22 @@ function ProjectPathPicker({
           )}
         </div>
 
-        {/* Browse button */}
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="h-9 w-9 shrink-0"
-          onClick={(e) => void handleBrowse(e)}
-          title="Browse directory"
-        >
-          <FolderOpen size={14} />
-        </Button>
+        <Tooltip content="Browse directory" side="bottom">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 shrink-0"
+            onClick={(e) => void handleBrowse(e)}
+            aria-label="Browse directory"
+          >
+            <FolderOpen size={14} />
+          </Button>
+        </Tooltip>
       </div>
     </div>
   );
 }
-
-// ─── Step card ────────────────────────────────────────────────────────────────
 
 function StepCard({
   step,
@@ -324,108 +321,152 @@ function StepCard({
   onRemove,
   onMoveUp,
   onMoveDown,
+  defaultMavenGoals,
+  defaultNpmScript,
 }: {
   step: StepFormData;
   index: number;
   total: number;
-  onUpdate: (field: keyof StepFormData, value: string | boolean) => void;
+  onUpdate: (updater: (current: StepFormData) => StepFormData) => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  defaultMavenGoals: string;
+  defaultNpmScript: string;
 }) {
+  function handleBuildSystemChange(next: 'maven' | 'npm') {
+    onUpdate((current) => ({
+      ...current,
+      buildSystem: next,
+      mavenGoals: next === 'maven' && !current.mavenGoals ? defaultMavenGoals : current.mavenGoals,
+      npmScript: next === 'npm' && !current.npmScript ? defaultNpmScript : current.npmScript,
+    }));
+  }
+
+  function handleProjectSelect(project: Project) {
+    onUpdate((current) => ({
+      ...current,
+      path: project.path,
+      buildSystem: project.buildSystem,
+      npmScript:
+        project.buildSystem === 'npm' && !current.npmScript ? defaultNpmScript : current.npmScript,
+      mavenGoals:
+        project.buildSystem === 'maven' && !current.mavenGoals ? defaultMavenGoals : current.mavenGoals,
+    }));
+  }
+
   return (
-    <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-background/50">
-      {/* Step header */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-mono bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded shrink-0">
-          Step {index + 1}
-        </span>
-        <span className="flex-1 text-sm font-medium text-foreground/70 truncate select-none">
-          {step.label || <span className="italic text-muted-foreground/60">unlabelled</span>}
-        </span>
-        <div className="flex items-center gap-0.5 shrink-0">
-          <button
-            type="button"
-            onClick={onMoveUp}
-            disabled={index === 0}
-            className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-            title="Move up"
-          >
-            <ArrowUp size={12} />
-          </button>
-          <button
-            type="button"
-            onClick={onMoveDown}
-            disabled={index === total - 1}
-            className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-            title="Move down"
-          >
-            <ArrowDown size={12} />
-          </button>
-          <button
-            type="button"
-            onClick={onRemove}
-            disabled={total === 1}
-            className="p-1 rounded text-destructive/70 hover:text-destructive disabled:opacity-25 disabled:cursor-not-allowed transition-colors ml-1"
-            title="Remove step"
-          >
-            <Trash2 size={13} />
-          </button>
+    <div className="rounded-[24px] border border-border bg-secondary/35 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="pill-meta rounded-full bg-card font-mono text-muted-foreground">
+              Step {index + 1}
+            </span>
+            <span className="pill-meta rounded-full bg-secondary text-muted-foreground">
+              {step.buildSystem === 'maven' ? 'Maven' : 'npm'}
+            </span>
+          </div>
+          <p className="mt-2 truncate text-sm font-medium text-foreground">
+            {step.label || 'Untitled step'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Tooltip content="Move up" side="bottom" disabled={index === 0}>
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={index === 0}
+              className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-25"
+              aria-label="Move step up"
+            >
+              <ArrowUp size={12} />
+            </button>
+          </Tooltip>
+          <Tooltip content="Move down" side="bottom" disabled={index === total - 1}>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={index === total - 1}
+              className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-25"
+              aria-label="Move step down"
+            >
+              <ArrowDown size={12} />
+            </button>
+          </Tooltip>
+          <Tooltip content="Remove step" side="bottom" disabled={total === 1}>
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={total === 1}
+              className="rounded-full p-2 text-destructive/70 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-25"
+              aria-label="Remove step"
+            >
+              <Trash2 size={13} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
-      {/* Row 1: Label + Build system */}
-      <div className="flex gap-3 items-end">
-        <div className="flex-1 min-w-0">
+      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <Input
+          label="Label"
+          placeholder="e.g. web-app"
+          value={step.label}
+          onChange={(e) => onUpdate((current) => ({ ...current, label: e.target.value }))}
+        />
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Build system
+          </span>
+          <BuildSystemToggle value={step.buildSystem} onChange={handleBuildSystemChange} />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <ProjectPathPicker
+          value={step.path}
+          onChange={(value) => onUpdate((current) => ({ ...current, path: value }))}
+          onProjectSelect={handleProjectSelect}
+        />
+      </div>
+
+      {step.buildSystem === 'maven' ? (
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px] lg:items-end">
           <Input
-            label="Label"
-            placeholder="e.g. shared-core"
-            value={step.label}
-            onChange={(e) => onUpdate('label', e.target.value)}
+            label="Goals"
+            placeholder="e.g. clean install"
+            value={step.mavenGoals}
+            onChange={(e) => onUpdate((current) => ({ ...current, mavenGoals: e.target.value }))}
           />
-        </div>
-        <div className="flex flex-col gap-1 shrink-0">
-          <span className="text-xs text-muted-foreground font-medium">Build system</span>
-          <BuildSystemToggle value={step.buildSystem} onChange={(v) => onUpdate('buildSystem', v)} />
-        </div>
-      </div>
-
-      {/* Row 2: Project path picker */}
-      <ProjectPathPicker
-        value={step.path}
-        onChange={(v) => onUpdate('path', v)}
-      />
-
-      {/* Row 3: Goals + Flags */}
-      <div className="grid grid-cols-2 gap-3">
-        <Input
-          label="Goals"
-          placeholder="e.g. clean install"
-          value={step.goals}
-          onChange={(e) => onUpdate('goals', e.target.value)}
-        />
-        <Input
-          label="Flags (optional)"
-          placeholder="e.g. -DskipTests -T4"
-          value={step.flags}
-          onChange={(e) => onUpdate('flags', e.target.value)}
-        />
-      </div>
-
-      {/* Row 4 (Maven only): Java version */}
-      {step.buildSystem === 'maven' && (
-        <div className="max-w-[200px]">
+          <Input
+            label="Flags"
+            placeholder="e.g. -DskipTests -T4"
+            value={step.mavenFlags}
+            onChange={(e) => onUpdate((current) => ({ ...current, mavenFlags: e.target.value }))}
+          />
           <JavaVersionSelect
             value={step.javaVersion}
-            onChange={(v) => onUpdate('javaVersion', v)}
+            onChange={(value) => onUpdate((current) => ({ ...current, javaVersion: value }))}
           />
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)] lg:items-end">
+          <Input
+            label="Script"
+            placeholder="e.g. build"
+            value={step.npmScript}
+            onChange={(e) => onUpdate((current) => ({ ...current, npmScript: e.target.value }))}
+          />
+          <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
+            npm steps run `npm run &lt;script&gt;`.
+          </div>
         </div>
       )}
     </div>
   );
 }
-
-// ─── Pipeline dialog ──────────────────────────────────────────────────────────
 
 export function PipelineDialog({
   open,
@@ -434,42 +475,52 @@ export function PipelineDialog({
   onSave,
   mode,
 }: PipelineDialogProps) {
+  const { data: configData } = useQuery(configQuery);
+  const defaultMavenGoals = configData?.config.maven.defaultGoals.join(' ') ?? 'clean install';
+  const defaultNpmScript = configData?.config.npm.defaultBuildScript ?? 'build';
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [failFast, setFailFast] = useState(true);
-  const [steps, setSteps] = useState<StepFormData[]>([emptyStep()]);
+  const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals, defaultNpmScript)]);
 
   useEffect(() => {
-    if (open && initialData) {
+    if (!open) return;
+    if (initialData) {
       setName(initialData.name);
       setDescription(initialData.description ?? '');
       setFailFast(initialData.failFast);
-      setSteps(initialData.steps.length > 0 ? initialData.steps.map(fromApiStep) : [emptyStep()]);
-    } else if (open && !initialData) {
-      setName('');
-      setDescription('');
-      setFailFast(true);
-      setSteps([emptyStep()]);
+      setSteps(
+        initialData.steps.length > 0
+          ? initialData.steps.map((step) => fromApiStep(step, defaultMavenGoals, defaultNpmScript))
+          : [createEmptyStep(defaultMavenGoals, defaultNpmScript)],
+      );
+      return;
     }
-  }, [open, initialData]);
+
+    setName('');
+    setDescription('');
+    setFailFast(true);
+    setSteps([createEmptyStep(defaultMavenGoals, defaultNpmScript)]);
+  }, [open, initialData, defaultMavenGoals, defaultNpmScript]);
 
   function addStep() {
-    setSteps((s) => [...s, emptyStep()]);
+    setSteps((current) => [...current, createEmptyStep(defaultMavenGoals, defaultNpmScript)]);
   }
 
   function removeStep(index: number) {
-    setSteps((s) => s.filter((_, i) => i !== index));
+    setSteps((current) => current.filter((_, i) => i !== index));
   }
 
-  function updateStep(index: number, field: keyof StepFormData, value: string | boolean) {
-    setSteps((s) => s.map((step, i) => (i === index ? { ...step, [field]: value } : step)));
+  function updateStep(index: number, updater: (current: StepFormData) => StepFormData) {
+    setSteps((current) => current.map((step, i) => (i === index ? updater(step) : step)));
   }
 
   function moveStep(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= steps.length) return;
-    setSteps((s) => {
-      const copy = [...s];
+    setSteps((current) => {
+      const copy = [...current];
       [copy[index], copy[target]] = [copy[target]!, copy[index]!];
       return copy;
     });
@@ -481,21 +532,25 @@ export function PipelineDialog({
   }
 
   const canSave =
-    name.trim().length > 0 && steps.length > 0 && steps.every((s) => s.path.trim());
+    name.trim().length > 0 &&
+    steps.length > 0 &&
+    steps.every((step) => {
+      if (!step.path.trim()) return false;
+      return step.buildSystem === 'maven'
+        ? step.mavenGoals.trim().length > 0
+        : step.npmScript.trim().length > 0;
+    });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogTitle>{mode === 'create' ? 'Create Pipeline' : `Edit "${name}"`}</DialogTitle>
+      <DialogContent className="max-w-5xl">
+        <DialogTitle>{mode === 'create' ? 'Create pipeline' : `Edit "${name}"`}</DialogTitle>
         <DialogDescription>
-          {mode === 'create'
-            ? 'Define a build pipeline with one or more ordered steps.'
-            : "Update this pipeline's steps and configuration."}
+          Build a multi-step pipeline with separate Maven and npm step behavior.
         </DialogDescription>
 
-        <div className="flex flex-col gap-5 mt-4 max-h-[75vh] overflow-y-auto pr-1">
-          {/* Pipeline metadata */}
-          <div className="grid grid-cols-2 gap-3">
+        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-visible">
+          <div className="grid gap-4 border-b border-border pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
             <Input
               label="Pipeline name"
               placeholder="e.g. full-build"
@@ -504,56 +559,57 @@ export function PipelineDialog({
               disabled={mode === 'edit'}
             />
             <Input
-              label="Description (optional)"
-              placeholder="What does this pipeline build?"
+              label="Description"
+              placeholder="Short summary of what this pipeline does"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+            <button
+              type="button"
+              aria-pressed={failFast}
+              onClick={() => setFailFast((current) => !current)}
+              className={cn('toggle-pill', failFast && 'is-active')}
+            >
+              <span className="toggle-pill-indicator">
+                {failFast ? <Check size={11} /> : null}
+              </span>
+              Fail fast
+            </button>
           </div>
 
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none w-fit">
-            <input
-              type="checkbox"
-              checked={failFast}
-              onChange={(e) => setFailFast(e.target.checked)}
-              className="rounded border-input accent-primary"
-            />
-            <span className="text-muted-foreground">Fail fast</span>
-            <span className="text-xs text-muted-foreground/60">
-              (stop pipeline on first step failure)
-            </span>
-          </label>
+          <div className="mt-5 min-h-0 flex-1 overflow-y-auto overflow-x-visible px-1 py-1 -mx-1 -my-1 pr-3">
+            <div className="flex flex-col gap-4">
+              {steps.map((step, index) => (
+                <StepCard
+                  key={index}
+                  step={step}
+                  index={index}
+                  total={steps.length}
+                  onUpdate={(updater) => updateStep(index, updater)}
+                  onRemove={() => removeStep(index)}
+                  onMoveUp={() => moveStep(index, -1)}
+                  onMoveDown={() => moveStep(index, 1)}
+                  defaultMavenGoals={defaultMavenGoals}
+                  defaultNpmScript={defaultNpmScript}
+                />
+              ))}
+            </div>
+          </div>
 
-          {/* Steps */}
-          <div className="flex flex-col gap-3">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Steps ({steps.length})
-            </span>
-            {steps.map((step, i) => (
-              <StepCard
-                key={i}
-                step={step}
-                index={i}
-                total={steps.length}
-                onUpdate={(field, value) => updateStep(i, field, value)}
-                onRemove={() => removeStep(i)}
-                onMoveUp={() => moveStep(i, -1)}
-                onMoveDown={() => moveStep(i, 1)}
-              />
-            ))}
-            <Button variant="outline" size="sm" onClick={addStep} className="self-start">
-              <Plus size={14} /> Add step
+          <div className="mt-5 flex items-center justify-between border-t border-border pt-5">
+            <Button variant="outline" size="sm" onClick={addStep}>
+              <Plus size={14} />
+              Add step
             </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSubmit} disabled={!canSave}>
+                {mode === 'create' ? 'Create pipeline' : 'Save changes'}
+              </Button>
+            </div>
           </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handleSubmit} disabled={!canSave}>
-            {mode === 'create' ? 'Create pipeline' : 'Save changes'}
-          </Button>
         </div>
       </DialogContent>
     </Dialog>

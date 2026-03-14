@@ -1,19 +1,20 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { buildStatsQuery, buildsQuery, pipelinesQuery, useRunPipeline } from '@/api/queries';
+import { buildStatsQuery, buildsQuery, pipelinesQuery, useAdHocBuild, useRunPipeline } from '@/api/queries';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SkeletonRows } from '@/components/ui/skeleton';
 import { formatDuration, timeAgo, cn } from '@/lib/utils';
 import { useState } from 'react';
 import {
+  ArrowUpRight,
   BarChart3,
   CheckCircle2,
-  Timer,
   Loader2,
   Play,
-  ExternalLink,
+  RotateCcw,
+  Timer,
   Zap,
   AlertCircle,
   RefreshCw,
@@ -24,10 +25,6 @@ export const Route = createFileRoute('/')({
   component: Dashboard,
 });
 
-// ---------------------------------------------------------------------------
-// Stat card
-// ---------------------------------------------------------------------------
-
 function StatCard({
   label,
   value,
@@ -35,7 +32,6 @@ function StatCard({
   icon: Icon,
   iconClass,
   loading,
-  accentClass,
 }: {
   label: string;
   value: string | number;
@@ -43,35 +39,32 @@ function StatCard({
   icon: React.ElementType;
   iconClass: string;
   loading?: boolean;
-  accentClass?: string;
 }) {
   return (
-    <Card className={cn(accentClass && `border-l-2 ${accentClass}`)}>
-      <CardContent className="p-5 flex flex-col gap-3">
+    <Card>
+      <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">{label}</span>
-          <Icon size={15} className={iconClass} />
+          <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            {label}
+          </span>
+          <div className="icon-chip flex h-8 w-8 items-center justify-center rounded-full">
+            <Icon size={14} className={iconClass} />
+          </div>
         </div>
-        <div>
-          {loading ? (
-            <div className="h-8 w-16 rounded-md bg-border/60 animate-pulse" />
-          ) : (
-            <span className="text-2xl font-bold text-foreground tabular-nums tracking-tight">
+        {loading ? (
+          <div className="h-8 w-20 animate-pulse rounded-full bg-border/80" />
+        ) : (
+          <div>
+            <div className="page-title text-[1.75rem] font-bold leading-none tracking-[-0.04em] text-foreground">
               {value}
-            </span>
-          )}
-          {sub && !loading && (
-            <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
-          )}
-        </div>
+            </div>
+            {sub && <p className="mt-2 text-xs text-muted-foreground">{sub}</p>}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Inline error card (used inside section panels)
-// ---------------------------------------------------------------------------
 
 function ErrorCard({
   message,
@@ -81,13 +74,13 @@ function ErrorCard({
   onRetry?: () => void;
 }) {
   return (
-    <div className="p-4 flex items-center gap-3 text-destructive">
+    <div className="flex items-center gap-3 px-5 py-4 text-destructive">
       <AlertCircle size={14} className="shrink-0" />
-      <span className="text-xs flex-1">{message}</span>
+      <span className="flex-1 text-sm">{message}</span>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]"
         >
           <RefreshCw size={11} />
           Retry
@@ -97,29 +90,104 @@ function ErrorCard({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Status dot used in Quick Run row
-// ---------------------------------------------------------------------------
-
 function StatusDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
     success: 'bg-success',
-    failed:  'bg-destructive',
-    running: 'bg-warning animate-pulse',
+    failed: 'bg-destructive',
+    running: 'bg-primary animate-pulse',
   };
-  return (
-    <div
-      className={cn(
-        'w-1.5 h-1.5 rounded-full shrink-0',
-        colors[status] ?? 'bg-muted-foreground',
-      )}
-    />
-  );
+  return <div className={cn('h-2 w-2 rounded-full shrink-0', colors[status] ?? 'bg-muted-foreground')} />;
 }
 
-// ---------------------------------------------------------------------------
-// Dashboard
-// ---------------------------------------------------------------------------
+interface AdHocQuickRunItem {
+  key: string;
+  projectName: string;
+  projectPath: string;
+  buildSystem: 'maven' | 'npm';
+  label: string;
+  meta: string;
+  count: number;
+  body:
+    | { path: string; buildSystem: 'npm'; npmScript: string }
+    | { path: string; buildSystem: 'maven'; goals: string[]; flags?: string[] };
+}
+
+function parseAdHocCommand(build: BuildRunRowApi): AdHocQuickRunItem['body'] | null {
+  const command = build.command.trim();
+  if (build.build_system === 'npm') {
+    const npmMatch = command.match(/^\S+\s+run\s+(.+)$/);
+    const npmScript = npmMatch?.[1]?.trim();
+    if (!npmScript) return null;
+    return {
+      path: build.project_path,
+      buildSystem: 'npm',
+      npmScript,
+    };
+  }
+
+  if (build.build_system === 'maven') {
+    const parts = command.split(/\s+/).slice(1);
+    if (parts.length === 0) return null;
+    const goals = parts.filter((part) => !part.startsWith('-'));
+    const flags = parts.filter((part) => part.startsWith('-'));
+    if (goals.length === 0) return null;
+    return {
+      path: build.project_path,
+      buildSystem: 'maven',
+      goals,
+      flags: flags.length > 0 ? flags : undefined,
+    };
+  }
+
+  return null;
+}
+
+function deriveAdHocQuickRuns(builds: BuildRunRowApi[]): AdHocQuickRunItem[] {
+  const byKey = new Map<string, { build: BuildRunRowApi; count: number; latestAt: number; body: AdHocQuickRunItem['body'] }>();
+
+  for (const build of builds) {
+    if (build.pipeline_name !== null || build.status === 'running') continue;
+    const body = parseAdHocCommand(build);
+    if (!body) continue;
+    const key = `${build.build_system}:${build.project_path}:${build.command}`;
+    const latestAt = new Date(build.started_at).getTime();
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.count += 1;
+      if (latestAt > existing.latestAt) {
+        existing.build = build;
+        existing.latestAt = latestAt;
+      }
+    } else {
+      byKey.set(key, { build, count: 1, latestAt, body });
+    }
+  }
+
+  return [...byKey.entries()]
+    .filter(([, entry]) => entry.count >= 2)
+    .sort((a, b) => b[1].count - a[1].count || b[1].latestAt - a[1].latestAt)
+    .slice(0, 4)
+    .map(([key, entry]) => {
+      const { build, count, body } = entry;
+      const label =
+        build.build_system === 'npm'
+          ? `npm ${'npmScript' in body ? body.npmScript : ''}`.trim()
+          : [
+              ...(body.buildSystem === 'maven' ? body.goals : []),
+              ...(body.buildSystem === 'maven' ? body.flags ?? [] : []),
+            ].join(' ');
+      return {
+        key,
+        projectName: build.project_name,
+        projectPath: build.project_path,
+        buildSystem: build.build_system as 'maven' | 'npm',
+        label,
+        meta: `${count} recent runs`,
+        count,
+        body,
+      };
+    });
+}
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -138,10 +206,13 @@ function Dashboard() {
   } = useQuery(pipelinesQuery);
 
   const runPipeline = useRunPipeline();
+  const adHocBuild = useAdHocBuild();
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
+  const [runningAdHoc, setRunningAdHoc] = useState<Set<string>>(new Set());
 
   const activeBuilds = builds?.filter((b) => b.status === 'running') ?? [];
   const recentBuilds = builds?.filter((b) => b.status !== 'running').slice(0, 8) ?? [];
+  const adHocQuickRuns = deriveAdHocQuickRuns(builds ?? []);
 
   const successRate =
     stats && stats.totalBuilds > 0
@@ -155,9 +226,23 @@ function Dashboard() {
       void navigate({ to: '/builds/$jobId', params: { jobId } });
     } finally {
       setRunningPipelines((s) => {
-        const n = new Set(s);
-        n.delete(name);
-        return n;
+        const next = new Set(s);
+        next.delete(name);
+        return next;
+      });
+    }
+  }
+
+  async function handleRunAdHoc(item: AdHocQuickRunItem) {
+    setRunningAdHoc((s) => new Set(s).add(item.key));
+    try {
+      const { jobId } = await adHocBuild.mutateAsync(item.body);
+      void navigate({ to: '/builds/$jobId', params: { jobId } });
+    } finally {
+      setRunningAdHoc((s) => {
+        const next = new Set(s);
+        next.delete(item.key);
+        return next;
       });
     }
   }
@@ -171,16 +256,37 @@ function Dashboard() {
   }
 
   return (
-    <div className="p-6 flex flex-col gap-6 max-w-6xl mx-auto">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <div>
+        <h1 className="page-title text-[1.6rem] font-semibold leading-tight text-foreground">
+          Dashboard
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Track active jobs, recent results, and quick build actions.
+        </p>
+      </div>
 
-      {/* ── Stat cards ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {activeBuilds.length > 0 && (
+        <div className="panel-muted flex items-center gap-3 rounded-[20px] border border-primary/15 px-5 py-4">
+          <div className="h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
+          <span className="text-sm font-medium text-primary">Building</span>
+          <span className="truncate text-sm text-muted-foreground">
+            {activeBuilds[0]?.project_name}
+            {activeBuilds.length > 1 && ` + ${activeBuilds.length - 1} more`}
+          </span>
+          <span className="ml-auto text-xs font-mono text-primary">
+            {timeAgo(activeBuilds[0]!.started_at)}
+          </span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total Builds"
           value={stats?.totalBuilds ?? 0}
+          sub={stats?.totalBuilds ? `${stats.totalBuilds} recorded runs` : 'No build history yet'}
           icon={BarChart3}
           iconClass="text-primary"
-          accentClass="border-l-primary/60"
           loading={statsLoading}
         />
         <StatCard
@@ -188,197 +294,152 @@ function Dashboard() {
           value={successRate != null ? `${successRate}%` : '—'}
           sub={
             stats && stats.totalBuilds > 0
-              ? `${stats.successCount} of ${stats.totalBuilds} builds`
-              : undefined
+              ? `${stats.successCount} successful runs`
+              : 'Waiting for completed builds'
           }
           icon={CheckCircle2}
           iconClass="text-success"
-          accentClass="border-l-success/60"
           loading={statsLoading}
         />
         <StatCard
           label="Avg Duration"
           value={stats?.avgDurationMs ? formatDuration(stats.avgDurationMs) : '—'}
-          sub={stats?.totalBuilds ? `across ${stats.totalBuilds} builds` : undefined}
+          sub={stats?.totalBuilds ? 'Across all recorded builds' : 'No timings available yet'}
           icon={Timer}
           iconClass="text-warning"
-          accentClass="border-l-warning/60"
           loading={statsLoading}
         />
         <StatCard
           label="Active Jobs"
           value={activeBuilds.length}
-          sub={activeBuilds.length > 0 ? 'running now' : 'all quiet'}
+          sub={activeBuilds.length > 0 ? 'Running right now' : 'All quiet'}
           icon={Zap}
-          iconClass={activeBuilds.length > 0 ? 'text-warning' : 'text-muted-foreground'}
-          accentClass={activeBuilds.length > 0 ? 'border-l-warning/60' : undefined}
+          iconClass={activeBuilds.length > 0 ? 'text-primary' : 'text-muted-foreground'}
         />
       </div>
 
-      {/* ── Active builds ─────────────────────────────────────────────────── */}
-      {activeBuilds.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Running now ({activeBuilds.length})
-          </h2>
-          <div className="grid gap-2 grid-cols-1 lg:grid-cols-2">
-            {activeBuilds.map((b) => (
-              <Link
-                key={b.id}
-                to="/builds/$jobId"
-                params={{ jobId: String(b.id) }}
-                className="block"
-              >
-                <Card className="hover:border-primary/40 transition-colors cursor-pointer">
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
-                      <Loader2 size={12} className="text-warning animate-spin" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-foreground truncate block">
-                        {b.pipeline_name ?? 'ad-hoc build'}
-                      </span>
-                      <span className="text-xs text-muted-foreground font-mono truncate block">
-                        {b.project_name}
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                      {timeAgo(b.started_at)}
-                    </span>
-                    <ExternalLink size={12} className="text-muted-foreground shrink-0" />
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ── Two-column lower section ─────────────────────────────────────── */}
-      <div className="flex gap-5">
-
-        {/* Recent Builds */}
-        <section className="flex flex-col gap-3 flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Recent Builds
-            </h2>
-            <Link to="/builds" className="text-xs text-primary hover:underline">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-border">
+            <div>
+              <CardTitle className="text-sm">Recent Builds</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">Latest finished work across pipelines and ad-hoc runs</p>
+            </div>
+            <Link to="/builds" search={{ runId: undefined }} className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)] focus-visible:text-primary">
               View all
+              <ArrowUpRight size={11} />
             </Link>
-          </div>
-
-          <div className="rounded-lg border border-border overflow-hidden bg-card">
+          </CardHeader>
+          <CardContent className="p-0">
             {buildsError ? (
-              <ErrorCard
-                message="Could not load recent builds"
-                onRetry={retryBuilds}
-              />
+              <ErrorCard message="Could not load recent builds" onRetry={retryBuilds} />
             ) : buildsLoading ? (
-              <div className="p-4">
-                <SkeletonRows count={4} />
+              <div className="p-5">
+                <SkeletonRows count={5} />
               </div>
             ) : recentBuilds.length === 0 ? (
-              <div className="p-8 text-center flex flex-col gap-1.5">
-                <span className="text-sm text-muted-foreground">No builds recorded yet</span>
-                <span className="text-xs text-muted-foreground/60">
-                  Run a pipeline or build a project to see results here
-                </span>
+              <div className="px-5 py-12 text-center">
+                <p className="text-sm text-muted-foreground">No builds recorded yet</p>
+                <p className="mt-1 text-xs text-muted-foreground/80">
+                  Run a pipeline or start an ad-hoc build to populate this list.
+                </p>
               </div>
             ) : (
-              <div className="divide-y divide-border/50">
-                {recentBuilds.map((b) => (
-                  <RecentBuildRow key={b.id} build={b} />
+              <div>
+                {recentBuilds.map((build) => (
+                  <RecentBuildRow key={build.id} build={build} />
                 ))}
               </div>
             )}
-          </div>
-        </section>
+          </CardContent>
+        </Card>
 
-        {/* Quick Run */}
-        <section className="flex flex-col gap-3 w-72 shrink-0">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Quick Run
-            </h2>
-            <Link to="/pipelines" className="text-xs text-primary hover:underline">
-              Manage →
-            </Link>
-          </div>
-
-          <div className="rounded-lg border border-border overflow-hidden bg-card">
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-border">
+            <div>
+              <CardTitle className="text-sm">Quick Run</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">Start frequent pipelines and repeated ad-hoc runs without leaving the dashboard</p>
+            </div>
+            {(pipelines && pipelines.length > 0) || adHocQuickRuns.length > 0 ? (
+              <Link to="/pipelines" className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)] focus-visible:text-primary">
+                Manage
+                <ArrowUpRight size={11} />
+              </Link>
+            ) : null}
+          </CardHeader>
+          <CardContent className="p-0">
             {pipelinesError ? (
-              <ErrorCard
-                message="Could not load pipelines"
-                onRetry={retryPipelines}
-              />
+              <ErrorCard message="Could not load pipelines" onRetry={retryPipelines} />
             ) : pipelinesLoading ? (
-              <div className="p-4">
-                <SkeletonRows count={3} />
+              <div className="p-5">
+                <SkeletonRows count={4} />
               </div>
-            ) : !pipelines || pipelines.length === 0 ? (
-              <div className="p-6 text-center flex flex-col gap-2">
-                <span className="text-sm text-muted-foreground italic">No pipelines yet</span>
-                <Link to="/pipelines" className="text-xs text-primary hover:underline">
-                  Create one →
-                </Link>
+            ) : (!pipelines || pipelines.length === 0) && adHocQuickRuns.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 px-5 py-12 text-center">
+                <p className="text-sm text-muted-foreground">No quick runs available yet</p>
+                <p className="max-w-xs text-xs text-muted-foreground/80">
+                  Pipelines and repeated ad-hoc builds will start showing up here once you use them a few times.
+                </p>
+                <Button size="sm" onClick={() => void navigate({ to: '/pipelines' })}>
+                  Create pipeline
+                </Button>
               </div>
             ) : (
-              <div className="divide-y divide-border/50">
-                {pipelines.slice(0, 7).map((p) => (
-                  <QuickRunRow
-                    key={p.name}
-                    pipeline={p}
-                    isRunning={runningPipelines.has(p.name)}
+              <div className="divide-y divide-border/70">
+                {pipelines?.slice(0, 4).map((pipeline) => (
+                  <QuickRunPipelineRow
+                    key={`pipeline-${pipeline.name}`}
+                    pipeline={pipeline}
+                    isRunning={runningPipelines.has(pipeline.name)}
                     onRun={handleRun}
+                  />
+                ))}
+                {adHocQuickRuns.map((item) => (
+                  <QuickRunAdHocRow
+                    key={`adhoc-${item.key}`}
+                    item={item}
+                    isRunning={runningAdHoc.has(item.key)}
+                    onRun={handleRunAdHoc}
                   />
                 ))}
               </div>
             )}
-          </div>
-        </section>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Row components
-// ---------------------------------------------------------------------------
-
 function RecentBuildRow({ build }: { build: BuildRunRowApi }) {
   return (
     <Link
-      to="/builds/$jobId"
-      params={{ jobId: String(build.id) }}
-      className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/30 transition-colors"
+      to="/builds"
+      search={{ runId: String(build.id) }}
+      className="flex items-center gap-3 border-b border-border/70 px-5 py-3 transition-colors last:border-b-0 hover:bg-accent/55 focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]"
     >
       <StatusBadge status={build.status} />
-      <div className="flex-1 min-w-0">
-        <span className="text-xs text-foreground/80 truncate block">
-          {build.pipeline_name ?? (
-            <span className="italic text-muted-foreground">ad-hoc</span>
-          )}
+      <div className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">
+          {build.pipeline_name ?? 'Ad-hoc build'}
         </span>
-        <span className="text-[10px] font-mono text-muted-foreground truncate block">
+        <span className="block truncate text-[11px] font-mono text-muted-foreground">
           {build.project_name}
         </span>
       </div>
-      <div className="flex flex-col items-end gap-0.5 shrink-0">
-        <span className="text-[10px] text-muted-foreground/70 tabular-nums">
-          {timeAgo(build.started_at)}
-        </span>
+      <div className="shrink-0 text-right">
+        <div className="text-xs text-muted-foreground">{timeAgo(build.started_at)}</div>
         {build.duration_ms != null && (
-          <span className="text-[10px] text-muted-foreground/50 tabular-nums">
+          <div className="mt-0.5 text-[11px] font-mono text-muted-foreground">
             {formatDuration(build.duration_ms)}
-          </span>
+          </div>
         )}
       </div>
     </Link>
   );
 }
 
-function QuickRunRow({
+function QuickRunPipelineRow({
   pipeline,
   isRunning,
   onRun,
@@ -388,28 +449,69 @@ function QuickRunRow({
   onRun: (name: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2.5 hover:bg-accent/20 transition-colors">
+    <div className="flex items-center gap-3 border-b border-border/70 px-5 py-3 last:border-b-0 hover:bg-accent/55">
       <div className="flex-1 min-w-0">
-        <span className="text-xs font-medium text-foreground truncate block">{pipeline.name}</span>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[10px] text-muted-foreground">
+        <span className="block truncate text-sm font-medium text-foreground">{pipeline.name}</span>
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="pill-meta rounded-full bg-secondary uppercase tracking-[0.08em] text-muted-foreground">
+            Pipeline
+          </span>
+          <span>
             {pipeline.steps.length} step{pipeline.steps.length !== 1 ? 's' : ''}
           </span>
-          {pipeline.lastRun && <StatusDot status={pipeline.lastRun.status} />}
+          {pipeline.lastRun && (
+            <>
+              <StatusDot status={pipeline.lastRun.status} />
+              <span>{timeAgo(pipeline.lastRun.startedAt)}</span>
+            </>
+          )}
         </div>
       </div>
       <Button
         size="sm"
-        className="h-7 px-2.5 text-xs shrink-0"
+        className="shrink-0"
         onClick={() => onRun(pipeline.name)}
         disabled={isRunning}
-        title={`Run ${pipeline.name}`}
       >
-        {isRunning ? (
-          <Loader2 size={11} className="animate-spin" />
-        ) : (
-          <Play size={11} />
-        )}
+        {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+        {isRunning ? 'Starting' : 'Run'}
+      </Button>
+    </div>
+  );
+}
+
+function QuickRunAdHocRow({
+  item,
+  isRunning,
+  onRun,
+}: {
+  item: AdHocQuickRunItem;
+  isRunning: boolean;
+  onRun: (item: AdHocQuickRunItem) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-5 py-3 hover:bg-accent/55">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="pill-meta rounded-full bg-secondary uppercase tracking-[0.08em] text-muted-foreground">
+            Ad-hoc
+          </span>
+          <span className="truncate text-sm font-medium text-foreground">{item.projectName}</span>
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="truncate font-mono">{item.label}</span>
+          <span>{item.meta}</span>
+        </div>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        className="shrink-0"
+        onClick={() => void onRun(item)}
+        disabled={isRunning}
+      >
+        {isRunning ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+        {isRunning ? 'Starting' : 'Run again'}
       </Button>
     </div>
   );

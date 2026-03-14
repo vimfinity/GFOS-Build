@@ -114,6 +114,12 @@ export function useJobEvents(jobId: string | null): UseJobEventsResult {
       setStartMs(entry.startMs);
       setEvents(entry.events);
       setDone(entry.done);
+      setError(null);
+    } else {
+      setStartMs(Date.now());
+      setEvents([]);
+      setDone(false);
+      setError(null);
     }
 
     // If the job is already done and cached, skip reconnecting

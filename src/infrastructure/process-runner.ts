@@ -1,12 +1,11 @@
 import * as childProcess from 'node:child_process';
-import * as readline from 'node:readline';
 import type { ProcessEvent } from '../core/types.js';
 
 export interface ProcessRunner {
   spawn(
     executable: string,
     args: string[],
-    options: { cwd: string; env?: NodeJS.ProcessEnv },
+    options: { cwd: string; env?: NodeJS.ProcessEnv; signal?: AbortSignal },
   ): AsyncIterable<ProcessEvent>;
 }
 
@@ -51,7 +50,7 @@ export class NodeProcessRunner implements ProcessRunner {
   spawn(
     executable: string,
     args: string[],
-    options: { cwd: string; env?: NodeJS.ProcessEnv },
+    options: { cwd: string; env?: NodeJS.ProcessEnv; signal?: AbortSignal },
   ): AsyncIterable<ProcessEvent> {
     const queue = new AsyncQueue<ProcessEvent>();
     const startMs = Date.now();
@@ -59,6 +58,28 @@ export class NodeProcessRunner implements ProcessRunner {
     let stdoutClosed = false;
     let stderrClosed = false;
     let processClosed = false;
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+    let aborted = false;
+
+    function emitBufferedLines(chunk: string, stream: 'stdout' | 'stderr'): string {
+      const next = (stream === 'stdout' ? stdoutBuffer : stderrBuffer) + chunk;
+      const parts = next.split(/\r\n|[\r\n]/);
+      const remainder = parts.pop() ?? '';
+      for (const line of parts) {
+        queue.push({ type: stream, line });
+      }
+      return remainder;
+    }
+
+    function flushBuffer(stream: 'stdout' | 'stderr'): void {
+      const buffer = stream === 'stdout' ? stdoutBuffer : stderrBuffer;
+      if (buffer.length > 0) {
+        queue.push({ type: stream, line: buffer });
+        if (stream === 'stdout') stdoutBuffer = '';
+        else stderrBuffer = '';
+      }
+    }
 
     function tryFinalize(): void {
       if (stdoutClosed && stderrClosed && processClosed) {
@@ -74,18 +95,50 @@ export class NodeProcessRunner implements ProcessRunner {
       stdio: ['inherit', 'pipe', 'pipe'],
     });
 
-    const rlStdout = readline.createInterface({ input: proc.stdout!, crlfDelay: Infinity });
-    const rlStderr = readline.createInterface({ input: proc.stderr!, crlfDelay: Infinity });
+    const handleAbort = () => {
+      if (processClosed || aborted) return;
+      aborted = true;
+      queue.push({ type: 'stderr', line: 'Build cancelled.' });
+      if (process.platform === 'win32' && proc.pid) {
+        void childProcess.spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], {
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+      } else {
+        proc.kill('SIGTERM');
+      }
+    };
 
-    rlStdout.on('line', (line) => queue.push({ type: 'stdout', line }));
-    rlStdout.on('close', () => { stdoutClosed = true; tryFinalize(); });
+    if (options.signal) {
+      if (options.signal.aborted) handleAbort();
+      else options.signal.addEventListener('abort', handleAbort, { once: true });
+    }
 
-    rlStderr.on('line', (line) => queue.push({ type: 'stderr', line }));
-    rlStderr.on('close', () => { stderrClosed = true; tryFinalize(); });
+    proc.stdout?.setEncoding('utf8');
+    proc.stderr?.setEncoding('utf8');
+
+    proc.stdout?.on('data', (chunk: string) => {
+      stdoutBuffer = emitBufferedLines(chunk, 'stdout');
+    });
+    proc.stdout?.on('close', () => {
+      flushBuffer('stdout');
+      stdoutClosed = true;
+      tryFinalize();
+    });
+
+    proc.stderr?.on('data', (chunk: string) => {
+      stderrBuffer = emitBufferedLines(chunk, 'stderr');
+    });
+    proc.stderr?.on('close', () => {
+      flushBuffer('stderr');
+      stderrClosed = true;
+      tryFinalize();
+    });
 
     proc.on('close', (code) => {
       exitCode = code ?? 1;
       processClosed = true;
+      if (options.signal) options.signal.removeEventListener('abort', handleAbort);
       tryFinalize();
     });
 
@@ -95,6 +148,7 @@ export class NodeProcessRunner implements ProcessRunner {
       stdoutClosed = true;
       stderrClosed = true;
       processClosed = true;
+      if (options.signal) options.signal.removeEventListener('abort', handleAbort);
       tryFinalize();
     });
 

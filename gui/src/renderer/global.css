@@ -1,42 +1,72 @@
 @import "tailwindcss";
 
 @theme {
-  /* GFOS teal — hue-210 tinted backgrounds with #007d8f primary */
-  --color-primary: oklch(0.53 0.10 210);
-  --color-primary-foreground: oklch(0.98 0 0);
-  --color-background: oklch(0.16 0.012 210);
-  --color-foreground: oklch(0.94 0.005 210);
-  --color-card: oklch(0.21 0.014 210);
-  --color-card-foreground: oklch(0.94 0.005 210);
-  --color-popover: oklch(0.21 0.014 210 / 0.92);
-  --color-popover-foreground: oklch(0.94 0.005 210);
-  --color-secondary: oklch(0.28 0.018 210);
-  --color-secondary-foreground: oklch(0.94 0.005 210);
-  --color-muted: oklch(0.28 0.018 210);
-  --color-muted-foreground: oklch(0.60 0.020 210);
-  --color-accent: oklch(0.30 0.022 210);
-  --color-accent-foreground: oklch(0.94 0.005 210);
-  --color-destructive: oklch(0.60 0.22 27);
-  --color-success: oklch(0.72 0.19 150);
-  --color-warning: oklch(0.80 0.18 86);
-  --color-border: oklch(0.32 0.020 210);
-  --color-input: oklch(0.28 0.018 210);
-  --color-ring: oklch(0.53 0.10 210);
+  --color-primary: oklch(0.58 0.11 214);
+  --color-primary-foreground: oklch(0.99 0 0);
+  --color-background: oklch(0.98 0 0);
+  --color-foreground: oklch(0.2 0.008 260);
+  --color-card: oklch(1 0 0 / 0.92);
+  --color-card-foreground: oklch(0.2 0.008 260);
+  --color-popover: oklch(1 0 0 / 0.96);
+  --color-popover-foreground: oklch(0.2 0.008 260);
+  --color-secondary: oklch(0.95 0 0);
+  --color-secondary-foreground: oklch(0.2 0.008 260);
+  --color-muted: oklch(0.96 0 0);
+  --color-muted-foreground: oklch(0.56 0.014 260);
+  --color-accent: oklch(0.95 0 0);
+  --color-accent-foreground: oklch(0.2 0.008 260);
+  --color-destructive: oklch(0.61 0.22 26);
+  --color-success: oklch(0.63 0.18 154);
+  --color-warning: oklch(0.72 0.17 83);
+  --color-border: oklch(0.9 0 0);
+  --color-input: oklch(0.86 0 0);
+  --color-ring: oklch(0.58 0.11 214);
 
-  /* Radius scale */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
 
-  /* Translucent backdrop blur for popovers / menus */
   --backdrop-blur-popover: 20px;
 
-  /* Monospace font stack */
-  --font-mono: "Geist Mono", "Cascadia Code", "Cascadia Mono", Consolas, "Courier New", monospace;
+  --font-sans: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Code", Consolas, monospace;
 }
 
 @layer base {
+  :root {
+    --nav-bg: rgb(255 255 255 / 0.84);
+    --nav-border: rgb(24 24 27 / 0.07);
+    --nav-shadow: 0 1px 3px rgb(24 24 27 / 0.04), 0 10px 32px rgb(24 24 27 / 0.08);
+    --card-shadow: 0 1px 3px rgb(24 24 27 / 0.03), 0 10px 28px rgb(24 24 27 / 0.05);
+    --surface-soft: rgb(255 255 255 / 0.72);
+    --surface-strong: rgb(255 255 255 / 0.92);
+    --icon-chip-bg: rgb(244 246 248 / 0.98);
+    --icon-chip-border: rgb(214 222 231 / 0.92);
+    --icon-chip-highlight: rgb(255 255 255 / 0.92);
+    --icon-chip-accent-bg: rgb(229 246 250 / 0.98);
+    --icon-chip-accent-border: rgb(173 219 229 / 0.95);
+    --field-bg: transparent;
+    --field-border: rgb(204 209 214 / 0.96);
+    --field-highlight: transparent;
+    --selection-bg: color-mix(in oklab, var(--color-primary) 26%, white);
+    --selection-fg: rgb(15 23 42);
+    --terminal-bg: rgb(248 250 252);
+    --terminal-border: rgb(203 213 225 / 0.9);
+    --terminal-fg: rgb(15 23 42);
+    --terminal-stderr: rgb(185 28 28);
+    --terminal-muted: rgb(100 116 139);
+    --terminal-toolbar-bg: rgb(255 255 255 / 0.88);
+    --terminal-toolbar-border: rgb(203 213 225 / 0.9);
+    --terminal-toolbar-fg: rgb(71 85 105);
+    --terminal-row-error-bg: rgb(254 242 242);
+    --terminal-row-error-border: rgb(239 68 68 / 0.55);
+    --terminal-row-warn-bg: rgb(255 251 235);
+    --terminal-row-warn-border: rgb(217 119 6 / 0.45);
+    --terminal-row-success-bg: rgb(240 253 244);
+    --terminal-row-success-border: rgb(22 163 74 / 0.45);
+  }
+
   *,
   *::before,
   *::after {
@@ -55,17 +85,23 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      Oxygen, sans-serif;
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    background-image: none;
+    background-attachment: fixed;
   }
 
-  /* Smooth theme-switch transitions — SVGs and scrollbars excluded */
+  #root {
+    min-height: 100%;
+    position: relative;
+  }
+
   *,
   *::before,
   *::after {
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.05s ease;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.12s ease,
+      box-shadow 0.16s ease;
   }
 
   svg,
@@ -73,7 +109,18 @@
     transition: none;
   }
 
-  /* Dark theme scrollbar (default) */
+  ::selection {
+    background: var(--selection-bg);
+    color: var(--selection-fg);
+  }
+
+  input::selection,
+  textarea::selection,
+  [contenteditable="true"]::selection {
+    background: var(--selection-bg);
+    color: var(--selection-fg);
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -84,45 +131,409 @@
     transition: none;
   }
   ::-webkit-scrollbar-thumb {
-    background: oklch(0.35 0.02 210);
+    background: rgb(161 161 170 / 0.7);
     border-radius: 3px;
     transition: none;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.42 0.025 210);
+    background: rgb(113 113 122 / 0.9);
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  table {
+    border-collapse: collapse;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Light theme overrides
-   Placed OUTSIDE @layer so these are unlayered CSS, appearing AFTER the
-   @theme inline :root block in source order.  Two unlayered rules with equal
-   specificity resolve by source order → this one wins.
-   ═══════════════════════════════════════════════════════════════════════════ */
-[data-theme="light"] {
-  --color-background: oklch(0.97 0.005 210);
-  --color-foreground: oklch(0.14 0.015 210);
-  --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.14 0.015 210);
-  --color-popover: oklch(1 0 0 / 0.95);
-  --color-popover-foreground: oklch(0.14 0.015 210);
-  --color-secondary: oklch(0.93 0.008 210);
-  --color-secondary-foreground: oklch(0.14 0.015 210);
-  --color-muted: oklch(0.93 0.008 210);
-  --color-muted-foreground: oklch(0.46 0.020 210);
-  --color-accent: oklch(0.90 0.012 210);
-  --color-accent-foreground: oklch(0.14 0.015 210);
-  --color-border: oklch(0.86 0.010 210);
-  --color-input: oklch(0.93 0.008 210);
-  --color-destructive: oklch(0.54 0.22 27);
-  --color-success: oklch(0.52 0.19 150);
-  --color-warning: oklch(0.58 0.18 86);
-  /* --color-primary, --color-primary-foreground, --color-ring: keep dark teal */
+[data-theme="dark"] {
+  --color-background: oklch(0.17 0 0);
+  --color-foreground: oklch(0.97 0.002 260);
+  --color-card: oklch(0.23 0 0 / 0.9);
+  --color-card-foreground: oklch(0.97 0.002 260);
+  --color-popover: oklch(0.23 0 0 / 0.96);
+  --color-popover-foreground: oklch(0.97 0.002 260);
+  --color-secondary: oklch(0.28 0 0);
+  --color-secondary-foreground: oklch(0.97 0.002 260);
+  --color-muted: oklch(0.28 0 0);
+  --color-muted-foreground: oklch(0.72 0.012 260);
+  --color-accent: oklch(0.3 0 0);
+  --color-accent-foreground: oklch(0.97 0.002 260);
+  --color-border: oklch(0.34 0 0);
+  --color-input: oklch(0.4 0 0 / 0.95);
+  --color-destructive: oklch(0.64 0.2 26);
+  --color-success: oklch(0.7 0.16 154);
+  --color-warning: oklch(0.78 0.15 83);
+  --nav-bg: rgb(39 39 42 / 0.82);
+  --nav-border: rgb(255 255 255 / 0.08);
+  --nav-shadow: 0 1px 3px rgb(0 0 0 / 0.18), 0 12px 36px rgb(0 0 0 / 0.25);
+  --card-shadow: 0 1px 3px rgb(0 0 0 / 0.14), 0 14px 36px rgb(0 0 0 / 0.24);
+  --surface-soft: rgb(39 39 42 / 0.62);
+  --surface-strong: rgb(39 39 42 / 0.88);
+  --icon-chip-bg: rgb(51 56 64 / 0.92);
+  --icon-chip-border: rgb(77 84 95 / 0.82);
+  --icon-chip-highlight: rgb(255 255 255 / 0.06);
+  --icon-chip-accent-bg: rgb(22 59 72 / 0.92);
+  --icon-chip-accent-border: rgb(44 113 136 / 0.82);
+  --field-bg: transparent;
+  --field-border: rgb(78 80 86 / 0.72);
+  --field-highlight: transparent;
+  --selection-bg: color-mix(in oklab, var(--color-primary) 68%, black);
+  --selection-fg: rgb(250 252 255);
+  --terminal-bg: rgb(13 17 23);
+  --terminal-border: rgb(39 52 67 / 0.9);
+  --terminal-fg: rgb(209 250 229);
+  --terminal-stderr: rgb(252 165 165);
+  --terminal-muted: rgb(113 113 122);
+  --terminal-toolbar-bg: rgb(39 39 42 / 0.82);
+  --terminal-toolbar-border: rgb(82 82 91 / 0.72);
+  --terminal-toolbar-fg: rgb(212 212 216);
+  --terminal-row-error-bg: rgb(69 10 10 / 0.22);
+  --terminal-row-error-border: rgb(127 29 29 / 0.62);
+  --terminal-row-warn-bg: rgb(69 26 3 / 0.18);
+  --terminal-row-warn-border: rgb(180 83 9 / 0.46);
+  --terminal-row-success-bg: rgb(5 46 22 / 0.2);
+  --terminal-row-success-border: rgb(21 128 61 / 0.5);
 }
 
-[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: oklch(0.76 0.012 210);
+[data-theme="dark"] body {
+  background-image: none;
 }
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.68 0.016 210);
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgb(82 82 91 / 0.86);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgb(113 113 122 / 0.95);
+}
+
+@layer components {
+  .glass-card {
+    background: var(--surface-strong);
+    box-shadow: var(--card-shadow);
+    backdrop-filter: blur(14px);
+  }
+
+  .panel-muted {
+    background: var(--surface-soft);
+    backdrop-filter: blur(12px);
+  }
+
+  .page-title {
+    letter-spacing: -0.03em;
+  }
+
+  .icon-chip {
+    background: var(--icon-chip-bg);
+    border: 1px solid var(--icon-chip-border);
+    box-shadow: inset 0 1px 0 var(--icon-chip-highlight);
+  }
+
+  .icon-chip-accent {
+    background: var(--icon-chip-accent-bg);
+    border: 1px solid var(--icon-chip-accent-border);
+    box-shadow: inset 0 1px 0 var(--icon-chip-highlight);
+  }
+
+  .pill-control {
+    display: inline-flex;
+    height: 2.25rem;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding-inline: 0.875rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .pill-meta {
+    display: inline-flex;
+    min-height: 1.5rem;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    padding-inline: 0.625rem;
+    padding-block: 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .segmented-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-border);
+    padding: 0.1875rem;
+    background: color-mix(in oklab, var(--color-card) 82%, var(--color-secondary) 18%);
+  }
+
+  .segmented-control-button {
+    position: relative;
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    padding-inline: 0.875rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--color-muted-foreground);
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.12s ease,
+      box-shadow 0.16s ease;
+  }
+
+  .segmented-control-button:hover {
+    background: color-mix(in oklab, var(--color-accent) 78%, transparent);
+    color: var(--color-foreground);
+  }
+
+  .segmented-control-button:focus-visible {
+    outline: none;
+    z-index: 1;
+    color: var(--color-foreground);
+    box-shadow:
+      inset 0 0 0 1px var(--color-ring),
+      inset 0 0 0 2px color-mix(in oklab, var(--color-foreground) 12%, transparent);
+  }
+
+  .segmented-control-button:active {
+    background: color-mix(in oklab, var(--color-accent) 88%, transparent);
+    color: var(--color-foreground);
+  }
+
+  .segmented-control-button.is-active {
+    background: color-mix(in oklab, var(--color-primary) 17%, var(--color-card));
+    color: var(--color-primary);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 32%, var(--color-border));
+  }
+
+  .segmented-control-button.is-active:focus-visible {
+    box-shadow:
+      inset 0 0 0 1px var(--color-ring),
+      inset 0 0 0 2px color-mix(in oklab, var(--color-foreground) 12%, transparent);
+  }
+
+  .segmented-control-button.is-active:hover {
+    background: color-mix(in oklab, var(--color-primary) 21%, var(--color-card));
+  }
+
+  .field-shell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid var(--field-border);
+    background: var(--field-bg);
+  }
+
+  .field-shell:focus-within {
+    border-color: var(--color-ring);
+    box-shadow: 0 0 0 1px var(--color-ring);
+  }
+
+  .field-shell-pill {
+    min-height: 2.75rem;
+    border-radius: 9999px;
+    padding-inline: 1rem;
+    padding-block: 0.625rem;
+  }
+
+  .field-shell-soft {
+    background: var(--field-bg);
+  }
+
+  .field-input {
+    min-width: 0;
+    flex: 1 1 auto;
+    border: 0;
+    background: transparent;
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+    outline: none;
+  }
+
+  .field-input::placeholder {
+    color: color-mix(in oklab, var(--color-muted-foreground) 74%, transparent);
+  }
+
+  .field-select {
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+    outline: none;
+    appearance: none;
+  }
+
+  .field-icon-button {
+    display: inline-flex;
+    height: 1.5rem;
+    width: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    color: var(--color-muted-foreground);
+  }
+
+  .field-icon-button:hover {
+    background: color-mix(in oklab, var(--color-accent) 84%, transparent);
+    color: var(--color-foreground);
+  }
+
+  .field-icon-button:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--color-ring);
+  }
+
+  .search-shell {
+    display: flex;
+    min-width: 15rem;
+    flex: 1 1 0%;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid var(--field-border);
+    background: var(--field-bg);
+    padding-inline: 1rem;
+    padding-block: 0.625rem;
+  }
+
+  .search-shell:focus-within {
+    border-color: var(--color-ring);
+    box-shadow: 0 0 0 1px var(--color-ring);
+  }
+
+  .listbox-panel {
+    border: 1px solid var(--color-border);
+    border-radius: 1.25rem;
+    padding: 0.5rem;
+  }
+
+  .listbox-option {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 1rem;
+    padding: 0.75rem 1rem;
+    text-align: left;
+  }
+
+  .listbox-option:hover {
+    background: color-mix(in oklab, var(--color-accent) 76%, transparent);
+  }
+
+  .listbox-option:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--color-ring);
+  }
+
+  .listbox-option.is-active {
+    background: color-mix(in oklab, var(--color-primary) 10%, var(--color-accent));
+  }
+
+  .toggle-pill {
+    display: inline-flex;
+    height: 2.75rem;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid var(--field-border);
+    background: var(--field-bg);
+    padding-inline: 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-muted-foreground);
+    box-shadow: inset 0 1px 0 var(--field-highlight);
+  }
+
+  .toggle-pill:hover {
+    background: color-mix(in oklab, var(--color-accent) 76%, var(--field-bg));
+    color: var(--color-foreground);
+  }
+
+  .toggle-pill:focus-visible {
+    outline: none;
+    color: var(--color-foreground);
+    box-shadow:
+      0 0 0 1px var(--color-ring),
+      inset 0 0 0 1px color-mix(in oklab, var(--color-foreground) 12%, transparent),
+      inset 0 1px 0 var(--field-highlight);
+  }
+
+  .toggle-pill:active {
+    background: color-mix(in oklab, var(--color-accent) 88%, var(--field-bg));
+  }
+
+  .toggle-pill.is-active {
+    border-color: color-mix(in oklab, var(--color-primary) 30%, var(--field-border));
+    background: color-mix(in oklab, var(--color-primary) 14%, var(--field-bg));
+    color: var(--color-primary);
+  }
+
+  .toggle-pill-indicator {
+    display: inline-flex;
+    height: 1rem;
+    width: 1rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in oklab, var(--field-border) 92%, var(--color-muted-foreground));
+    background: transparent;
+    color: var(--color-primary);
+  }
+
+  .toggle-pill.is-active .toggle-pill-indicator {
+    border-color: color-mix(in oklab, var(--color-primary) 34%, transparent);
+    background: color-mix(in oklab, var(--color-primary) 16%, var(--field-bg));
+  }
+
+  .tooltip-popup {
+    position: relative;
+    z-index: 80;
+    max-width: 18rem;
+    overflow: visible;
+    border-radius: 0.875rem;
+    border: 1px solid color-mix(in oklab, var(--color-border) 82%, transparent);
+    background: color-mix(in oklab, var(--color-popover) 94%, var(--color-card));
+    padding: 0.55rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--color-popover-foreground);
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.16);
+    backdrop-filter: blur(14px);
+  }
+
+  .tooltip-kbd {
+    display: inline-flex;
+    min-height: 1.25rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in oklab, var(--color-border) 72%, transparent);
+    background: color-mix(in oklab, var(--color-secondary) 88%, transparent);
+    padding-inline: 0.4rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--color-muted-foreground);
+    white-space: nowrap;
+  }
 }
