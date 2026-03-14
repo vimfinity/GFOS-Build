@@ -59,7 +59,7 @@ function badRequest(message: string): Response {
   return json({ error: message }, 400);
 }
 
-export async function runServe(options: ServeOptions): Promise<{ port: number; close: () => void }> {
+export async function runServe(options: ServeOptions): Promise<{ port: number; close: () => void; getActiveJobCount: () => number }> {
   const { db, scanner, buildRunner, pipelineRunner } = options;
   let currentConfig = options.config;
   const activeJobs = new Map<string, ActiveJob>();
@@ -495,5 +495,6 @@ export async function runServe(options: ServeOptions): Promise<{ port: number; c
   return {
     port: addr.port,
     close: () => { httpServer.close(); wss.close(); },
+    getActiveJobCount: () => activeJobs.size,
   };
 }

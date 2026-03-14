@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'ele
 import path from 'node:path';
 import { IPC } from '@gfos-build/shared';
 import { startServer, type ServerHandle } from './server';
+import { createUpdaterService, type UpdaterService } from './updater';
 
 const APP_NAME = 'GFOS Build';
 const APP_USER_MODEL_ID = 'com.gfos.gfos-build';
@@ -11,6 +12,7 @@ const isSmokeTest = process.argv.includes('--smoke-test') || process.env['GFOS_B
 let server: ServerHandle | null = null;
 let mainWindow: BrowserWindow | null = null;
 let fatalExitStarted = false;
+let updater: UpdaterService | null = null;
 
 app.setName(APP_NAME);
 if (isSmokeTest) {
@@ -166,6 +168,11 @@ function createWindow(): BrowserWindow {
 
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC.GET_SIDECAR_URL, () => getServerUrl());
+  ipcMain.handle(IPC.GET_APP_INFO, () => updater?.getAppInfo());
+  ipcMain.handle(IPC.GET_UPDATE_STATE, () => updater?.getState());
+  ipcMain.handle(IPC.CHECK_FOR_UPDATES, () => updater?.checkForUpdates());
+  ipcMain.handle(IPC.DOWNLOAD_UPDATE, () => updater?.downloadUpdate());
+  ipcMain.handle(IPC.APPLY_UPDATE, () => updater?.applyUpdate());
 
   ipcMain.handle(IPC.OPEN_DIRECTORY, async () => {
     const ownerWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined;
@@ -190,7 +197,18 @@ app.whenReady().then(async () => {
   try {
     registerIpcHandlers();
     server = await startServer();
+    updater = createUpdaterService({
+      getActiveJobCount: () => server?.getActiveJobCount() ?? 0,
+      sendState: (state) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send(IPC.UPDATE_STATE_CHANGED, state);
+        }
+      },
+    });
     createWindow();
+    void updater.checkForUpdates().catch((error) => {
+      console.error('Automatic update check failed:', error);
+    });
   } catch (error) {
     fatalExit('Failed to start desktop app', error);
   }
@@ -209,5 +227,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('quit', () => {
+  updater?.dispose();
+  updater = null;
   closeServer();
 });

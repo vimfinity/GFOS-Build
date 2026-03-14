@@ -16,11 +16,28 @@ A desktop application for Maven project management, pipeline orchestration, and 
 
 ## Download
 
-Go to the [Releases](../../releases) page and download the latest `GFOS-Build-<version>-win32-x64.zip`.
+Go to the [Releases](../../releases) page and pick one of the Windows artifacts:
+
+- **Managed installer** — `GFOS-Build-Setup-<version>-x64.exe`
+- **Portable ZIP** — `GFOS-Build-<version>-win32-x64.zip`
+
+### Managed installer
+
+Run the setup `.exe` and install it for the current user. No admin rights are required.
+
+Managed installs include:
+
+- proper Windows uninstall support
+- in-app update checks
+- background download + restart-to-apply updates
+
+### Portable ZIP
 
 Extract the ZIP anywhere and run **`GFOS Build.exe`** from the extracted `GFOS Build <version>/` folder.
 
-If you want GFOS Build to appear in Windows search, run **`Add GFOS Build to Start Menu.cmd`** once from the extracted folder. This creates a per-user Start Menu shortcut with no admin rights or installer required.
+Portable builds remain a supported fallback. They can detect newer releases and link you to the latest download, but they do not replace themselves automatically.
+
+If you want the portable build to appear in Windows search, run **`Add GFOS Build to Start Menu.cmd`** once from the extracted folder. This creates a per-user Start Menu shortcut with no admin rights or installer required.
 
 ### Requirements
 
@@ -68,8 +85,11 @@ bun run dist:desktop:win     # create the Windows desktop release
 
 The release outputs will be in `release/desktop/`:
 
-- `release/desktop/win-unpacked/GFOS Build-win32-x64/`
 - `release/desktop/GFOS-Build-<version>-win32-x64.zip`
+- `release/desktop/win-unpacked/GFOS Build-win32-x64/`
+- `release/desktop/managed/GFOS-Build-Setup-<version>-x64.exe`
+- `release/desktop/managed/latest.yml`
+- `release/desktop/managed/*.blockmap`
 
 The portable desktop bundle also includes:
 

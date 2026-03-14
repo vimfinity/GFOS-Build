@@ -3,6 +3,7 @@
   "productName": "GFOS Build",
   "version": "0.1.0-alpha.2",
   "description": "GFOS Build — Desktop GUI",
+  "author": "GFOS",
   "private": true,
   "main": "out/main/index.js",
   "scripts": {
@@ -12,7 +13,9 @@
     "smoke:win": "node scripts/start-win.mjs --smoke-test",
     "check": "bun run typecheck && bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "dist:win": "node scripts/dist-win.mjs",
+    "dist:win": "node scripts/dist-win.mjs && bunx electron-builder --config electron-builder.yml --win nsis --x64",
+    "dist:win:portable": "node scripts/dist-win.mjs",
+    "dist:win:installer": "bunx electron-builder --config electron-builder.yml --win nsis --x64",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "node node_modules/electron/install.js && bun run rebuild:native"
   },
@@ -22,6 +25,7 @@
     "@tanstack/react-router": "^1.95.0",
     "better-sqlite3": "^11.7.0",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.6.2",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -42,9 +46,10 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^34.0.0",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^3.0.0",
     "tailwindcss": "^4.0.0",
-    "vite": "^6.4.1",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vite": "^6.4.1"
   }
 }
