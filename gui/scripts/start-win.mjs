@@ -20,8 +20,36 @@ const packagedExe = path.resolve(
   'GFOS Build.exe',
 );
 
-if (!fs.existsSync(packagedExe)) {
-  console.log('No packaged desktop app found. Building it first...');
+function getLatestModified(targetPath) {
+  if (!fs.existsSync(targetPath)) return 0;
+  const stat = fs.statSync(targetPath);
+  if (stat.isFile()) return stat.mtimeMs;
+
+  let latest = stat.mtimeMs;
+  for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
+    latest = Math.max(latest, getLatestModified(path.join(targetPath, entry.name)));
+  }
+  return latest;
+}
+
+const sourcePaths = [
+  path.join(guiRoot, 'src'),
+  path.join(guiRoot, 'package.json'),
+  path.join(guiRoot, 'electron.vite.config.ts'),
+  path.join(repoRoot, 'shared'),
+  path.join(repoRoot, 'assets', 'icon.ico'),
+];
+
+const latestSourceMtime = Math.max(...sourcePaths.map((targetPath) => getLatestModified(targetPath)));
+const packagedExeMtime = fs.existsSync(packagedExe) ? fs.statSync(packagedExe).mtimeMs : 0;
+const needsRebuild = !fs.existsSync(packagedExe) || latestSourceMtime > packagedExeMtime;
+
+if (needsRebuild) {
+  console.log(
+    fs.existsSync(packagedExe)
+      ? 'Packaged desktop app is out of date. Rebuilding it first...'
+      : 'No packaged desktop app found. Building it first...',
+  );
   const { execSync } = await import('node:child_process');
   execSync('bun run dist:win', {
     cwd: guiRoot,
