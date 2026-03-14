@@ -1,196 +1,152 @@
 import type { UpdateState } from '@gfos-build/shared';
 import { useUpdateState } from '@/api/update';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip } from '@/components/ui/tooltip';
-import { cn, formatDate } from '@/lib/utils';
-import { AlertTriangle, ArrowUpCircle, CheckCircle2, Download, Loader2, RefreshCw } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
+import { AlertTriangle, ArrowUpCircle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 
 function getStatusCopy(state: UpdateState): {
-  icon: ReactNode;
+  visible: boolean;
   tooltip: string;
-  title: string;
-  actionLabel: string | null;
+  label: string | null;
+  iconOnly: boolean;
+  variant: 'default' | 'outline' | 'destructive' | 'ghost';
+  icon: 'available' | 'downloading' | 'downloaded' | 'blocked' | 'error';
+  disabled?: boolean;
 } {
   switch (state.status) {
-    case 'checking':
-      return {
-        icon: <Loader2 size={15} className="animate-spin" />,
-        tooltip: 'Checking for updates',
-        title: 'Checking for updates',
-        actionLabel: null,
-      };
     case 'available':
       return {
-        icon: <ArrowUpCircle size={15} />,
-        tooltip: `Update ${state.availableVersion ?? ''} available`,
-        title: 'Update available',
-        actionLabel: state.distribution === 'managed' ? 'Download update' : 'Download latest ZIP',
+        visible: true,
+        tooltip: state.releaseName ?? `GFOS Build v${state.availableVersion ?? state.currentVersion} is available`,
+        label: 'Update available',
+        iconOnly: false,
+        variant: 'outline',
+        icon: 'available',
       };
     case 'downloading':
       return {
-        icon: <Loader2 size={15} className="animate-spin" />,
+        visible: true,
         tooltip: `Downloading update${state.downloadPercent ? ` (${Math.round(state.downloadPercent)}%)` : ''}`,
-        title: 'Downloading update',
-        actionLabel: null,
+        label: null,
+        iconOnly: true,
+        variant: 'ghost',
+        icon: 'downloading',
+        disabled: true,
       };
     case 'downloaded':
       return {
-        icon: <CheckCircle2 size={15} />,
-        tooltip: 'Update ready to apply',
-        title: 'Update ready',
-        actionLabel: 'Restart to update',
+        visible: true,
+        tooltip: `Restart to install ${state.releaseName ?? `GFOS Build v${state.availableVersion ?? state.currentVersion}`}`,
+        label: 'Restart',
+        iconOnly: false,
+        variant: 'outline',
+        icon: 'downloaded',
       };
     case 'apply_blocked_active_jobs':
       return {
-        icon: <AlertTriangle size={15} />,
+        visible: true,
         tooltip: 'Update is ready, but active jobs must finish first',
-        title: 'Update ready',
-        actionLabel: 'Restart blocked while jobs run',
+        label: 'Jobs running',
+        iconOnly: false,
+        variant: 'outline',
+        icon: 'blocked',
+        disabled: true,
       };
     case 'error':
       return {
-        icon: <AlertTriangle size={15} />,
+        visible: true,
         tooltip: state.error ?? 'Update error',
-        title: 'Update error',
-        actionLabel: 'Check again',
+        label: null,
+        iconOnly: true,
+        variant: 'destructive',
+        icon: 'error',
       };
     default:
       return {
-        icon: <Download size={15} />,
-        tooltip: 'Check for updates',
-        title: 'Updates',
-        actionLabel: 'Check now',
+        visible: false,
+        tooltip: '',
+        label: null,
+        iconOnly: true,
+        variant: 'outline',
+        icon: 'available',
       };
   }
 }
 
 export function UpdateControl() {
-  const [open, setOpen] = useState(false);
   const { state, busyAction, checkForUpdates, downloadUpdate, applyUpdate } = useUpdateState();
-  const copy = useMemo(() => getStatusCopy(state), [state]);
+  const isPendingDownload = busyAction === 'download' && state.status === 'available';
+  const displayState: UpdateState = isPendingDownload
+    ? {
+        ...state,
+        status: 'downloading',
+      }
+    : state;
+  const copy = getStatusCopy(displayState);
 
-  async function handlePrimaryAction() {
+  async function handleControlClick() {
     if (state.status === 'available') {
       await downloadUpdate();
       return;
     }
-    if (state.status === 'downloaded' || state.status === 'apply_blocked_active_jobs') {
+
+    if (state.status === 'downloaded') {
       await applyUpdate();
       return;
     }
-    await checkForUpdates();
+
+    if (state.status === 'error') {
+      await checkForUpdates();
+    }
   }
 
-  const disablePrimary =
-    busyAction !== null || state.status === 'checking' || state.status === 'downloading';
+  if (!copy.visible) {
+    return null;
+  }
+
+  const icon =
+    copy.icon === 'available' ? (
+      <ArrowUpCircle size={14} />
+    ) : copy.icon === 'downloading' ? (
+      <Loader2 size={14} className="animate-spin" />
+    ) : copy.icon === 'downloaded' ? (
+      <CheckCircle2 size={14} />
+    ) : copy.icon === 'blocked' ? (
+      <AlertTriangle size={14} />
+    ) : (
+      <RefreshCw size={14} />
+    );
+
+  const buttonClass = cn(
+    'shrink-0 shadow-none',
+    copy.iconOnly ? 'w-9 min-w-9 px-0' : 'px-3.5',
+    copy.variant === 'outline' &&
+      displayState.status === 'available' &&
+      'border-primary/35 bg-primary/10 text-primary hover:bg-primary/16 active:bg-primary/20',
+    copy.variant === 'outline' &&
+      displayState.status === 'downloaded' &&
+      'border-primary/35 bg-primary/10 text-primary hover:bg-primary/16 active:bg-primary/20',
+    copy.variant === 'outline' &&
+      displayState.status === 'apply_blocked_active_jobs' &&
+      'border-warning/30 bg-warning/10 text-warning hover:bg-warning/12 active:bg-warning/16',
+    copy.variant === 'ghost' && 'text-muted-foreground hover:bg-accent hover:text-foreground',
+  );
 
   return (
-    <>
-      <Tooltip content={copy.tooltip} side="bottom">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className={cn(
-            'inline-flex h-9 items-center justify-center rounded-full px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
-            (state.status === 'available' || state.status === 'downloaded' || state.status === 'apply_blocked_active_jobs') &&
-              'text-primary',
-            state.status === 'error' && 'text-destructive',
-          )}
-          aria-label={copy.tooltip}
-        >
-          {copy.icon}
-        </button>
-      </Tooltip>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-xl">
-          <div className="space-y-5">
-            <div>
-              <DialogTitle>{copy.title}</DialogTitle>
-              <DialogDescription>
-                {state.distribution === 'managed'
-                  ? 'Managed installs can download and apply updates from GitHub Releases.'
-                  : 'Portable builds stay manual. GFOS Build can still point you to the latest release ZIP.'}
-              </DialogDescription>
-            </div>
-
-            <div className="rounded-[18px] border border-border bg-secondary/45 p-4">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium text-foreground">Current version</span>
-                <span className="text-muted-foreground">v{state.currentVersion}</span>
-                <span className="text-muted-foreground/50">•</span>
-                <span className="font-medium text-foreground capitalize">{state.distribution}</span>
-                <span className="text-muted-foreground">channel {state.channel}</span>
-              </div>
-              {state.availableVersion ? (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Latest available: <span className="font-medium text-foreground">v{state.availableVersion}</span>
-                </p>
-              ) : null}
-              {state.publishedAt ? (
-                <p className="mt-1 text-xs text-muted-foreground">Published {formatDate(state.publishedAt)}</p>
-              ) : null}
-              {state.downloadPercent != null && (state.status === 'downloading' || state.status === 'downloaded') ? (
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-border">
-                  <div
-                    className="h-full rounded-full bg-primary transition-[width] duration-200"
-                    style={{ width: `${Math.max(3, Math.round(state.downloadPercent))}%` }}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            {state.releaseName || state.releaseNotes ? (
-              <div className="space-y-2">
-                {state.releaseName ? (
-                  <div className="text-sm font-medium text-foreground">{state.releaseName}</div>
-                ) : null}
-                {state.releaseNotes ? (
-                  <pre className="max-h-52 overflow-auto rounded-[18px] border border-border bg-secondary/45 p-4 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                    {state.releaseNotes}
-                  </pre>
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {state.status === 'not_available'
-                  ? 'No newer release is currently available.'
-                  : 'Release details will appear here after an update check.'}
-              </p>
-            )}
-
-            {state.status === 'apply_blocked_active_jobs' ? (
-              <p className="text-sm text-warning">
-                An update is already downloaded. Finish or stop active jobs before restarting to apply it.
-              </p>
-            ) : null}
-            {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
-
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => void checkForUpdates()} disabled={busyAction !== null}>
-                <RefreshCw size={14} className={cn(busyAction === 'check' && 'animate-spin')} />
-                Check now
-              </Button>
-              {copy.actionLabel ? (
-                <Button
-                  onClick={() => void handlePrimaryAction()}
-                  disabled={disablePrimary || state.status === 'apply_blocked_active_jobs'}
-                >
-                  {busyAction === 'download' || busyAction === 'apply' ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <ArrowUpCircle size={14} />
-                  )}
-                  {copy.actionLabel}
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+    <Tooltip content={copy.tooltip} side="bottom">
+      <Button
+        type="button"
+        variant={copy.variant}
+        size="sm"
+        onClick={() => void handleControlClick()}
+        className={buttonClass}
+        disabled={copy.disabled || busyAction !== null}
+        aria-label={copy.tooltip}
+      >
+        {icon}
+        {copy.label ? <span>{copy.label}</span> : null}
+      </Button>
+    </Tooltip>
   );
 }

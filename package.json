@@ -18,7 +18,7 @@
     "dev:desktop": "cd gui && bun run dev",
     "start": "bun run dist/cli/index.js",
     "start:desktop": "cd gui && bun run start",
-    "smoke:desktop": "cd gui && bun run smoke:win",
+    "release:smoke": "cd gui && bun run smoke:win",
     "build": "tsc -p tsconfig.json",
     "build:desktop": "cd gui && bun run build",
     "lint": "eslint src tests",

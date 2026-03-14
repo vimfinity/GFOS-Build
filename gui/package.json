@@ -13,9 +13,9 @@
     "smoke:win": "node scripts/start-win.mjs --smoke-test",
     "check": "bun run typecheck && bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "dist:win": "node scripts/dist-win.mjs && bunx electron-builder --config electron-builder.yml --win nsis --x64 --publish never",
+    "dist:win": "node scripts/dist-win.mjs && bunx electron-builder --config electron-builder.yml --win nsis --x64 --publish never && node scripts/cleanup-managed-release.mjs",
     "dist:win:portable": "node scripts/dist-win.mjs",
-    "dist:win:installer": "bunx electron-builder --config electron-builder.yml --win nsis --x64 --publish never",
+    "dist:win:installer": "bunx electron-builder --config electron-builder.yml --win nsis --x64 --publish never && node scripts/cleanup-managed-release.mjs",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "node node_modules/electron/install.js && bun run rebuild:native"
   },

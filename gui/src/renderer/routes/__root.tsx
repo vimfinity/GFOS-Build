@@ -107,16 +107,19 @@ function NavTab({
 }
 
 function SettingsNavButton({
+  shortcut,
 }: {
   shortcut: string;
 }) {
   const base =
-    'inline-flex h-9 items-center justify-center rounded-full px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:text-foreground focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
-  const active = 'icon-chip-accent inline-flex h-9 items-center justify-center rounded-full px-3 text-primary transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
+    'inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:text-foreground focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
+  const active =
+    'inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
 
   return (
     <Tooltip
       content="Settings"
+      shortcut={<ShortcutKey>{shortcut}</ShortcutKey>}
       side="bottom"
     >
       {

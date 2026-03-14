@@ -142,6 +142,18 @@ function compareVersions(left: string, right: string): number {
   return (a.prereleaseNumber ?? 0) - (b.prereleaseNumber ?? 0);
 }
 
+function getNextTestVersion(currentVersion: string): string {
+  const parsed = parseVersion(currentVersion);
+  if (!parsed) return currentVersion;
+
+  const base = `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+  if (!parsed.prereleaseTag) {
+    return `${parsed.major}.${parsed.minor}.${parsed.patch + 1}`;
+  }
+
+  return `${base}-${parsed.prereleaseTag}.${(parsed.prereleaseNumber ?? 0) + 1}`;
+}
+
 async function fetchLatestRelease(distribution: DistributionMode): Promise<GitHubRelease | null> {
   const response = await fetch(GITHUB_RELEASES_API, {
     headers: {
@@ -164,8 +176,9 @@ async function fetchLatestRelease(distribution: DistributionMode): Promise<GitHu
 }
 
 export function createUpdaterService(options: CreateUpdaterServiceOptions): UpdaterService {
-  const distribution = detectDistribution();
-  const updatesEnabled = app.isPackaged;
+  const devUpdateSimulation = !app.isPackaged;
+  const distribution = devUpdateSimulation ? 'managed' : detectDistribution();
+  const updatesEnabled = app.isPackaged || devUpdateSimulation;
   let state: UpdateState = {
     status: 'idle',
     currentVersion: app.getVersion(),
@@ -211,6 +224,63 @@ export function createUpdaterService(options: CreateUpdaterServiceOptions): Upda
 
   refreshLoop();
 
+  const runDevCheck = async (): Promise<UpdateState> => {
+    const availableVersion = getNextTestVersion(appInfo.version);
+    const publishedAt = new Date().toISOString();
+    return setState({
+      status: 'available',
+      availableVersion,
+      releaseName: `GFOS Build v${availableVersion}`,
+      releaseNotes: 'Local updater simulation for desktop development.',
+      publishedAt,
+      downloadPercent: undefined,
+      downloadedBytes: undefined,
+      totalBytes: undefined,
+      error: undefined,
+      releasePageUrl: GITHUB_RELEASES_PAGE,
+    });
+  };
+
+  const runDevDownload = async (): Promise<UpdateState> => {
+    const availableVersion = state.availableVersion ?? getNextTestVersion(appInfo.version);
+    const releaseName = state.releaseName ?? `GFOS Build v${availableVersion}`;
+    const publishedAt = state.publishedAt ?? new Date().toISOString();
+
+    return setState({
+      status: 'downloaded',
+      availableVersion,
+      releaseName,
+      publishedAt,
+      downloadPercent: 100,
+      downloadedBytes: 100,
+      totalBytes: 100,
+      error: undefined,
+    });
+  };
+
+  const runDevApply = async (): Promise<UpdateState> => {
+    const next = refreshApplyBlockState(state, options.getActiveJobCount);
+    state = next;
+    if (next.status === 'apply_blocked_active_jobs') {
+      options.sendState(state);
+      return state;
+    }
+
+    return setState({
+      status: 'idle',
+      availableVersion: undefined,
+      releaseName: undefined,
+      releaseNotes: undefined,
+      publishedAt: undefined,
+      downloadPercent: undefined,
+      downloadedBytes: undefined,
+      totalBytes: undefined,
+      error: undefined,
+      applyBlockedReason: undefined,
+      lastCheckedAt: new Date().toISOString(),
+    });
+  };
+
   const ensureManagedUpdater = async (): Promise<AppUpdater> => {
     if (managedUpdaterPromise) {
       return managedUpdaterPromise;
@@ -221,7 +291,8 @@ export function createUpdaterService(options: CreateUpdaterServiceOptions): Upda
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = false;
       autoUpdater.allowPrerelease = true;
-
+      return autoUpdater;
+    }).then((autoUpdater) => {
       autoUpdater.on('checking-for-update', () => {
         setState({
           status: 'checking',
@@ -349,6 +420,9 @@ export function createUpdaterService(options: CreateUpdaterServiceOptions): Upda
           error: 'Updates are unavailable in development builds.',
         });
       }
+      if (devUpdateSimulation) {
+        return runDevCheck();
+      }
       if (distribution === 'managed') {
         try {
           const managedUpdater = await ensureManagedUpdater();
@@ -371,6 +445,9 @@ export function createUpdaterService(options: CreateUpdaterServiceOptions): Upda
           status: 'error',
           error: 'Updates are unavailable in development builds.',
         });
+      }
+      if (devUpdateSimulation) {
+        return runDevDownload();
       }
       if (distribution === 'managed') {
         try {
@@ -409,6 +486,9 @@ export function createUpdaterService(options: CreateUpdaterServiceOptions): Upda
           error: 'Updates are unavailable in development builds.',
         });
       }
+      if (devUpdateSimulation) {
+        return runDevApply();
+      }
       if (distribution !== 'managed') {
         return setState({
           status: 'error',
@@ -425,7 +505,8 @@ export function createUpdaterService(options: CreateUpdaterServiceOptions): Upda
 
       try {
         const managedUpdater = await ensureManagedUpdater();
-        managedUpdater.quitAndInstall(false, true);
+        // The renderer already confirmed the restart, so install silently and relaunch the app.
+        managedUpdater.quitAndInstall(true, true);
         return emitState();
       } catch (error) {
         return setState({
