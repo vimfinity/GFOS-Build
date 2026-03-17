@@ -307,6 +307,7 @@ function StepCard({
 }) {
   const { data: configData } = useQuery(configQuery);
   const jdkVersions = useMemo(() => Object.keys(configData?.config.jdkRegistry ?? {}), [configData]);
+  const [collapsed, setCollapsed] = useState(false);
 
   function handleResolvedPath(path: string, project?: Project) {
     onUpdate((current) => ({
@@ -320,7 +321,12 @@ function StepCard({
   return (
     <div className="rounded-[24px] border border-border bg-secondary/35 p-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          className="min-w-0 flex-1 cursor-pointer text-left focus-visible:outline-none focus-visible:rounded-lg focus-visible:[box-shadow:0_0_0_1px_var(--color-ring)]"
+        >
           <div className="flex items-center gap-2">
             <span className="pill-meta rounded-full bg-card font-mono text-muted-foreground">
               Step {index + 1}
@@ -339,10 +345,16 @@ function StepCard({
               </span>
             )}
           </div>
-          <p className="mt-2 truncate text-sm font-medium text-foreground">
-            {step.label || 'Untitled step'}
-          </p>
-        </div>
+          <div className="mt-2 flex items-center gap-1.5">
+            <ChevronDown
+              size={13}
+              className={cn('shrink-0 text-muted-foreground transition-transform duration-200', collapsed && '-rotate-90')}
+            />
+            <p className="truncate text-sm font-medium text-foreground">
+              {step.label || 'Untitled step'}
+            </p>
+          </div>
+        </button>
 
         <div className="flex items-center gap-1">
           <Tooltip content="Move up" side="bottom" disabled={index === 0}>
@@ -381,151 +393,155 @@ function StepCard({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-        <Input
-          label="Label"
-          placeholder="e.g. web-app"
-          value={step.label}
-          onChange={(e) => onUpdate((current) => ({ ...current, label: e.target.value }))}
-        />
-        <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
-          Build system is detected from the selected project path.
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <ProjectPathPicker
-          value={step.path}
-          onChange={(value) => onUpdate((current) => ({ ...current, path: value }))}
-          onResolvedPath={handleResolvedPath}
-        />
-      </div>
-
-      {step.inspectionError && (
-        <div className="mt-4 rounded-[18px] border border-destructive/20 bg-destructive/8 px-4 py-3 text-sm text-destructive">
-          {step.inspectionError}
-        </div>
-      )}
-
-      {step.buildSystem === 'maven' ? (
-        <div className="mt-4">
-          <MavenCommandFields
-            metadata={step.mavenMetadata}
-            value={toMavenCommandValue(step)}
-            onChange={(nextValue) =>
-              onUpdate((current) => ({
-                ...current,
-                mavenModulePath: nextValue.modulePath,
-                mavenGoals: nextValue.goals,
-                mavenOptionKeys: nextValue.optionKeys,
-                mavenProfileStates: nextValue.profileStates,
-                mavenExtraOptions: nextValue.extraOptions,
-                javaVersion: nextValue.javaVersion,
-                executionMode: nextValue.executionMode,
-              }))
-            }
-            jdkVersions={jdkVersions}
-          />
-        </div>
-      ) : step.buildSystem === 'node' ? (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end">
-          <div className="flex flex-col gap-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Command
-            </label>
-            <div className="segmented-control w-fit">
-              {([
-                { value: 'script', label: 'Run script' },
-                { value: 'install', label: 'Install deps' },
-              ] as const).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={step.commandType === option.value}
-                  onClick={() =>
-                    onUpdate((current) => ({
-                      ...current,
-                      commandType: option.value,
-                      script:
-                        option.value === 'script'
-                          ? current.script || current.availableScripts[0]?.name || ''
-                          : current.script,
-                      inspectionError:
-                        option.value === 'script' && current.availableScripts.length === 0
-                          ? 'No scripts were found in this package.json.'
-                          : undefined,
-                    }))
-                  }
-                  className={cn('segmented-control-button', step.commandType === option.value && 'is-active')}
-                >
-                  {option.label}
-                </button>
-              ))}
+      <div className={cn('grid transition-[grid-template-rows] duration-200 ease-in-out', collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]')}>
+        <div className="overflow-hidden">
+          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <Input
+              label="Label"
+              placeholder="e.g. web-app"
+              value={step.label}
+              onChange={(e) => onUpdate((current) => ({ ...current, label: e.target.value }))}
+            />
+            <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
+              Build system is detected from the selected project path.
             </div>
           </div>
-          {step.commandType === 'script' ? (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Script
-            </label>
-            {step.availableScripts.length > 0 ? (
-              <ComboboxField
-                value={step.script}
-                options={getNodeScriptComboboxOptions(
-                  Object.fromEntries(step.availableScripts.map((scriptEntry) => [scriptEntry.name, scriptEntry.command])),
-                )}
-                onValueChange={(value) => onUpdate((current) => ({ ...current, script: value }))}
-                placeholder="Select a script"
-                emptyText="No matching scripts"
-              />
-            ) : (
-              <div className="rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
-                No scripts were found in this package.json.
-              </div>
-            )}
+
+          <div className="mt-4">
+            <ProjectPathPicker
+              value={step.path}
+              onChange={(value) => onUpdate((current) => ({ ...current, path: value }))}
+              onResolvedPath={handleResolvedPath}
+            />
           </div>
-          ) : (
-            <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
-              Uses the detected package manager install command.
+
+          {step.inspectionError && (
+            <div className="mt-4 rounded-[18px] border border-destructive/20 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+              {step.inspectionError}
             </div>
           )}
-          <Input
-            label={step.commandType === 'install' ? 'Install args' : 'Optional args'}
-            placeholder={step.commandType === 'install' ? 'e.g. --frozen-lockfile' : 'e.g. --host 0.0.0.0'}
-            value={step.args}
-            onChange={(e) => onUpdate((current) => ({ ...current, args: e.target.value }))}
-          />
-          <div className="lg:col-span-2 flex flex-col gap-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Execution mode
-            </label>
-            <div className="segmented-control w-fit">
-              {(['internal', 'external'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={step.executionMode === mode}
-                  onClick={() => onUpdate((current) => ({ ...current, executionMode: mode }))}
-                  className={cn('segmented-control-button', step.executionMode === mode && 'is-active')}
-                >
-                  {mode === 'internal' ? 'In app' : 'External terminal'}
-                </button>
-              ))}
-            </div>
-            {step.executionMode === 'external' && (
-              <p className="text-xs leading-relaxed text-warning">
-                External steps launch a new terminal window and the pipeline continues immediately.
-              </p>
-            )}
-          </div>
-        </div>
-      ) : null}
 
-      {step.buildSystem === 'node' && step.availableScripts.length === 0 && !step.inspectionError && step.commandType === 'install' && (
-        <div className="mt-4 rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
-          Install is still available even though no scripts were found in this package.json.
+          {step.buildSystem === 'maven' ? (
+            <div className="mt-4">
+              <MavenCommandFields
+                metadata={step.mavenMetadata}
+                value={toMavenCommandValue(step)}
+                onChange={(nextValue) =>
+                  onUpdate((current) => ({
+                    ...current,
+                    mavenModulePath: nextValue.modulePath,
+                    mavenGoals: nextValue.goals,
+                    mavenOptionKeys: nextValue.optionKeys,
+                    mavenProfileStates: nextValue.profileStates,
+                    mavenExtraOptions: nextValue.extraOptions,
+                    javaVersion: nextValue.javaVersion,
+                    executionMode: nextValue.executionMode,
+                  }))
+                }
+                jdkVersions={jdkVersions}
+              />
+            </div>
+          ) : step.buildSystem === 'node' ? (
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end">
+              <div className="flex flex-col gap-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  Command
+                </label>
+                <div className="segmented-control w-fit">
+                  {([
+                    { value: 'script', label: 'Run script' },
+                    { value: 'install', label: 'Install deps' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={step.commandType === option.value}
+                      onClick={() =>
+                        onUpdate((current) => ({
+                          ...current,
+                          commandType: option.value,
+                          script:
+                            option.value === 'script'
+                              ? current.script || current.availableScripts[0]?.name || ''
+                              : current.script,
+                          inspectionError:
+                            option.value === 'script' && current.availableScripts.length === 0
+                              ? 'No scripts were found in this package.json.'
+                              : undefined,
+                        }))
+                      }
+                      className={cn('segmented-control-button', step.commandType === option.value && 'is-active')}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {step.commandType === 'script' ? (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    Script
+                  </label>
+                  {step.availableScripts.length > 0 ? (
+                    <ComboboxField
+                      value={step.script}
+                      options={getNodeScriptComboboxOptions(
+                        Object.fromEntries(step.availableScripts.map((scriptEntry) => [scriptEntry.name, scriptEntry.command])),
+                      )}
+                      onValueChange={(value) => onUpdate((current) => ({ ...current, script: value }))}
+                      placeholder="Select a script"
+                      emptyText="No matching scripts"
+                    />
+                  ) : (
+                    <div className="rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
+                      No scripts were found in this package.json.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
+                  Uses the detected package manager install command.
+                </div>
+              )}
+              <Input
+                label={step.commandType === 'install' ? 'Install args' : 'Optional args'}
+                placeholder={step.commandType === 'install' ? 'e.g. --frozen-lockfile' : 'e.g. --host 0.0.0.0'}
+                value={step.args}
+                onChange={(e) => onUpdate((current) => ({ ...current, args: e.target.value }))}
+              />
+              <div className="lg:col-span-2 flex flex-col gap-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  Execution mode
+                </label>
+                <div className="segmented-control w-fit">
+                  {(['internal', 'external'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={step.executionMode === mode}
+                      onClick={() => onUpdate((current) => ({ ...current, executionMode: mode }))}
+                      className={cn('segmented-control-button', step.executionMode === mode && 'is-active')}
+                    >
+                      {mode === 'internal' ? 'In app' : 'External terminal'}
+                    </button>
+                  ))}
+                </div>
+                {step.executionMode === 'external' && (
+                  <p className="text-xs leading-relaxed text-warning">
+                    External steps launch a new terminal window and the pipeline continues immediately.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {step.buildSystem === 'node' && step.availableScripts.length === 0 && !step.inspectionError && step.commandType === 'install' && (
+            <div className="mt-4 rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
+              Install is still available even though no scripts were found in this package.json.
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -744,7 +760,7 @@ export function PipelineDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-5xl h-[min(90vh,860px)]">
         <DialogTitle>{mode === 'create' ? 'Create pipeline' : `Edit "${name}"`}</DialogTitle>
         <DialogDescription>
           Build a multi-step pipeline with detected Maven and Node step behavior.
