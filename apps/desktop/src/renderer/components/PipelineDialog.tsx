@@ -8,7 +8,7 @@ import { ComboboxField } from '@/components/ui/combobox-field';
 import { Tooltip } from '@/components/ui/tooltip';
 import { getNodeScriptChoices, getNodeScriptComboboxOptions, type NodeScriptChoice } from '@/lib/node-script-options';
 import { cn } from '@/lib/utils';
-import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2, Check } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2, Check, ChevronDown } from 'lucide-react';
 import type { PipelineStep } from '@gfos-build/contracts';
 import type { ExecutionMode, MavenMetadata, MavenOptionKey, MavenProfileState, NodeCommandType, PackageManager, Project } from '@gfos-build/contracts';
 import { pickDirectory } from '@/api/bridge';
@@ -212,7 +212,14 @@ function ProjectPathPicker({
             }}
             onKeyDown={handleKeyDown}
             placeholder={open ? 'Search projects or type an absolute path...' : 'Select a project...'}
-            className="field-input h-11 w-full rounded-2xl border px-4 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
+            className="field-input h-11 w-full rounded-2xl border pl-4 pr-10 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
+          />
+          <ChevronDown
+            size={15}
+            className={cn(
+              'pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-transform',
+              open && 'rotate-180',
+            )}
           />
 
           {open && (
