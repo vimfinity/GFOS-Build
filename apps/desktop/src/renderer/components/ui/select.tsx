@@ -54,7 +54,7 @@ export function SelectContent({
 }: ComponentPropsWithoutRef<typeof BaseSelect.Positioner>) {
   return (
     <BaseSelect.Portal>
-      <BaseSelect.Positioner sideOffset={sideOffset} alignItemWithTrigger={alignItemWithTrigger} {...props}>
+      <BaseSelect.Positioner sideOffset={sideOffset} alignItemWithTrigger={alignItemWithTrigger} className="select-positioner" {...props}>
         <BaseSelect.Popup className="glass-card select-popup">
           <BaseSelect.List className={cn('select-list', className)}>
             {children}

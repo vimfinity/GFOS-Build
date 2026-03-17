@@ -49,16 +49,16 @@ interface PipelineDialogProps {
   mode: 'create' | 'edit';
 }
 
-function createEmptyStep(mavenGoals: string): StepFormData {
+function createEmptyStep(mavenGoals: string, mavenOptionKeys: MavenOptionKey[] = [], mavenExtraOptions: string[] = []): StepFormData {
   return {
     label: '',
     path: '',
     buildSystem: null,
     mavenModulePath: '',
     mavenGoals: mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install'],
-    mavenOptionKeys: [],
+    mavenOptionKeys,
     mavenProfileStates: {},
-    mavenExtraOptions: [],
+    mavenExtraOptions,
     commandType: 'script',
     script: '',
     args: '',
@@ -532,6 +532,14 @@ export function PipelineDialog({
 }: PipelineDialogProps) {
   const { data: configData } = useQuery(configQuery);
   const defaultMavenGoals = configData?.config.maven.defaultGoals.join(' ') ?? 'clean install';
+  const defaultMavenOptionKeys = useMemo(
+    () => (configData?.config.maven.defaultOptionKeys ?? []) as MavenOptionKey[],
+    [configData],
+  );
+  const defaultMavenExtraOptions = useMemo(
+    () => configData?.config.maven.defaultExtraOptions ?? [],
+    [configData],
+  );
   const registeredJdkVersions = useMemo(
     () => Object.keys(configData?.config.jdkRegistry ?? {}),
     [configData],
@@ -540,7 +548,7 @@ export function PipelineDialog({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [failFast, setFailFast] = useState(true);
-  const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals)]);
+  const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)]);
   const [isDirty, setIsDirty] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
 
@@ -649,7 +657,7 @@ export function PipelineDialog({
     const nextSteps =
       initialData?.steps.length
         ? initialData.steps.map((step) => fromApiStep(step, defaultMavenGoals))
-        : [createEmptyStep(defaultMavenGoals)];
+        : [createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)];
 
     setName(initialData?.name ?? '');
     setDescription(initialData?.description ?? '');
@@ -668,7 +676,7 @@ export function PipelineDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, initialData, defaultMavenGoals, registeredJdkVersions]);
+  }, [open, initialData, defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions, registeredJdkVersions]);
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen && isDirty) {
@@ -687,7 +695,7 @@ export function PipelineDialog({
 
   function addStep() {
     setIsDirty(true);
-    setSteps((current) => [...current, createEmptyStep(defaultMavenGoals)]);
+    setSteps((current) => [...current, createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)]);
   }
 
   function removeStep(index: number) {

@@ -433,8 +433,11 @@
     color: var(--color-foreground);
   }
 
-  .select-popup {
+  .select-positioner {
     z-index: 90;
+  }
+
+  .select-popup {
     min-width: var(--anchor-width);
     max-width: min(28rem, calc(100vw - 2rem));
     overflow: hidden;
