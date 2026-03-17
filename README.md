@@ -51,10 +51,15 @@ No Java runtime, Node.js, or other dependencies required — the app is fully se
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) >= 1.1
-- Node.js >= 20 (for `electron-rebuild`)
-- Visual Studio 2022 with the `Desktop development with C++` workload when native Electron dependencies need a local rebuild on Windows
+- [Bun](https://bun.sh) >= 1.3.10 for workspace installs and `bunx`
+- Node.js 24 LTS for the CLI runtime, CI, and Electron main-process compatibility
 - Windows (packaging target is win32-x64)
+
+Validated in this repo with:
+
+- Bun `1.3.10`
+- Node.js `24.12.0`
+- Electron `41.0.2`
 
 ### Setup
 
@@ -63,6 +68,8 @@ bun install
 ```
 
 If you pulled an older clone, run `bun install` again after updating. Bun needs to trust Electron's install script so the desktop binary is downloaded correctly.
+
+GFOS Build uses Bun as the package manager, but the built CLI and desktop runtime target plain Node.js 24.
 
 ### Run in development mode
 
@@ -107,12 +114,12 @@ bun run check          # lint + typecheck + unit tests + build
 ## Architecture
 
 ```
-src/                         # Bun server (CLI + HTTP API)
+src/                         # Node-first server (CLI + HTTP API)
   application/               # pipeline runner, scanner
   cli/                       # HTTP/WS server, route handlers
   config/                    # zod-validated config schema
   core/                      # domain types, JDK resolver
-  infrastructure/            # SQLite DB (bun:sqlite), file system
+  infrastructure/            # SQLite DB (node:sqlite), file system
 
 shared/                      # shared TypeScript types (api, types)
 

@@ -20,9 +20,6 @@ extraResources:
     filter:
       - icon.ico
 
-asarUnpack:
-  - node_modules/**/*.node
-
 npmRebuild: false
 generateUpdatesFilesForAllChannels: true
 

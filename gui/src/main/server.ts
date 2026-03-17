@@ -12,11 +12,11 @@ import { CachedScanner } from '@server/application/scanner';
 import { BuildRunner } from '@server/application/build-runner';
 import { PipelineRunner } from '@server/application/pipeline-runner';
 import { runServe } from '@server/cli/commands/serve';
-import { NodeDatabase } from './database';
+import { AppDatabase } from '@server/infrastructure/database';
 
 export interface ServerHandle {
   port: number;
-  db: NodeDatabase;
+  db: AppDatabase;
   close: () => void;
   getActiveJobCount: () => number;
 }
@@ -45,7 +45,7 @@ export async function startServer(version: string): Promise<ServerHandle> {
 
   const fileSystem = new NodeFileSystem();
   const processRunner = new NodeProcessRunner();
-  const db = new NodeDatabase(getDbPath());
+  const db = new AppDatabase(getDbPath());
   const scanner = new CachedScanner(new RepositoryScanner(fileSystem), db);
   const executor = new BuildExecutor(processRunner);
   const nodeExecutor = new NodeExecutor(processRunner);
