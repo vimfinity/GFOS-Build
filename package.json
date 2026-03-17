@@ -4,6 +4,17 @@
   "description": "CLI for Maven build orchestration and pipeline automation",
   "type": "module",
   "private": true,
+  "packageManager": "bun@1.3.10",
+  "engines": {
+    "node": ">=24 <25",
+    "bun": ">=1.3.10"
+  },
+  "overrides": {
+    "rollup": "4.59.0",
+    "minimatch": "10.2.4",
+    "ajv": "6.14.0",
+    "flatted": "3.4.1"
+  },
   "workspaces": [
     "gui",
     "shared"
@@ -16,45 +27,40 @@
   "scripts": {
     "dev": "bun run src/cli/index.ts",
     "dev:desktop": "cd gui && bun run dev",
-    "start": "bun run dist/cli/index.js",
+    "start": "node dist/cli/index.js",
     "start:desktop": "cd gui && bun run start",
     "smoke:desktop": "cd gui && bun run smoke:win",
     "release:smoke": "bun run smoke:desktop",
-    "build": "tsc -p tsconfig.json",
-    "build:desktop": "cd gui && bun run build",
+    "build:shared": "tsc -p shared/tsconfig.json",
+    "build": "bun run build:shared && tsc -p tsconfig.json",
+    "build:desktop": "bun run build:shared && cd gui && bun run build",
     "lint": "eslint src tests",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "typecheck:desktop": "cd gui && bun run typecheck",
-    "test:vitest": "vitest run",
-    "test:bun": "bun test tests/**/*.bun.test.ts",
-    "test": "bun run test:vitest && bun run test:bun",
+    "typecheck:shared": "tsc --noEmit -p shared/tsconfig.json",
+    "typecheck": "bun run build:shared && bun run typecheck:shared && tsc --noEmit -p tsconfig.json",
+    "typecheck:desktop": "bun run build:shared && bun run typecheck:shared && cd gui && bun run typecheck",
+    "test": "vitest run",
     "check": "bun run lint && bun run typecheck && bun run test && bun run build",
-    "check:desktop": "cd gui && bun run check",
+    "check:desktop": "bun run build:shared && bun run typecheck:shared && cd gui && bun run check",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"*.md\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.md\"",
-    "dist:desktop:win": "cd gui && bun run dist:win"
+    "dist:desktop:win": "bun run build:shared && cd gui && bun run dist:win"
   },
-  "trustedDependencies": [
-    "better-sqlite3",
-    "electron"
-  ],
   "dependencies": {
     "@gfos-build/shared": "workspace:*",
     "ws": "^8.18.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.18.0",
-    "@types/bun": "latest",
-    "@types/node": "^22.10.0",
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.10.0",
     "@types/ws": "^8.5.13",
-    "eslint": "^9.18.0",
+    "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.0.0",
     "globals": "^15.14.0",
     "prettier": "^3.4.2",
-    "turbo": "^2.3.3",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.20.0",
-    "vitest": "^3.0.0"
+    "turbo": "^2.8.17",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.1",
+    "vitest": "^4.1.0"
   }
 }

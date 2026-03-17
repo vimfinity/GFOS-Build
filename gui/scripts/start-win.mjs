@@ -16,7 +16,6 @@ const packagedExe = path.resolve(
   'release',
   'desktop',
   'win-unpacked',
-  'GFOS Build-win32-x64',
   'GFOS Build.exe',
 );
 

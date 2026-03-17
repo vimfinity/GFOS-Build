@@ -1,8 +1,11 @@
-import { Database } from 'bun:sqlite';
-import path from 'node:path';
 import { mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Project } from '../core/types.js';
 import type { BuildCompletionStatus, ExecutionMode, PackageManager } from '../core/types.js';
+
+const require = createRequire(import.meta.url);
 
 const SCHEMA_VERSION = 1;
 
@@ -48,6 +51,10 @@ CREATE TABLE IF NOT EXISTS build_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_build_logs_run_id ON build_logs(run_id);
 `;
+
+type NodeSqliteModule = typeof import('node:sqlite');
+
+let cachedNodeSqlite: NodeSqliteModule | null = null;
 
 export interface StartBuildRunParams {
   jobId?: string;
@@ -103,7 +110,6 @@ export interface BuildLogPage {
   nextBeforeSeq: number | null;
 }
 
-/** Shared interface — implemented by AppDatabase (bun:sqlite) and NodeDatabase (better-sqlite3). */
 export interface IDatabase {
   startBuildRun(params: StartBuildRunParams): number;
   finishBuildRun(params: FinishBuildRunParams): void;
@@ -122,13 +128,13 @@ export interface IDatabase {
   close(): void;
 }
 
-/** CLI implementation — uses bun:sqlite (built into the Bun runtime, no native compilation). */
 export class AppDatabase implements IDatabase {
-  private readonly db: Database;
+  private readonly db: DatabaseSync;
 
   constructor(dbPath: string) {
+    const { DatabaseSync: DatabaseCtor } = loadNodeSqlite();
     mkdirSync(path.dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath);
+    this.db = new DatabaseCtor(dbPath);
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA foreign_keys = ON');
     this.migrate();
@@ -156,7 +162,7 @@ export class AppDatabase implements IDatabase {
 
   startBuildRun(params: StartBuildRunParams): number {
     const now = new Date().toISOString();
-    this.db
+    const result = this.db
       .prepare(
         `INSERT INTO build_runs
           (job_id, project_path, project_name, build_system, package_manager, execution_mode, command, java_home, pipeline_name, step_index, started_at, status)
@@ -174,8 +180,8 @@ export class AppDatabase implements IDatabase {
         params.pipelineName ?? null,
         params.stepIndex ?? null,
         now,
-      );
-    return (this.db.prepare('SELECT last_insert_rowid() as id').get() as { id: number }).id;
+      ) as { lastInsertRowid: number | bigint };
+    return Number(result.lastInsertRowid);
   }
 
   finishBuildRun(params: FinishBuildRunParams): void {
@@ -254,22 +260,22 @@ export class AppDatabase implements IDatabase {
   }
 
   getRecentBuilds(opts: { limit: number; pipeline?: string; project?: string }): BuildRunRow[] {
-    const SELECT = `SELECT id, job_id, project_path, project_name, build_system, package_manager, execution_mode, command, java_home,
+    const select = `SELECT id, job_id, project_path, project_name, build_system, package_manager, execution_mode, command, java_home,
                 pipeline_name, step_index, started_at, finished_at, duration_ms, exit_code, status
          FROM build_runs`;
     if (opts.pipeline) {
       return this.db
-        .prepare(`${SELECT} WHERE pipeline_name = ? ORDER BY started_at DESC LIMIT ?`)
-        .all(opts.pipeline, opts.limit) as BuildRunRow[];
+        .prepare(`${select} WHERE pipeline_name = ? ORDER BY started_at DESC LIMIT ?`)
+        .all(opts.pipeline, opts.limit) as unknown as BuildRunRow[];
     }
     if (opts.project) {
       return this.db
-        .prepare(`${SELECT} WHERE project_path = ? ORDER BY started_at DESC LIMIT ?`)
-        .all(opts.project, opts.limit) as BuildRunRow[];
+        .prepare(`${select} WHERE project_path = ? ORDER BY started_at DESC LIMIT ?`)
+        .all(opts.project, opts.limit) as unknown as BuildRunRow[];
     }
     return this.db
-      .prepare(`${SELECT} ORDER BY started_at DESC LIMIT ?`)
-      .all(opts.limit) as BuildRunRow[];
+      .prepare(`${select} ORDER BY started_at DESC LIMIT ?`)
+      .all(opts.limit) as unknown as BuildRunRow[];
   }
 
   getBuildStats(): BuildStats {
@@ -293,8 +299,8 @@ export class AppDatabase implements IDatabase {
          GROUP BY pipeline_name ORDER BY runs DESC`,
       )
       .all() as Array<{ name: string; runs: number; successes: number; avg_ms: number | null }>)
-      .filter((r) => r.runs > 0)
-      .map((r) => ({ name: r.name, runs: r.runs, successes: r.successes, avgMs: r.avg_ms }));
+      .filter((row) => row.runs > 0)
+      .map((row) => ({ name: row.name, runs: row.runs, successes: row.successes, avgMs: row.avg_ms }));
 
     const byProject = (this.db
       .prepare(
@@ -305,7 +311,7 @@ export class AppDatabase implements IDatabase {
          FROM build_runs GROUP BY project_path HAVING runs > 0 ORDER BY runs DESC LIMIT 20`,
       )
       .all() as Array<{ path: string; name: string; runs: number; successes: number; avg_ms: number | null }>)
-      .map((r) => ({ path: r.path, name: r.name, runs: r.runs, successes: r.successes, avgMs: r.avg_ms }));
+      .map((row) => ({ path: row.path, name: row.name, runs: row.runs, successes: row.successes, avgMs: row.avg_ms }));
 
     const slowestSteps = (this.db
       .prepare(
@@ -315,7 +321,7 @@ export class AppDatabase implements IDatabase {
          GROUP BY project_path HAVING COUNT(*) >= 2 ORDER BY avg_ms DESC LIMIT 10`,
       )
       .all() as Array<{ label: string; path: string; avg_ms: number; runs: number }>)
-      .map((r) => ({ label: r.label, path: r.path, avgMs: r.avg_ms, runs: r.runs }));
+      .map((row) => ({ label: row.label, path: row.path, avgMs: row.avg_ms, runs: row.runs }));
 
     return {
       totalBuilds: totals.total,
@@ -386,7 +392,6 @@ export class AppDatabase implements IDatabase {
     };
   }
 
-
   clearBuildLogs(): void {
     this.db.exec('DELETE FROM build_logs');
   }
@@ -395,9 +400,67 @@ export class AppDatabase implements IDatabase {
     this.db.exec('DELETE FROM build_logs');
     this.db.exec('DELETE FROM build_runs');
   }
+
   close(): void {
     this.db.close();
   }
+}
+
+function loadNodeSqlite(): NodeSqliteModule {
+  if (cachedNodeSqlite) {
+    return cachedNodeSqlite;
+  }
+
+  const originalEmitWarning = process.emitWarning;
+  process.emitWarning = function patchedEmitWarning(
+    warning: string | Error,
+    ...args: unknown[]
+  ): void {
+    if (
+      warning === 'SQLite is an experimental feature and might change at any time' ||
+      (warning instanceof Error && warning.name === 'ExperimentalWarning')
+    ) {
+      return;
+    }
+    Reflect.apply(originalEmitWarning, this, [warning, ...args]);
+  };
+
+  try {
+    const sqlite = require('node:sqlite') as NodeSqliteModule;
+    assertNodeSqliteCompatibility(sqlite);
+    cachedNodeSqlite = sqlite;
+    return sqlite;
+  } catch (error) {
+    throw new Error(
+      `GFOS Build requires Node.js with built-in node:sqlite support. Install Node 24 LTS or a compatible Electron runtime. ${formatNodeSqliteError(error)}`,
+    );
+  } finally {
+    process.emitWarning = originalEmitWarning;
+  }
+}
+
+function assertNodeSqliteCompatibility(sqlite: NodeSqliteModule): void {
+  if (typeof sqlite.DatabaseSync !== 'function') {
+    throw new Error('node:sqlite did not expose DatabaseSync.');
+  }
+
+  const db = new sqlite.DatabaseSync(':memory:');
+  try {
+    const statement = db.prepare('SELECT 1 AS value');
+    if (typeof statement.columns !== 'function') {
+      throw new Error('node:sqlite is missing StatementSync.columns().');
+    }
+    statement.columns();
+  } finally {
+    db.close();
+  }
+}
+
+function formatNodeSqliteError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
 }
 
 function clampLogLimit(limit: number | undefined): number {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -18,7 +18,7 @@ describe('AppDatabase', () => {
     }
   });
 
-  test('excludes launched runs from aggregated stats', () => {
+  it('excludes launched runs from aggregated stats', () => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
     const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
     try {
@@ -52,7 +52,7 @@ describe('AppDatabase', () => {
     }
   });
 
-  test('clears logs when deleting all builds', () => {
+  it('clears logs when deleting all builds', () => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
     const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
     try {
@@ -74,7 +74,7 @@ describe('AppDatabase', () => {
     }
   });
 
-  test('paginates stored logs from newest to oldest chunks', () => {
+  it('paginates stored logs from newest to oldest chunks', () => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
     const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
     try {
