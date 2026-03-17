@@ -463,7 +463,7 @@ function SettingsView() {
                 placeholder="e.g. -T4"
               />
               <p className="text-[11px] leading-relaxed text-muted-foreground/72">
-                Optional extra Maven options appended to new runs by default.
+                Optional extra Maven options appended to new runs by default. Type an option and press <kbd className="rounded border border-border px-1 font-mono text-[10px]">Enter</kbd> to add it.
               </p>
             </div>
           </ConfigCard>
