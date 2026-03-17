@@ -47,7 +47,7 @@
     "typecheck": "bun run typecheck:contracts && bun run typecheck:domain && bun run typecheck:application && bun run typecheck:platform-node && bun run typecheck:cli",
     "typecheck:desktop": "bun run typecheck && cd apps/desktop && bun run typecheck",
     "test": "vitest run",
-    "check": "bun run lint && bun run typecheck && bun run test && bun run build",
+    "check": "bun run lint && bun run build && bun run typecheck && bun run test",
     "check:desktop": "bun run check && cd apps/desktop && bun run check",
     "format": "prettier --write \"apps/**/*.ts\" \"apps/**/*.tsx\" \"packages/**/*.ts\" \"tests/**/*.ts\" \"*.md\"",
     "format:check": "prettier --check \"apps/**/*.ts\" \"apps/**/*.tsx\" \"packages/**/*.ts\" \"tests/**/*.ts\" \"*.md\"",
