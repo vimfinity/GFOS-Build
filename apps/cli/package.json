@@ -1,0 +1,16 @@
+{
+  "name": "@gfos-build/cli",
+  "version": "0.1.0-alpha.5",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "gfos-build": "dist/index.js"
+  },
+  "dependencies": {
+    "@gfos-build/application": "workspace:*",
+    "@gfos-build/contracts": "workspace:*",
+    "@gfos-build/domain": "workspace:*",
+    "@gfos-build/platform-node": "workspace:*"
+  }
+}

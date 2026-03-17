@@ -16,44 +16,49 @@
     "flatted": "3.4.1"
   },
   "workspaces": [
-    "gui",
-    "shared"
+    "apps/*",
+    "packages/*"
   ],
   "bin": {
-    "gfos-build": "dist/cli/index.js"
+    "gfos-build": "apps/cli/dist/index.js"
   },
   "author": "GFOS",
   "license": "MIT",
   "scripts": {
-    "dev": "bun run src/cli/index.ts",
-    "dev:desktop": "cd gui && bun run dev",
-    "start": "node dist/cli/index.js",
-    "start:desktop": "cd gui && bun run start",
-    "smoke:desktop": "cd gui && bun run smoke:win",
+    "dev": "bun run apps/cli/src/index.ts",
+    "dev:desktop": "cd apps/desktop && bun run dev",
+    "start": "node apps/cli/dist/index.js",
+    "start:desktop": "cd apps/desktop && bun run start",
+    "smoke:desktop": "cd apps/desktop && bun run smoke:win",
     "release:smoke": "bun run smoke:desktop",
-    "build:shared": "tsc -p shared/tsconfig.json",
-    "build": "bun run build:shared && tsc -p tsconfig.json",
-    "build:desktop": "bun run build:shared && cd gui && bun run build",
-    "lint": "eslint src tests",
-    "typecheck:shared": "tsc --noEmit -p shared/tsconfig.json",
-    "typecheck": "bun run build:shared && bun run typecheck:shared && tsc --noEmit -p tsconfig.json",
-    "typecheck:desktop": "bun run build:shared && bun run typecheck:shared && cd gui && bun run typecheck",
+    "build:contracts": "tsc -p packages/contracts/tsconfig.json",
+    "build:domain": "tsc -p packages/domain/tsconfig.json",
+    "build:application": "tsc -p packages/application/tsconfig.json",
+    "build:platform-node": "tsc -p packages/platform-node/tsconfig.json",
+    "build:cli": "tsc -p apps/cli/tsconfig.json",
+    "build": "bun run build:contracts && bun run build:domain && bun run build:application && bun run build:platform-node && bun run build:cli",
+    "build:desktop": "bun run build && cd apps/desktop && bun run build",
+    "lint": "eslint apps packages tests",
+    "typecheck:contracts": "tsc --noEmit -p packages/contracts/tsconfig.json",
+    "typecheck:domain": "tsc --noEmit -p packages/domain/tsconfig.json",
+    "typecheck:application": "tsc --noEmit -p packages/application/tsconfig.json",
+    "typecheck:platform-node": "tsc --noEmit -p packages/platform-node/tsconfig.json",
+    "typecheck:cli": "tsc --noEmit -p apps/cli/tsconfig.json",
+    "typecheck": "bun run typecheck:contracts && bun run typecheck:domain && bun run typecheck:application && bun run typecheck:platform-node && bun run typecheck:cli",
+    "typecheck:desktop": "bun run typecheck && cd apps/desktop && bun run typecheck",
     "test": "vitest run",
-    "check": "bun run lint && bun run typecheck && bun run test && bun run build",
-    "check:desktop": "bun run build:shared && bun run typecheck:shared && cd gui && bun run check",
-    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"*.md\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.md\"",
-    "dist:desktop:win": "bun run build:shared && cd gui && bun run dist:win"
+    "check": "bun run lint && bun run build && bun run typecheck && bun run test",
+    "check:desktop": "bun run check && cd apps/desktop && bun run check",
+    "format": "prettier --write \"apps/**/*.ts\" \"apps/**/*.tsx\" \"packages/**/*.ts\" \"tests/**/*.ts\" \"*.md\"",
+    "format:check": "prettier --check \"apps/**/*.ts\" \"apps/**/*.tsx\" \"packages/**/*.ts\" \"tests/**/*.ts\" \"*.md\"",
+    "dist:desktop:win": "bun run build && cd apps/desktop && bun run dist:win"
   },
   "dependencies": {
-    "@gfos-build/shared": "workspace:*",
-    "ws": "^8.18.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@types/node": "^24.10.0",
-    "@types/ws": "^8.5.13",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.0.0",
     "globals": "^15.14.0",

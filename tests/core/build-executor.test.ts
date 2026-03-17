@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { BuildExecutor } from '../../src/core/build-executor.js';
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.js';
-import type { MavenBuildStep, ProcessEvent } from '../../src/core/types.js';
+import { BuildExecutor } from '../../packages/application/src/build-executor.js';
+import type { ProcessRunner } from '../../packages/platform-node/src/process-runner.js';
+import type { MavenBuildStep, ProcessEvent } from '../../packages/domain/src/types.js';
 
 class FakeProcessRunner implements ProcessRunner {
   lastArgs?: { executable: string; args: string[]; options: { cwd: string; env?: Record<string, string | undefined> } };

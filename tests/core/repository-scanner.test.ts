@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import { RepositoryScanner } from '../../src/core/repository-scanner.js';
-import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
-import type { ScanEvent, ScanOptions } from '../../src/core/types.js';
+import { RepositoryScanner } from '../../packages/application/src/repository-scanner.js';
+import type { FileSystem, DirEntry } from '../../packages/application/src/file-system.js';
+import type { ScanEvent, ScanOptions } from '../../packages/domain/src/types.js';
 
 class InMemoryFileSystem implements FileSystem {
   private files = new Map<string, string>();

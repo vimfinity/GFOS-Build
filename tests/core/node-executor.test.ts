@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { NodeExecutor } from '../../src/core/node-executor.js';
-import type { NodeBuildStep, ProcessEvent } from '../../src/core/types.js';
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.js';
+import { NodeExecutor } from '../../packages/application/src/node-executor.js';
+import type { NodeBuildStep, ProcessEvent } from '../../packages/domain/src/types.js';
+import type { ProcessRunner } from '../../packages/platform-node/src/process-runner.js';
 
 class FakeProcessRunner implements ProcessRunner {
   lastSpawn?: { executable: string; args: string[]; cwd: string };

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { loadConfig } from '../../src/config/loader.js';
+import { loadConfig } from '../../packages/platform-node/src/loader.js';
 import * as fs from 'node:fs';
 
 vi.mock('node:fs', () => ({ readFileSync: vi.fn() }));
@@ -18,7 +18,6 @@ const validConfig = JSON.stringify({
   node: { executables: { npm: 'npm', pnpm: 'pnpm', bun: 'bun' } },
   jdkRegistry: { '21': 'J:/dev/java/jdk21' },
   scan: { includeHidden: false, exclude: [] },
-  pipelines: {},
 });
 
 const minimalConfig = JSON.stringify({});
@@ -33,7 +32,9 @@ describe('loadConfig', () => {
       throw makeEnoent();
     });
     const result = loadConfig('/nonexistent/config.json');
-    expect(result).toEqual({ found: false });
+    expect(result.found).toBe(false);
+    expect(result.config.roots).toEqual({});
+    expect(result.configPath).toBe('/nonexistent/config.json');
   });
 
   it('loads config from explicit path', () => {
@@ -63,7 +64,7 @@ describe('loadConfig', () => {
   it('throws on invalid JSON', () => {
     mockedReadFileSync.mockReturnValue('not json{');
     expect(() => loadConfig('/custom/config.json')).toThrow(
-      'Invalid JSON in config file',
+      'Invalid JSON in local settings file',
     );
   });
 
@@ -73,7 +74,7 @@ describe('loadConfig', () => {
     });
     mockedReadFileSync.mockReturnValue(badConfig);
     expect(() => loadConfig('/custom/config.json')).toThrow(
-      'Config validation errors',
+      'Local settings file',
     );
   });
 
@@ -83,7 +84,7 @@ describe('loadConfig', () => {
     });
     mockedReadFileSync.mockReturnValue(badConfig);
     expect(() => loadConfig('/custom/config.json')).toThrow(
-      'Config validation errors',
+      'Local settings file',
     );
   });
 
@@ -93,10 +94,10 @@ describe('loadConfig', () => {
         npm: { executable: 'npm' },
       }),
     );
-    expect(() => loadConfig('/custom/config.json')).toThrow('Config validation errors');
+    expect(() => loadConfig('/custom/config.json')).toThrow('Local settings file');
   });
 
-  it('loads full config with pipelines', () => {
+  it('rejects embedded pipeline definitions in settings.json', () => {
     const fullConfig = JSON.stringify({
       roots: { quellen: 'J:/dev/quellen' },
       pipelines: {
@@ -118,11 +119,6 @@ describe('loadConfig', () => {
       },
     });
     mockedReadFileSync.mockReturnValue(fullConfig);
-    const result = loadConfig('/custom/config.json');
-    expect(result.found).toBe(true);
-    if (result.found) {
-      expect(result.config.pipelines['web-2025']!.steps).toHaveLength(1);
-      expect(result.config.pipelines['web-2025']!.failFast).toBe(true);
-    }
+    expect(() => loadConfig('/custom/config.json')).toThrow('Unrecognized key(s) in object: \'pipelines\'');
   });
 });
