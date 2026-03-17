@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildChildProcessEnv } from '../../src/infrastructure/process-env.js';
+import { buildChildProcessEnv } from '../../packages/platform-node/src/process-env.js';
 
 describe('buildChildProcessEnv', () => {
   it('does not inherit NODE_ENV from the parent process', () => {

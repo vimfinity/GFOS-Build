@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePom } from '../../src/core/pom-parser.js';
+import { parsePom } from '../../packages/domain/src/pom-parser.js';
 
 describe('parsePom', () => {
   it('extracts artifactId', () => {

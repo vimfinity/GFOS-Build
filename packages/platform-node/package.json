@@ -1,0 +1,20 @@
+{
+  "name": "@gfos-build/platform-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@gfos-build/application": "workspace:*",
+    "@gfos-build/contracts": "workspace:*",
+    "@gfos-build/domain": "workspace:*",
+    "zod": "^3.24.0"
+  }
+}

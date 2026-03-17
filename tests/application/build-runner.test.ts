@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { BuildRunner } from '../../src/application/build-runner.js';
-import { BuildExecutor } from '../../src/core/build-executor.js';
-import { NodeExecutor } from '../../src/core/node-executor.js';
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.js';
-import type { BuildEvent, MavenBuildStep, NodeBuildStep, ProcessEvent } from '../../src/core/types.js';
-import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
+import { BuildRunner } from '../../packages/application/src/build-runner.js';
+import { BuildExecutor } from '../../packages/application/src/build-executor.js';
+import { NodeExecutor } from '../../packages/application/src/node-executor.js';
+import type { ProcessRunner } from '../../packages/platform-node/src/process-runner.js';
+import type { BuildEvent, MavenBuildStep, NodeBuildStep, ProcessEvent } from '../../packages/domain/src/types.js';
+import type { FileSystem, DirEntry } from '../../packages/application/src/file-system.js';
 
 class FakeProcessRunner implements ProcessRunner {
   events: ProcessEvent[] = [];

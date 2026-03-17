@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { AppDatabase } from '../../src/infrastructure/database.js';
+import { AppDatabase } from '../../packages/platform-node/src/database.js';
 
 describe('AppDatabase', () => {
   let tempDir: string | undefined;
@@ -22,22 +22,30 @@ describe('AppDatabase', () => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
     const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
     try {
-      const successId = db.startBuildRun({
+      const successRunId = db.createRun({ kind: 'quick', title: 'app' });
+      const successId = db.createStepRun({
+        runId: successRunId,
         projectPath: 'C:/repo/app',
         projectName: 'app',
         buildSystem: 'node',
         command: 'bun run build',
+        stepLabel: 'app',
       });
-      db.finishBuildRun({ id: successId, exitCode: 0, durationMs: 1800, status: 'success' });
+      db.finishStepRun({ id: successId, exitCode: 0, durationMs: 1800, status: 'success' });
+      db.finishRun({ id: successRunId, durationMs: 1800, status: 'success' });
 
-      const launchedId = db.startBuildRun({
+      const launchedRunId = db.createRun({ kind: 'quick', title: 'app' });
+      const launchedId = db.createStepRun({
+        runId: launchedRunId,
         projectPath: 'C:/repo/app',
         projectName: 'app',
         buildSystem: 'node',
         executionMode: 'external',
         command: 'bun run dev',
+        stepLabel: 'app',
       });
-      db.finishBuildRun({ id: launchedId, exitCode: 0, durationMs: 30, status: 'launched' });
+      db.finishStepRun({ id: launchedId, exitCode: 0, durationMs: 30, status: 'launched' });
+      db.finishRun({ id: launchedRunId, durationMs: 30, status: 'launched' });
 
       const stats = db.getBuildStats();
 
@@ -45,7 +53,7 @@ describe('AppDatabase', () => {
       expect(stats.successCount).toBe(1);
       expect(stats.failureCount).toBe(0);
       expect(stats.byProject).toEqual([
-        expect.objectContaining({ path: 'C:/repo/app', runs: 1, successes: 1 }),
+        expect.objectContaining({ path: 'C:/repo/app', runs: 2, successes: 1 }),
       ]);
     } finally {
       db.close();
@@ -56,18 +64,22 @@ describe('AppDatabase', () => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
     const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
     try {
-      const runId = db.startBuildRun({
+      const pipelineRunId = db.createRun({ kind: 'quick', title: 'app' });
+      const runId = db.createStepRun({
+        runId: pipelineRunId,
         projectPath: 'C:/repo/app',
         projectName: 'app',
         buildSystem: 'node',
         command: 'bun run build',
+        stepLabel: 'app',
       });
-      db.appendBuildLog(runId, 0, 'stdout', 'hello');
-      db.finishBuildRun({ id: runId, exitCode: 0, durationMs: 100, status: 'success' });
+      db.appendStepLog(runId, 0, 'stdout', 'hello');
+      db.finishStepRun({ id: runId, exitCode: 0, durationMs: 100, status: 'success' });
+      db.finishRun({ id: pipelineRunId, durationMs: 100, status: 'success' });
 
       db.clearAllBuilds();
 
-      expect(db.getRecentBuilds({ limit: 10 })).toHaveLength(0);
+      expect(db.getRecentRuns({ limit: 10 })).toHaveLength(0);
       expect(db.getBuildLogs(runId).entries).toHaveLength(0);
     } finally {
       db.close();
@@ -78,15 +90,18 @@ describe('AppDatabase', () => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
     const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
     try {
-      const runId = db.startBuildRun({
+      const pipelineRunId = db.createRun({ kind: 'quick', title: 'app' });
+      const runId = db.createStepRun({
+        runId: pipelineRunId,
         projectPath: 'C:/repo/app',
         projectName: 'app',
         buildSystem: 'node',
         command: 'bun run build',
+        stepLabel: 'app',
       });
 
       for (let seq = 0; seq < 5; seq++) {
-        db.appendBuildLog(runId, seq, 'stdout', `line-${seq}`);
+        db.appendStepLog(runId, seq, 'stdout', `line-${seq}`);
       }
 
       const latestPage = db.getBuildLogs(runId, { limit: 2 });

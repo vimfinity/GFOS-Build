@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseArgs } from '../../src/cli/args.js';
+import { parseArgs } from '../../apps/cli/src/args.js';
 
 describe('parseArgs', () => {
   // Helper to create argv with 'bun' and 'script' as first two entries

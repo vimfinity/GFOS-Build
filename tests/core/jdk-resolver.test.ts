@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { resolveJavaHome, requireRegisteredJavaHome, detectJdks, buildEnvWithJavaHome } from '../../src/core/jdk-resolver.js';
-import type { AppConfig } from '../../src/config/schema.js';
-import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
+import { resolveJavaHome, requireRegisteredJavaHome, detectJdks, buildEnvWithJavaHome } from '../../packages/application/src/jdk-resolver.js';
+import type { AppConfig } from '../../packages/platform-node/src/schema.js';
+import type { FileSystem, DirEntry } from '../../packages/application/src/file-system.js';
 
 const config: AppConfig = {
   roots: {},

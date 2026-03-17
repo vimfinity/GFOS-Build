@@ -3,7 +3,7 @@
     "target": "ES2023",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -12,10 +12,19 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@gfos-build/contracts": ["packages/contracts/index.ts"],
+      "@gfos-build/contracts/*": ["packages/contracts/*"],
+      "@gfos-build/domain": ["packages/domain/src/index.ts"],
+      "@gfos-build/domain/*": ["packages/domain/src/*"],
+      "@gfos-build/application": ["packages/application/src/index.ts"],
+      "@gfos-build/application/*": ["packages/application/src/*"],
+      "@gfos-build/platform-node": ["packages/platform-node/src/index.ts"],
+      "@gfos-build/platform-node/*": ["packages/platform-node/src/*"]
+    }
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist", "release"]
 }

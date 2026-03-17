@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { PipelineRunner } from '../../src/application/pipeline-runner.js';
-import { BuildRunner } from '../../src/application/build-runner.js';
-import { BuildExecutor } from '../../src/core/build-executor.js';
-import { NodeExecutor } from '../../src/core/node-executor.js';
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.js';
-import type { BuildEvent, MavenBuildStep, NodeBuildStep, Pipeline, ProcessEvent } from '../../src/core/types.js';
-import type { FileSystem, DirEntry } from '../../src/infrastructure/file-system.js';
-import type { AppDatabase } from '../../src/infrastructure/database.js';
+import { PipelineRunner } from '../../packages/application/src/pipeline-runner.js';
+import { BuildRunner } from '../../packages/application/src/build-runner.js';
+import { BuildExecutor } from '../../packages/application/src/build-executor.js';
+import { NodeExecutor } from '../../packages/application/src/node-executor.js';
+import type { ProcessRunner } from '../../packages/platform-node/src/process-runner.js';
+import type { BuildEvent, MavenBuildStep, NodeBuildStep, Pipeline, ProcessEvent } from '../../packages/domain/src/types.js';
+import type { FileSystem, DirEntry } from '../../packages/application/src/file-system.js';
+import type { AppDatabase } from '../../packages/platform-node/src/database.js';
 import path from 'node:path';
 
 class FakeProcessRunner implements ProcessRunner {
@@ -46,19 +46,19 @@ function createMockFs(existingFiles: string[], fileContents: Record<string, stri
 }
 
 class NullDatabase {
-  startBuildRun(): number {
+  createRun(): number {
     return 0;
   }
-  finishBuildRun(): void {}
-  getPipelineState(): { last_failed_step: number | null } | null {
+  finishRun(): void {}
+  createStepRun(): number {
+    return 0;
+  }
+  finishStepRun(): void {}
+  appendStepLog(): void {}
+  getLastFailedStepIndex(): number | null {
     return null;
   }
-  upsertPipelineState(): void {}
-  getScanCache(): null {
-    return null;
-  }
-  setScanCache(): void {}
-  getRecentBuilds(): [] {
+  getRecentRuns(): [] {
     return [];
   }
   getBuildStats() {
@@ -67,13 +67,12 @@ class NullDatabase {
   getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null }> {
     return {};
   }
-  appendBuildLog(): void {}
   getBuildLogs() {
     return { entries: [], nextBeforeSeq: null };
   }
   clearBuildLogs(): void {}
   clearAllBuilds(): void {}
-  reconcileRunningBuilds(): void {}
+  reconcileRunningRuns(): void {}
   close(): void {}
 }
 

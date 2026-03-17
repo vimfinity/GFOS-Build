@@ -1,6 +1,6 @@
 # GFOS Build
 
-A desktop application for Maven and Node project management, pipeline orchestration, and build monitoring.
+A local-first desktop application for Maven and Node project management, pipeline orchestration, and run monitoring.
 
 > **Alpha release** — core functionality is working but rough edges remain. Feedback welcome.
 
@@ -9,33 +9,22 @@ A desktop application for Maven and Node project management, pipeline orchestrat
 - **Project Scanner** — recursively discovers Maven and Node projects across configurable root directories; distinguishes buildable modules from aggregator POMs
 - **Pipeline Builder** — define multi-step Maven and Node build pipelines with detected package-manager scripts, per-step execution mode, and per-step JDK/goals for Maven
 - **Live Build Output** — streaming build log with ANSI rendering, `[INFO]`/`[ERROR]`/`[WARNING]` syntax highlighting, and step progress indicator
-- **Build History** — persistent log of all pipeline and ad-hoc builds including stored log output; grouped pipeline runs; searchable and filterable
+- **Build History** — persistent log of all pipeline and quick runs including stored log output; grouped pipeline runs; searchable and filterable
 - **Statistics Dashboard** — success rate, average duration, slowest steps, per-pipeline and per-project breakdowns
 - **Settings** — configure scan roots, Maven defaults, Node package-manager executables, JDK paths, and exclude patterns
 - **Dark / Light theme**
 
-## Download
+## Distribution
 
-Go to the [Releases](../../releases) page and pick one of the Windows artifacts:
+Go to the [Releases](../../releases) page and use the Windows portable package:
 
-- **Managed installer** — `GFOS-Build-Setup-<version>-x64.exe`
 - **Portable ZIP** — `GFOS-Build-<version>-win32-x64.zip`
 
-### Managed installer
-
-Run the setup `.exe` and install it for the current user. No admin rights are required.
-
-Managed installs include:
-
-- proper Windows uninstall support
-- in-app update checks
-- background download + restart-to-apply updates
-
-### Portable ZIP
+### Portable package
 
 Extract the ZIP anywhere and run **`GFOS Build.exe`** from the extracted `GFOS Build <version>/` folder.
 
-Portable builds remain a supported fallback. They can detect newer releases and link you to the latest download, but they do not replace themselves automatically.
+This build is fully local and does not include a background updater or managed installer flow.
 
 If you want the portable build to appear in Windows search, run **`Add GFOS Build to Start Menu.cmd`** once from the extracted folder. This creates a per-user Start Menu shortcut with no admin rights or installer required.
 
@@ -95,10 +84,7 @@ bun run smoke:desktop        # smoke-test the packaged Windows desktop app
 The release outputs will be in `release/desktop/`:
 
 - `release/desktop/GFOS-Build-<version>-win32-x64.zip`
-- `release/desktop/win-unpacked/GFOS Build-win32-x64/`
-- `release/desktop/managed/GFOS-Build-Setup-<version>-x64.exe`
-- `release/desktop/managed/latest.yml`
-- `release/desktop/managed/*.blockmap`
+- `release/desktop/win-unpacked/`
 
 The portable desktop bundle also includes:
 
@@ -114,28 +100,22 @@ bun run check          # lint + typecheck + unit tests + build
 ## Architecture
 
 ```
-src/                         # Node-first server (CLI + HTTP API)
-  application/               # pipeline runner, scanner
-  cli/                       # HTTP/WS server, route handlers
-  config/                    # zod-validated config schema
-  core/                      # domain types, JDK resolver
-  infrastructure/            # SQLite DB (node:sqlite), file system
+apps/
+  cli/                       # CLI entrypoints
+  desktop/                   # Electron main, preload, renderer
 
-shared/                      # shared TypeScript types (api, types)
-
-gui/
-  src/main/                  # Electron main process (hosts the local API server)
-  src/renderer/              # React + TanStack Router + Tailwind
-    routes/                  # builds/, pipelines/, projects/, settings/, stats/
-    components/              # BuildOutput, PipelineDialog, UI primitives
-    api/                     # React Query hooks, WebSocket event cache
+packages/
+  contracts/                 # shared IPC/query/event types
+  domain/                    # pure domain types and helpers
+  application/               # orchestration and use cases
+  platform-node/             # SQLite, file system, process spawning, local runtime
 ```
 
-The renderer communicates with a local HTTP/WebSocket API hosted inside the Electron main process on a random port.
+The renderer communicates with the Electron main process through a typed preload bridge. No localhost HTTP or WebSocket sidecar is used.
 
 ## Configuration
 
-On first launch, GFOS Build walks you through setting up your scan roots and Maven defaults. Config is stored in the app's user data directory as `gfos-build.config.json`.
+On first launch, GFOS Build walks you through setting up your scan roots and Maven defaults. Settings are stored in `config/settings.json` under the app state directory, while durable run data is stored in `data/state.sqlite`.
 
 ## License
 

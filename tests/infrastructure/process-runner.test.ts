@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildWindowsExternalLaunchCommand } from '../../src/infrastructure/process-runner.js';
+import { buildWindowsExternalLaunchCommand } from '../../packages/platform-node/src/process-runner.js';
 
 describe('buildWindowsExternalLaunchCommand', () => {
   it('prefers a PowerShell terminal instead of cmd.exe', () => {

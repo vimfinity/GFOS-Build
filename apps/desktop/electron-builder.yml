@@ -1,0 +1,26 @@
+appId: com.gfos.gfos-build
+productName: GFOS Build
+
+directories:
+  output: ../release/desktop
+
+files:
+  - out/**/*
+  - package.json
+  - node_modules/**/*
+  - "!src{,/**}"
+  - "!scripts{,/**}"
+  - "!electron.vite.config.ts"
+  - "!tsconfig*.json"
+  - "!bun.lock"
+
+extraResources:
+  - from: ../assets
+    to: assets
+    filter:
+      - icon.ico
+
+npmRebuild: false
+
+win:
+  icon: ../assets/icon.ico

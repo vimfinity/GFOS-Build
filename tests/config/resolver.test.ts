@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import { resolveStepPath } from '../../src/config/resolver.js';
+import { resolveStepPath } from '../../packages/platform-node/src/resolver.js';
 
 const roots: Record<string, string> = {
   quellen: 'J:/dev/quellen',
