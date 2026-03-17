@@ -171,6 +171,11 @@ function ProjectPathPicker({
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Escape') {
+      if (open) {
+        // Prevent the parent dialog from seeing this Escape so it doesn't
+        // trigger the discard-confirmation while just closing the dropdown.
+        event.nativeEvent.stopImmediatePropagation();
+      }
       setOpen(false);
       setQuery('');
       inputRef.current?.blur();
@@ -536,6 +541,8 @@ export function PipelineDialog({
   const [description, setDescription] = useState('');
   const [failFast, setFailFast] = useState(true);
   const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals)]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   async function resolveStepPath(index: number, path: string, project?: Project) {
     const applyInspection = (current: StepFormData, resolvedProject: Project | null, error?: string): StepFormData => {
@@ -635,6 +642,8 @@ export function PipelineDialog({
 
   useEffect(() => {
     if (!open) return;
+    setIsDirty(false);
+    setConfirmClose(false);
     let cancelled = false;
 
     const nextSteps =
@@ -661,21 +670,40 @@ export function PipelineDialog({
     };
   }, [open, initialData, defaultMavenGoals, registeredJdkVersions]);
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && isDirty) {
+      setConfirmClose(true);
+      return;
+    }
+    setConfirmClose(false);
+    onOpenChange(nextOpen);
+  }
+
+  function handleDiscard() {
+    setConfirmClose(false);
+    setIsDirty(false);
+    onOpenChange(false);
+  }
+
   function addStep() {
+    setIsDirty(true);
     setSteps((current) => [...current, createEmptyStep(defaultMavenGoals)]);
   }
 
   function removeStep(index: number) {
+    setIsDirty(true);
     setSteps((current) => current.filter((_, i) => i !== index));
   }
 
   function updateStep(index: number, updater: (current: StepFormData) => StepFormData) {
+    setIsDirty(true);
     setSteps((current) => current.map((step, i) => (i === index ? updater(step) : step)));
   }
 
   function moveStep(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= steps.length) return;
+    setIsDirty(true);
     setSteps((current) => {
       const copy = [...current];
       [copy[index], copy[target]] = [copy[target]!, copy[index]!];
@@ -700,12 +728,29 @@ export function PipelineDialog({
     });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-5xl">
         <DialogTitle>{mode === 'create' ? 'Create pipeline' : `Edit "${name}"`}</DialogTitle>
         <DialogDescription>
           Build a multi-step pipeline with detected Maven and Node step behavior.
         </DialogDescription>
+
+        {confirmClose && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center rounded-[24px] bg-background/80 backdrop-blur-sm">
+            <div className="rounded-[20px] border border-border bg-card p-6 text-center shadow-lg">
+              <p className="font-semibold text-foreground">Discard changes?</p>
+              <p className="mt-1 text-sm text-muted-foreground">Any unsaved progress will be lost.</p>
+              <div className="mt-4 flex justify-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setConfirmClose(false)}>
+                  Keep editing
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleDiscard}>
+                  Discard
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-visible">
           <div className="grid gap-4 border-b border-border pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
@@ -713,19 +758,19 @@ export function PipelineDialog({
               label="Pipeline name"
               placeholder="e.g. full-build"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setIsDirty(true); setName(e.target.value); }}
               disabled={mode === 'edit'}
             />
             <Input
               label="Description"
               placeholder="Short summary of what this pipeline does"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => { setIsDirty(true); setDescription(e.target.value); }}
             />
             <button
               type="button"
               aria-pressed={failFast}
-              onClick={() => setFailFast((current) => !current)}
+              onClick={() => { setIsDirty(true); setFailFast((current) => !current); }}
               className={cn('toggle-pill', failFast && 'is-active')}
             >
               <span className="toggle-pill-indicator">
@@ -759,7 +804,7 @@ export function PipelineDialog({
               Add step
             </Button>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+              <Button variant="ghost" size="sm" onClick={() => handleOpenChange(false)}>
                 Cancel
               </Button>
               <Button size="sm" onClick={handleSubmit} disabled={!canSave}>
