@@ -179,6 +179,7 @@ function isDarkTheme(): boolean {
 }
 
 const MAVEN_TAG_RE = /^\[(INFO|WARNING|WARN|ERROR|DEBUG|FATAL)\] /;
+const ANSI_SGR_RE = new RegExp(String.raw`\u001b\[[0-9;]*m`, 'g');
 
 function getTagColors(): Record<string, string> {
   return isDarkTheme()
@@ -215,7 +216,7 @@ function getKeywordColors(): Array<{ re: RegExp; color: string; bold?: boolean }
 // Splits text at keyword matches and returns JSX with the keywords colored.
 function renderWithKeywords(text: string): React.ReactNode {
   if (!text) return null;
-  const stripped = text.replace(/\x1b\[[0-9;]*m/g, '');
+  const stripped = text.replace(ANSI_SGR_RE, '');
   const keywordColors = getKeywordColors();
 
   for (const { re, color, bold } of keywordColors) {
@@ -225,7 +226,7 @@ function renderWithKeywords(text: string): React.ReactNode {
       const parts: React.ReactNode[] = [];
       let last = 0;
       let match: RegExpExecArray | null;
-      const rawToSearch = text.replace(/\x1b\[[0-9;]*m/g, ''); // stripped is same text
+      const rawToSearch = text.replace(ANSI_SGR_RE, ''); // stripped is same text
       re.lastIndex = 0;
       while ((match = re.exec(rawToSearch)) !== null) {
         if (match.index > last) parts.push(<AnsiLine key={last} line={text.slice(last, match.index)} />);
@@ -249,7 +250,7 @@ function renderWithKeywords(text: string): React.ReactNode {
 // The remainder of the line uses the terminal's default foreground color (via AnsiLine),
 // except for special keywords like BUILD SUCCESS / BUILD FAILURE.
 function MavenAwareLine({ line }: { line: string }): React.ReactElement {
-  const stripped = line.replace(/\x1b\[[0-9;]*m/g, '');
+  const stripped = line.replace(ANSI_SGR_RE, '');
   const tagMatch = MAVEN_TAG_RE.exec(stripped);
 
   if (tagMatch) {
@@ -277,7 +278,7 @@ function MavenAwareLine({ line }: { line: string }): React.ReactElement {
 
 // Derives the line accent (left border) class from the log level.
 function getLineAccent(line: string): MavenLevel | null {
-  const s = line.replace(/\x1b\[[0-9;]*m/g, '');
+  const s = line.replace(ANSI_SGR_RE, '');
   if (/^\[(?:ERROR|FATAL)\] /.test(s) || /BUILD FAILURE/.test(s)) return 'error';
   if (/^\[(?:WARNING|WARN)\] /.test(s))                            return 'warn';
   if (/BUILD SUCCESS/.test(s))                                     return 'success';

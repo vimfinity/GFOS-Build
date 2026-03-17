@@ -80,27 +80,24 @@ function NavTab({
       shortcut={shortcut ? <ShortcutKey>{shortcut}</ShortcutKey> : undefined}
       side="bottom"
     >
-      {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        <Link
-          to={to as any}
-          className={base}
-          activeProps={{ className: active }}
-          activeOptions={{ exact }}
-        >
-          <span>{label}</span>
-          {shortcut ? (
-            <ShortcutKey
-              className={cn(
-                'overflow-hidden transition-[max-width,opacity,margin,padding] duration-160 ease-out',
-                showShortcut ? 'ml-1.5 max-w-14 opacity-100' : 'ml-0 max-w-0 px-0 opacity-0',
-              )}
-            >
-              {shortcut}
-            </ShortcutKey>
-          ) : null}
-        </Link>
-      }
+      <Link
+        to={to as never}
+        className={base}
+        activeProps={{ className: active }}
+        activeOptions={{ exact }}
+      >
+        <span>{label}</span>
+        {shortcut ? (
+          <ShortcutKey
+            className={cn(
+              'overflow-hidden transition-[max-width,opacity,margin,padding] duration-160 ease-out',
+              showShortcut ? 'ml-1.5 max-w-14 opacity-100' : 'ml-0 max-w-0 px-0 opacity-0',
+            )}
+          >
+            {shortcut}
+          </ShortcutKey>
+        ) : null}
+      </Link>
     </Tooltip>
   );
 }
@@ -121,18 +118,15 @@ function SettingsNavButton({
       shortcut={<ShortcutKey>{shortcut}</ShortcutKey>}
       side="bottom"
     >
-      {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        <Link
-          to={SETTINGS_TAB.to as any}
-          className={base}
-          activeProps={{ className: active }}
-          activeOptions={{ exact: SETTINGS_TAB.exact }}
-          aria-label="Settings"
-        >
-          <Settings size={15} />
-        </Link>
-      }
+      <Link
+        to={SETTINGS_TAB.to as never}
+        className={base}
+        activeProps={{ className: active }}
+        activeOptions={{ exact: SETTINGS_TAB.exact }}
+        aria-label="Settings"
+      >
+        <Settings size={15} />
+      </Link>
     </Tooltip>
   );
 }

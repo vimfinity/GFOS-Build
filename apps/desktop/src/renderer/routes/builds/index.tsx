@@ -647,6 +647,7 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
 }
 
 const MAVEN_TAG_RE_LOG = /^\[(INFO|WARNING|WARN|ERROR|DEBUG|FATAL)\] /;
+const ANSI_SGR_RE_LOG = new RegExp(String.raw`\u001b\[[0-9;]*m`, 'g');
 
 function isDarkThemeLog(): boolean {
   if (typeof document === 'undefined') return true;
@@ -687,7 +688,7 @@ function getKeywordColorsLog(): Array<{ re: RegExp; color: string; bold?: boolea
 
 function renderWithKeywordsLog(text: string): React.ReactNode {
   if (!text) return null;
-  const stripped = text.replace(/\x1b\[[0-9;]*m/g, '');
+  const stripped = text.replace(ANSI_SGR_RE_LOG, '');
   const keywordColors = getKeywordColorsLog();
   for (const { re, color, bold } of keywordColors) {
     if (re.test(stripped)) {
@@ -695,7 +696,7 @@ function renderWithKeywordsLog(text: string): React.ReactNode {
       const parts: React.ReactNode[] = [];
       let last = 0;
       let match: RegExpExecArray | null;
-      const raw = text.replace(/\x1b\[[0-9;]*m/g, '');
+      const raw = text.replace(ANSI_SGR_RE_LOG, '');
       re.lastIndex = 0;
       while ((match = re.exec(raw)) !== null) {
         if (match.index > last) parts.push(<AnsiLine key={last} line={text.slice(last, match.index)} />);
@@ -714,7 +715,7 @@ function renderWithKeywordsLog(text: string): React.ReactNode {
 }
 
 function MavenAwareLineLog({ line }: { line: string }): React.ReactElement {
-  const stripped = line.replace(/\x1b\[[0-9;]*m/g, '');
+  const stripped = line.replace(ANSI_SGR_RE_LOG, '');
   const tagMatch = MAVEN_TAG_RE_LOG.exec(stripped);
   if (tagMatch) {
     const rawTag = tagMatch[1]!;
@@ -733,7 +734,7 @@ function MavenAwareLineLog({ line }: { line: string }): React.ReactElement {
 }
 
 function getLogAccent(line: string): 'error' | 'warn' | 'success' | null {
-  const stripped = line.replace(/\x1b\[[0-9;]*m/g, '');
+  const stripped = line.replace(ANSI_SGR_RE_LOG, '');
   if (/^\[(?:ERROR|FATAL)\] /.test(stripped) || /BUILD FAILURE/.test(stripped)) return 'error';
   if (/^\[(?:WARNING|WARN)\] /.test(stripped)) return 'warn';
   if (/BUILD SUCCESS/.test(stripped)) return 'success';
