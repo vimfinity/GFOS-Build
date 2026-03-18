@@ -25,4 +25,4 @@
 - [ ] I included before/after screenshots for any UI changes
 - [ ] I included a video for animation/interaction changes
 
-Closes #IssueNumber
+Closes #Issue-Number
