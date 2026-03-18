@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const guiRoot = path.resolve(__dirname, '..');
-const repoRoot = path.resolve(guiRoot, '..');
+const repoRoot = path.resolve(guiRoot, '..', '..');
 const require = createRequire(import.meta.url);
 
 const guiPackageJson = require(path.join(guiRoot, 'package.json'));
