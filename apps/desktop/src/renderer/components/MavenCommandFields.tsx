@@ -306,12 +306,17 @@ export function MavenCommandFields({ metadata, value, jdkVersions, onChange }: M
         </div>
       )}
 
-      <TagInput
-        label="Extra options"
-        value={value.extraOptions}
-        onChange={(nextOptions) => update('extraOptions', nextOptions)}
-        placeholder="e.g. -T4"
-      />
+      <div className="flex flex-col gap-1.5">
+        <TagInput
+          label="Extra options"
+          value={value.extraOptions}
+          onChange={(nextOptions) => update('extraOptions', nextOptions)}
+          placeholder="e.g. -T4"
+        />
+        <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+          Type an option and press <kbd className="rounded border border-border px-1 font-mono text-[10px]">Enter</kbd> to add it.
+        </p>
+      </div>
 
       {jdkVersions.length > 0 ? (
         <div className="flex flex-col gap-1.5">
