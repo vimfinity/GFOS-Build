@@ -33,6 +33,7 @@ export const IPC = {
   CLEAR_RUNS: 'gfos:clear-runs',
   OPEN_DIRECTORY: 'gfos:open-directory',
   GET_GIT_INFO: 'gfos:get-git-info',
+  GET_GIT_INFO_BATCH: 'gfos:get-git-info-batch',
   RUN_SUBSCRIBE: 'gfos:run-subscribe',
   RUN_UNSUBSCRIBE: 'gfos:run-unsubscribe',
   RUN_EVENT: 'gfos:run-event',
@@ -60,5 +61,6 @@ export interface ElectronBridge {
   clearRuns: () => Promise<void>;
   openDirectory: () => Promise<string | null>;
   getGitInfo: (path: string) => Promise<GitInfoResponse>;
+  getGitInfoBatch: (paths: string[]) => Promise<Record<string, GitInfoResponse>>;
   onRunEvent: (jobId: string, listener: (event: import('./api.js').RunEventEnvelope) => void) => () => void;
 }

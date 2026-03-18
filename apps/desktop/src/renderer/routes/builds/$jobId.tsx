@@ -52,6 +52,7 @@ function LiveBuildView() {
   useEffect(() => {
     if (done) {
       void queryClient.invalidateQueries({ queryKey: ['builds'] });
+      void queryClient.invalidateQueries({ queryKey: ['git-info'] });
     }
   }, [done, queryClient]);
 

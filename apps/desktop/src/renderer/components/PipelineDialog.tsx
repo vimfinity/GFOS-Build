@@ -12,7 +12,8 @@ import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2, Check, ChevronDo
 import type { PipelineStep } from '@gfos-build/contracts';
 import type { ExecutionMode, MavenMetadata, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType, PackageManager, Project } from '@gfos-build/contracts';
 import { pickDirectory } from '@/api/bridge';
-import { inspectProject, scanQuery, configQuery } from '@/api/queries';
+import { inspectProject, scanQuery, configQuery, useGitInfo } from '@/api/queries';
+import { BranchBadge } from '@/components/BranchBadge';
 
 interface StepFormData {
   label: string;
@@ -311,6 +312,7 @@ function StepCard({
   const { data: configData } = useQuery(configQuery);
   const jdkVersions = useMemo(() => Object.keys(configData?.config.jdkRegistry ?? {}), [configData]);
   const [collapsed, setCollapsed] = useState(false);
+  const { data: gitInfo } = useGitInfo(step.path);
 
   function handleResolvedPath(path: string, project?: Project) {
     onUpdate((current) => ({
@@ -356,6 +358,9 @@ function StepCard({
             <p className="truncate text-sm font-medium text-foreground">
               {step.label || 'Untitled step'}
             </p>
+            {gitInfo?.branch && (
+              <BranchBadge branch={gitInfo.branch} isDirty={gitInfo.isDirty} />
+            )}
           </div>
         </button>
 

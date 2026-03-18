@@ -6,13 +6,15 @@ import {
   useCreatePipeline,
   useUpdatePipeline,
   useDeletePipeline,
+  useGitInfoBatch,
 } from '@/api/queries';
 import { PipelineCard } from '@/components/PipelineCard';
 import { PipelineDialog, type PipelineFormData } from '@/components/PipelineDialog';
+import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { Button } from '@/components/ui/button';
 import { SearchField } from '@/components/ui/search-field';
 import { SkeletonCard } from '@/components/ui/skeleton';
-import { useState } from 'react';
+import { useState, useMemo, useDeferredValue } from 'react';
 import { Plus, Workflow, Search, AlertCircle, RefreshCw } from 'lucide-react';
 import type { PipelineListItem } from '@gfos-build/contracts';
 
@@ -29,8 +31,16 @@ function PipelinesView() {
   const updatePipeline = useUpdatePipeline();
   const deletePipeline = useDeletePipeline();
 
+  const uniqueStepPaths = useMemo(
+    () => [...new Set((pipelines ?? []).flatMap((p) => p.steps.map((s) => s.path)))],
+    [pipelines],
+  );
+  const { data: rawGitInfoMap } = useGitInfoBatch(uniqueStepPaths);
+  const gitInfoMap = useDeferredValue(rawGitInfoMap);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<PipelineListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [runningPipelines, setRunningPipelines] = useState<Set<string>>(new Set());
   const [searchText, setSearchText] = useState('');
   const filtered = (pipelines ?? []).filter((pipeline) => {
@@ -57,9 +67,11 @@ function PipelinesView() {
     setDialogOpen(true);
   }
 
-  async function handleDelete(name: string) {
-    await deletePipeline.mutateAsync(name);
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    await deletePipeline.mutateAsync(deleteTarget);
     void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+    setDeleteTarget(null);
   }
 
   async function handleSave(data: PipelineFormData) {
@@ -204,8 +216,9 @@ function PipelinesView() {
               pipeline={pipeline}
               onRun={handleRun}
               onEdit={() => handleEdit(pipeline)}
-              onDelete={() => void handleDelete(pipeline.name)}
+              onDelete={() => setDeleteTarget(pipeline.name)}
               isRunning={runningPipelines.has(pipeline.name)}
+              gitInfoMap={gitInfoMap}
             />
           ))}
         </div>
@@ -217,6 +230,17 @@ function PipelinesView() {
         initialData={editTarget ?? undefined}
         onSave={(data) => void handleSave(data)}
         mode={editTarget ? 'edit' : 'create'}
+      />
+
+      <ConfirmationDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title={`Delete "${deleteTarget}"?`}
+        description="This pipeline and its configuration will be permanently removed. This action cannot be undone."
+        confirmLabel={deletePipeline.isPending ? 'Deleting…' : 'Delete pipeline'}
+        confirmVariant="destructive"
+        isPending={deletePipeline.isPending}
+        onConfirm={() => void handleDeleteConfirm()}
       />
     </div>
   );

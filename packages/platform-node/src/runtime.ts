@@ -305,6 +305,10 @@ export class AppRuntime {
     return this.gitInfoReader.getInfo(projectPath);
   }
 
+  getGitInfoBatch(paths: string[]): Promise<Record<string, GitInfoResponse>> {
+    return this.gitInfoReader.getBatch(paths);
+  }
+
   async *scanProjects(
     options?: { roots?: Record<string, string>; includeHidden?: boolean; exclude?: string[]; noCache?: boolean },
   ): AsyncGenerator<ScanEvent> {
