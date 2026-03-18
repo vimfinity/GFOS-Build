@@ -81,6 +81,7 @@ function PipelinesView() {
               path: step.path,
               label: step.label || undefined,
               modulePath: step.mavenModulePath || undefined,
+              submoduleBuildStrategy: step.mavenModulePath ? step.mavenSubmoduleBuildStrategy : undefined,
               goals: step.mavenGoals,
               optionKeys: step.mavenOptionKeys,
               profileStates: step.mavenProfileStates,

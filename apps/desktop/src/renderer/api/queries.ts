@@ -11,7 +11,7 @@ import type {
   ScanResponse,
   StartJobResponse,
 } from '@gfos-build/contracts';
-import type { ExecutionMode, MavenOptionKey, MavenProfileState, NodeCommandType } from '@gfos-build/contracts';
+import type { ExecutionMode, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType } from '@gfos-build/contracts';
 import { getDesktopApi } from './client';
 
 export const healthQuery = queryOptions({
@@ -123,6 +123,7 @@ export function useQuickRun() {
       path: string;
       buildSystem: 'maven' | 'node';
       modulePath?: string;
+      submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
       goals?: string[];
       optionKeys?: MavenOptionKey[];
       profileStates?: Record<string, MavenProfileState>;

@@ -10,7 +10,7 @@ import { getNodeScriptChoices, getNodeScriptComboboxOptions, type NodeScriptChoi
 import { cn } from '@/lib/utils';
 import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2, Check, ChevronDown } from 'lucide-react';
 import type { PipelineStep } from '@gfos-build/contracts';
-import type { ExecutionMode, MavenMetadata, MavenOptionKey, MavenProfileState, NodeCommandType, PackageManager, Project } from '@gfos-build/contracts';
+import type { ExecutionMode, MavenMetadata, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType, PackageManager, Project } from '@gfos-build/contracts';
 import { pickDirectory } from '@/api/bridge';
 import { inspectProject, scanQuery, configQuery } from '@/api/queries';
 
@@ -19,6 +19,7 @@ interface StepFormData {
   path: string;
   buildSystem: 'maven' | 'node' | null;
   mavenModulePath: string;
+  mavenSubmoduleBuildStrategy: MavenSubmoduleBuildStrategy;
   mavenGoals: string[];
   mavenOptionKeys: MavenOptionKey[];
   mavenProfileStates: Record<string, MavenProfileState>;
@@ -55,6 +56,7 @@ function createEmptyStep(mavenGoals: string, mavenOptionKeys: MavenOptionKey[] =
     path: '',
     buildSystem: null,
     mavenModulePath: '',
+    mavenSubmoduleBuildStrategy: 'root-pl',
     mavenGoals: mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install'],
     mavenOptionKeys,
     mavenProfileStates: {},
@@ -74,6 +76,7 @@ function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
     path: step.path,
     buildSystem: step.buildSystem ?? null,
     mavenModulePath: step.modulePath ?? '',
+    mavenSubmoduleBuildStrategy: step.submoduleBuildStrategy ?? 'root-pl',
     mavenGoals: step.goals ?? (mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install']),
     mavenOptionKeys: step.optionKeys ?? [],
     mavenProfileStates: step.profileStates ?? {},
@@ -430,6 +433,7 @@ function StepCard({
                   onUpdate((current) => ({
                     ...current,
                     mavenModulePath: nextValue.modulePath,
+                    mavenSubmoduleBuildStrategy: nextValue.submoduleBuildStrategy,
                     mavenGoals: nextValue.goals,
                     mavenOptionKeys: nextValue.optionKeys,
                     mavenProfileStates: nextValue.profileStates,
@@ -854,6 +858,7 @@ export function PipelineDialog({
 function toMavenCommandValue(step: StepFormData): MavenCommandValue {
   return {
     modulePath: step.mavenModulePath,
+    submoduleBuildStrategy: step.mavenSubmoduleBuildStrategy,
     goals: step.mavenGoals,
     optionKeys: step.mavenOptionKeys,
     profileStates: step.mavenProfileStates,

@@ -39,7 +39,7 @@ export function buildMavenArgs(step: MavenBuildStep): string[] {
     args.push('-P', profileArgValue);
   }
 
-  if (step.modulePath) {
+  if (step.modulePath && step.submoduleBuildStrategy !== 'submodule-dir') {
     args.push('-pl', step.modulePath);
   }
 

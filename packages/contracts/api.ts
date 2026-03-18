@@ -4,6 +4,7 @@ import type {
   ExecutionMode,
   MavenOptionKey,
   MavenProfileState,
+  MavenSubmoduleBuildStrategy,
   NodeCommandType,
   PackageManager,
   Project,
@@ -42,6 +43,7 @@ export interface PipelineStep {
   executionMode?: ExecutionMode;
   commandType?: NodeCommandType;
   modulePath?: string;
+  submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
   goals?: string[];
   optionKeys?: MavenOptionKey[];
   profileStates?: Record<string, MavenProfileState>;
