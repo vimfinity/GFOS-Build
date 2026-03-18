@@ -206,6 +206,70 @@ describe('RepositoryScanner', () => {
     }
   });
 
+  it('falls back to sub-module java version when root pom.xml has none', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/gfoshg');
+
+    fs.addDirectory(rootPath, [dirEntry('standard', true)]);
+    fs.addDirectory(path.join(rootPath, 'standard'), [dirEntry('maven', true)]);
+    fs.addDirectory(path.join(rootPath, 'standard', 'maven'), []);
+    fs.addFile(
+      path.join(rootPath, 'pom.xml'),
+      '<project><artifactId>gfoshg-2025</artifactId><packaging>pom</packaging><modules><module>standard/maven</module></modules></project>',
+    );
+    fs.addFile(
+      path.join(rootPath, 'standard', 'maven', 'pom.xml'),
+      '<project><artifactId>standard</artifactId><properties><maven.compiler.source>21</maven.compiler.source></properties></project>',
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((e) => e.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.maven?.javaVersion).toBe('21');
+    }
+  });
+
+  it('picks highest java version when sub-modules differ', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/mixed');
+
+    fs.addDirectory(rootPath, [dirEntry('moduleA', true), dirEntry('moduleB', true)]);
+    fs.addDirectory(path.join(rootPath, 'moduleA'), []);
+    fs.addDirectory(path.join(rootPath, 'moduleB'), []);
+    fs.addFile(
+      path.join(rootPath, 'pom.xml'),
+      '<project><artifactId>mixed</artifactId><packaging>pom</packaging><modules><module>moduleA</module><module>moduleB</module></modules></project>',
+    );
+    fs.addFile(
+      path.join(rootPath, 'moduleA', 'pom.xml'),
+      '<project><artifactId>moduleA</artifactId><properties><maven.compiler.source>17</maven.compiler.source></properties></project>',
+    );
+    fs.addFile(
+      path.join(rootPath, 'moduleB', 'pom.xml'),
+      '<project><artifactId>moduleB</artifactId><properties><maven.compiler.source>21</maven.compiler.source></properties></project>',
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((e) => e.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.maven?.javaVersion).toBe('21');
+    }
+  });
+
   it('scans multiple roots', async () => {
     const fs = new InMemoryFileSystem();
     const root1 = path.resolve('/workspaces/root1');
