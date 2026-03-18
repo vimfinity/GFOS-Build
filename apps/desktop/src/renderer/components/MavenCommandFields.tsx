@@ -9,10 +9,12 @@ import type {
   MavenModuleMetadata,
   MavenOptionKey,
   MavenProfileState,
+  MavenSubmoduleBuildStrategy,
 } from '@gfos-build/contracts';
 
 export interface MavenCommandValue {
   modulePath: string;
+  submoduleBuildStrategy: MavenSubmoduleBuildStrategy;
   goals: string[];
   optionKeys: MavenOptionKey[];
   profileStates: Record<string, MavenProfileState>;
@@ -163,7 +165,9 @@ export function MavenCommandFields({ metadata, value, jdkVersions, onChange }: M
         <ModulePicker
           modules={moduleOptions}
           value={value.modulePath}
+          strategy={value.submoduleBuildStrategy}
           onChange={(nextModulePath) => update('modulePath', nextModulePath)}
+          onStrategyChange={(nextStrategy) => update('submoduleBuildStrategy', nextStrategy)}
         />
       )}
 
@@ -371,11 +375,15 @@ function MetadataBadge({ label, value }: { label: string; value: string }) {
 function ModulePicker({
   modules,
   value,
+  strategy,
   onChange,
+  onStrategyChange,
 }: {
   modules: MavenModuleMetadata[];
   value: string;
+  strategy: MavenSubmoduleBuildStrategy;
   onChange: (nextValue: string) => void;
+  onStrategyChange: (nextStrategy: MavenSubmoduleBuildStrategy) => void;
 }) {
   const options = useMemo(
     () => [
@@ -407,9 +415,45 @@ function ModulePicker({
         placeholder="Search a module or leave empty for the full project"
         emptyText="No matching modules"
       />
-      <p className="text-[11px] leading-relaxed text-muted-foreground/72">
-        Select a submodule to run Maven from the broader project root with `-pl`.
-      </p>
+      {value ? (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => onStrategyChange('root-pl')}
+              className={cn(
+                'pill-control pill-control-compact border transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+                strategy === 'root-pl'
+                  ? 'border-primary/20 bg-primary/10 text-primary'
+                  : 'border-border bg-card/70 text-muted-foreground hover:bg-accent/60 hover:text-foreground active:bg-accent/80',
+              )}
+            >
+              Root with <span className="font-mono">-pl</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onStrategyChange('submodule-dir')}
+              className={cn(
+                'pill-control pill-control-compact border transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+                strategy === 'submodule-dir'
+                  ? 'border-primary/20 bg-primary/10 text-primary'
+                  : 'border-border bg-card/70 text-muted-foreground hover:bg-accent/60 hover:text-foreground active:bg-accent/80',
+              )}
+            >
+              Submodule directory
+            </button>
+          </div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+            {strategy === 'submodule-dir'
+              ? <>Maven runs directly inside <span className="font-mono">{value}</span> — faster for standalone modules.</>
+              : <>Maven runs from the project root with <span className="font-mono">-pl {value}</span> — inherits parent POM settings.</>}
+          </p>
+        </div>
+      ) : (
+        <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+          Select a submodule to scope the build.
+        </p>
+      )}
     </div>
   );
 }

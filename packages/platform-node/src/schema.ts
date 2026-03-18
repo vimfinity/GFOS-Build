@@ -5,6 +5,7 @@ const mavenStepConfigSchema = z
     path: z.string().min(1),
     buildSystem: z.literal('maven').default('maven'),
     modulePath: z.string().min(1).optional(),
+    submoduleBuildStrategy: z.enum(['root-pl', 'submodule-dir']).optional(),
     goals: z.array(z.string().min(1)).optional(),
     optionKeys: z
       .array(z.enum(['skipTests', 'skipTestCompile', 'updateSnapshots', 'offline', 'quiet', 'debug', 'errors', 'failAtEnd', 'failNever']))

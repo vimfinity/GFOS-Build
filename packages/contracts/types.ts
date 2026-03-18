@@ -17,6 +17,7 @@ export type MavenOptionKey =
   | 'failAtEnd'
   | 'failNever';
 export type BuildCompletionStatus = 'success' | 'failed' | 'launched';
+export type MavenSubmoduleBuildStrategy = 'root-pl' | 'submodule-dir';
 export type BuildRunStatus = 'running' | BuildCompletionStatus;
 
 export interface MavenModuleMetadata {
@@ -71,6 +72,7 @@ export interface MavenBuildStep {
   path: string;
   buildSystem: 'maven';
   modulePath?: string;
+  submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
   goals: string[];
   optionKeys: MavenOptionKey[];
   profileStates: Record<string, MavenProfileState>;
