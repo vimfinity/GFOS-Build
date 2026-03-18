@@ -205,7 +205,9 @@ export function OnboardingDialog({
               value={defaultExtraOptions}
               onChange={setDefaultExtraOptions}
             />
-            {helperText('Optional non-standard Maven options appended to new runs by default.')}
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Optional non-standard Maven options appended to new runs by default. Type an option and press <kbd className="rounded border border-border px-1 font-mono text-[10px]">Enter</kbd> to add it.
+            </p>
           </div>
         </div>
       ),
