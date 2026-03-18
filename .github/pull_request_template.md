@@ -24,3 +24,5 @@
 - [ ] I explained what changed and why
 - [ ] I included before/after screenshots for any UI changes
 - [ ] I included a video for animation/interaction changes
+
+Closes #
