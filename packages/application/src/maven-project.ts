@@ -83,13 +83,15 @@ export async function inspectMavenProject(fs: FileSystem, projectPath: string): 
     }
   }
 
+  const dedupedModules = dedupeModules(modules);
+
   return {
     pomPath,
     artifactId: rootArtifactId,
     packaging: rootPackaging,
     isAggregator,
-    javaVersion: rootJavaVersion,
-    modules: dedupeModules(modules),
+    javaVersion: highestJavaVersion([rootJavaVersion, ...dedupedModules.map((m) => m.javaVersion)]),
+    modules: dedupedModules,
     profiles: dedupeProfiles(profiles),
     hasMvnConfig,
     mvnConfigContent,
@@ -112,6 +114,16 @@ function dedupeProfiles(profiles: MavenProfileMetadata[]): MavenProfileMetadata[
   return [...byKey.values()].sort(
     (a, b) => a.id.localeCompare(b.id) || a.sourceModulePath.localeCompare(b.sourceModulePath),
   );
+}
+
+function highestJavaVersion(versions: (string | undefined)[]): string | undefined {
+  const parsed = versions
+    .filter((v): v is string => v !== undefined)
+    .map((v) => ({ raw: v, numeric: parseInt(v, 10) }))
+    .filter((v) => !isNaN(v.numeric));
+
+  if (parsed.length === 0) return undefined;
+  return parsed.reduce((a, b) => (b.numeric > a.numeric ? b : a)).raw;
 }
 
 function toPortablePath(value: string): string {

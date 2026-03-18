@@ -1,4 +1,5 @@
-import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight, RotateCcw } from 'lucide-react';
+import { Fragment } from 'react';
+import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight, ChevronRight, RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatDuration, timeAgo } from '@/lib/utils';
@@ -65,22 +66,21 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-1">
           {pipeline.steps.map((step, index) => (
-            <button
-              key={`${step.label}-${index}`}
-              type="button"
-              disabled={isRunning}
-              onClick={() => !isRunning && onRun(pipeline.name, String(index + 1))}
-              title={`Run from "${step.label}"`}
-              className="pill-meta group cursor-pointer rounded-full border border-border bg-secondary text-secondary-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary disabled:cursor-default disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-secondary disabled:hover:text-secondary-foreground"
-            >
-              <span className="hidden group-hover:not-disabled:inline-block group-enabled:group-hover:inline-block">
-                <Play size={9} />
-              </span>
-              {step.label || `Step ${index + 1}`}
-              {step.buildSystem === 'node' && step.executionMode === 'external' ? ' · external' : ''}
-            </button>
+            <Fragment key={`${step.label}-${index}`}>
+              {index > 0 && <ChevronRight size={12} className="shrink-0 text-muted-foreground" />}
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => !isRunning && onRun(pipeline.name, String(index + 1))}
+                title={`Run from "${step.label || `Step ${index + 1}`}"`}
+                className="pill-meta group cursor-pointer rounded-full border border-border bg-secondary text-secondary-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary disabled:cursor-default disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-secondary disabled:hover:text-secondary-foreground"
+              >
+                {step.label || `Step ${index + 1}`}
+                {step.buildSystem === 'node' && step.executionMode === 'external' ? ' · external' : ''}
+              </button>
+            </Fragment>
           ))}
         </div>
 
