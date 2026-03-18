@@ -127,6 +127,10 @@ async function runSmokeTest(win: BrowserWindow): Promise<void> {
 }
 
 function createWindow(): BrowserWindow {
+  const windowIconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'assets', 'icon.ico')
+    : path.resolve(__dirname, '../../../../assets/icon.ico');
+
   const win = new BrowserWindow({
     title: APP_NAME,
     width: 1280,
@@ -135,7 +139,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     backgroundColor: '#1d2f32',
-    icon: path.join(__dirname, '../../../assets/icon.ico'),
+    icon: windowIconPath,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

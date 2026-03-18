@@ -2,7 +2,7 @@ appId: com.gfos.gfos-build
 productName: GFOS Build
 
 directories:
-  output: ../release/desktop
+  output: ../../release/desktop
 
 files:
   - out/**/*
@@ -15,7 +15,7 @@ files:
   - "!bun.lock"
 
 extraResources:
-  - from: ../assets
+  - from: ../../assets
     to: assets
     filter:
       - icon.ico
@@ -23,4 +23,4 @@ extraResources:
 npmRebuild: false
 
 win:
-  icon: ../assets/icon.ico
+  icon: ../../assets/icon.ico
