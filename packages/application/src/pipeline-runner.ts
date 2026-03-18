@@ -1,6 +1,7 @@
 import type { BuildRunner } from './build-runner.js';
 import type { BuildCompletionStatus, Pipeline, BuildEvent, BuildStepResult, RunResult } from '@gfos-build/domain';
 import { buildCommandString } from '@gfos-build/domain';
+import { type GitInfoReader, noopGitInfoReader } from './git-info.js';
 
 export interface PipelineRunStore {
   createRun(params: { jobId?: string; kind: 'pipeline'; pipelineName: string; title: string }): number;
@@ -18,6 +19,7 @@ export interface PipelineRunStore {
     pipelineName?: string;
     stepIndex?: number;
     stepLabel: string;
+    branch?: string;
   }): number;
   finishStepRun(params: { id: number; exitCode: number; durationMs: number; status: BuildCompletionStatus }): void;
   appendStepLog(stepRunId: number, seq: number, stream: string, line: string): void;
@@ -25,10 +27,15 @@ export interface PipelineRunStore {
 }
 
 export class PipelineRunner {
+  private readonly gitInfoReader: GitInfoReader;
+
   constructor(
     private readonly buildRunner: BuildRunner,
     private readonly db: PipelineRunStore,
-  ) {}
+    gitInfoReader?: GitInfoReader,
+  ) {
+    this.gitInfoReader = gitInfoReader ?? noopGitInfoReader;
+  }
 
   async *run(
     pipeline: Pipeline,
@@ -63,6 +70,7 @@ export class PipelineRunner {
         if (event.type === 'step:start') {
           if (stepRunId === undefined) {
             try {
+              const gitInfo = this.gitInfoReader.getInfo(event.step.path);
               stepRunId = this.db.createStepRun({
                 runId,
                 jobId,
@@ -76,6 +84,7 @@ export class PipelineRunner {
                 pipelineName: pipeline.name,
                 stepIndex: displayIndex,
                 stepLabel: event.step.label,
+                branch: gitInfo.branch ?? undefined,
               });
             } catch {
               // non-fatal DB error

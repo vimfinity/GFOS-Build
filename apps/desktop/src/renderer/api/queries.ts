@@ -1,9 +1,10 @@
-import { queryOptions, useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import { queryOptions, useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import type {
   BuildLogPage,
   BuildRunRowApi,
   BuildStatsApi,
   ConfigResponse,
+  GitInfoResponse,
   HealthResponse,
   JdkDetectionResponse,
   PipelineListItem,
@@ -153,4 +154,17 @@ export function useClearBuildLogs() {
 
 export function useClearAllBuilds() {
   return useMutation({ mutationFn: () => getDesktopApi().clearRuns() });
+}
+
+export const gitInfoQuery = (path: string) =>
+  queryOptions({
+    queryKey: ['git-info', path],
+    queryFn: (): Promise<GitInfoResponse> => getDesktopApi().getGitInfo(path),
+    staleTime: 30_000,
+    gcTime: 120_000,
+    enabled: !!path,
+  });
+
+export function useGitInfo(path: string) {
+  return useQuery(gitInfoQuery(path));
 }

@@ -1,6 +1,8 @@
 import { ArrowUpRight, CheckCircle, XCircle, Loader2, Circle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/lib/utils';
+import { useGitInfo } from '@/api/queries';
+import { BranchBadge } from '@/components/BranchBadge';
 import type { BuildEvent } from '@gfos-build/contracts';
 
 type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'launched';
@@ -9,6 +11,7 @@ interface StepState {
   label: string;
   status: StepStatus;
   durationMs?: number;
+  path?: string;
 }
 
 function deriveSteps(events: BuildEvent[], _totalFromPipeline: number, stepLabels: string[]): StepState[] {
@@ -17,7 +20,7 @@ function deriveSteps(events: BuildEvent[], _totalFromPipeline: number, stepLabel
   for (const event of events) {
     if (event.type === 'step:start') {
       const i = event.index;
-      if (states[i]) states[i] = { ...states[i]!, status: 'running' };
+      if (states[i]) states[i] = { ...states[i]!, status: 'running', path: event.step.path };
     } else if (event.type === 'step:done') {
       const i = event.index;
       if (states[i]) {
@@ -31,6 +34,11 @@ function deriveSteps(events: BuildEvent[], _totalFromPipeline: number, stepLabel
   }
 
   return states;
+}
+
+function StepBranchBadge({ path }: { path: string }) {
+  const { data: gitInfo } = useGitInfo(path);
+  return <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />;
 }
 
 export interface StepTimelineProps {
@@ -72,6 +80,7 @@ export function StepTimeline({ events, stepLabels }: StepTimelineProps) {
           {step.durationMs != null && (
             <span className="opacity-60 ml-0.5">{formatDuration(step.durationMs)}</span>
           )}
+          {step.path && <StepBranchBadge path={step.path} />}
         </div>
       ))}
     </div>

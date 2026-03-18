@@ -19,6 +19,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import type { BuildRunRowApi, BuildLogEntry } from '@gfos-build/contracts';
+import { BranchBadge } from '@/components/BranchBadge';
 import { AnsiLine } from '@/lib/ansi';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -413,6 +414,7 @@ function PipelineStepRow({ step, isTarget = false }: { step: BuildRunRowApi; isT
             <span className="max-w-64 truncate font-mono text-xs text-foreground/80">
               {step.project_name}
             </span>
+            <BranchBadge branch={step.branch} />
             {!isRunning && (
               <Button
                 type="button"
@@ -516,6 +518,7 @@ function BuildRow({ build, isTarget = false }: { build: BuildRunRowApi; isTarget
             <span className="max-w-64 truncate font-mono text-xs text-foreground/80">
               {build.project_name}
             </span>
+            <BranchBadge branch={build.branch} />
           </div>
         </td>
         <td className="whitespace-nowrap px-5 py-3 text-sm font-mono text-muted-foreground">
@@ -536,6 +539,7 @@ function BuildRow({ build, isTarget = false }: { build: BuildRunRowApi; isTarget
             <div className="flex flex-col gap-4">
               <div className="grid gap-2">
                 <DetailRow label="Path" value={build.project_path} mono />
+                {build.branch && <DetailRow label="Branch" value={build.branch} />}
                 <DetailRow label="Command" value={build.command} mono />
                 {build.java_home && <DetailRow label="JAVA_HOME" value={build.java_home} mono />}
                 {build.exit_code != null && <DetailRow label="Exit code" value={String(build.exit_code)} />}
