@@ -95,10 +95,11 @@ export class NodeProcessRunner implements ProcessRunner {
     }
 
     const resolvedExecutable = resolveInternalExecutable(executable);
-    const proc = childProcess.spawn(resolvedExecutable, args, {
+    const sanitizedArgs = args.filter((arg) => arg !== '');
+    const proc = childProcess.spawn(resolvedExecutable, sanitizedArgs, {
       cwd: options.cwd,
       env: buildChildProcessEnv(options.env),
-      shell: false,
+      shell: process.platform === 'win32',
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -151,7 +152,13 @@ export class NodeProcessRunner implements ProcessRunner {
     });
 
     proc.on('error', (err) => {
-      queue.push({ type: 'stderr', line: `Process error: ${err.message}` });
+      const details = [
+        `Process error: ${err.message}`,
+        `  executable: ${resolvedExecutable}`,
+        `  args: ${JSON.stringify(sanitizedArgs)}`,
+        `  cwd: ${options.cwd}`,
+      ].join('\n');
+      queue.push({ type: 'stderr', line: details });
       exitCode = 1;
       stdoutClosed = true;
       stderrClosed = true;
