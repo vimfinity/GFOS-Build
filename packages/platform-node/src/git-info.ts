@@ -1,5 +1,34 @@
-import { execSync } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { GitInfo, GitInfoReader } from '@gfos-build/application';
+
+const execAsync = promisify(exec);
+const GIT_OPTS = { timeout: 3000, encoding: 'utf8' as const };
+const NULL_INFO: GitInfo = { branch: null, isDirty: false };
+
+async function gitExec(cmd: string, cwd: string): Promise<string> {
+  const { stdout } = await execAsync(cmd, { ...GIT_OPTS, cwd });
+  return stdout.trim();
+}
+
+async function resolveGitInfo(cwd: string): Promise<GitInfo> {
+  let branch: string | null = null;
+  try {
+    branch = (await gitExec('git rev-parse --abbrev-ref HEAD', cwd)) || null;
+  } catch {
+    return NULL_INFO;
+  }
+
+  let isDirty = false;
+  try {
+    const status = await gitExec('git status --porcelain', cwd);
+    isDirty = status.length > 0;
+  } catch {
+    // non-fatal
+  }
+
+  return { branch, isDirty };
+}
 
 export class NodeGitInfoReader implements GitInfoReader {
   getInfo(path: string): GitInfo {
@@ -13,7 +42,7 @@ export class NodeGitInfoReader implements GitInfoReader {
           stdio: ['ignore', 'pipe', 'ignore'],
         }).trim() || null;
     } catch {
-      return { branch: null, isDirty: false };
+      return NULL_INFO;
     }
 
     let isDirty = false;
@@ -32,32 +61,40 @@ export class NodeGitInfoReader implements GitInfoReader {
     return { branch, isDirty };
   }
 
-  getBatch(paths: string[]): Record<string, GitInfo> {
-    const results: Record<string, GitInfo> = {};
-    const rootCache = new Map<string, GitInfo>();
-
-    for (const p of paths) {
-      try {
-        const root = execSync('git rev-parse --show-toplevel', {
-          cwd: p,
-          encoding: 'utf8',
-          timeout: 3000,
-          stdio: ['ignore', 'pipe', 'ignore'],
-        }).trim();
-
-        const cached = rootCache.get(root);
-        if (cached) {
-          results[p] = cached;
-          continue;
+  async getBatch(paths: string[]): Promise<Record<string, GitInfo>> {
+    // Resolve git roots for all paths in parallel (non-blocking)
+    const rootEntries = await Promise.all(
+      paths.map(async (p) => {
+        try {
+          return { path: p, root: await gitExec('git rev-parse --show-toplevel', p) };
+        } catch {
+          return { path: p, root: null };
         }
+      }),
+    );
 
-        const info = this.getInfo(p);
-        rootCache.set(root, info);
-        results[p] = info;
-      } catch {
-        results[p] = { branch: null, isDirty: false };
+    // Group paths by git root
+    const byRoot = new Map<string, string[]>();
+    const results: Record<string, GitInfo> = {};
+
+    for (const { path: p, root } of rootEntries) {
+      if (!root) {
+        results[p] = NULL_INFO;
+        continue;
       }
+      if (!byRoot.has(root)) byRoot.set(root, []);
+      byRoot.get(root)!.push(p);
     }
+
+    // Resolve branch + dirty for each unique root in parallel
+    await Promise.all(
+      [...byRoot.entries()].map(async ([, rootPaths]) => {
+        const info = await resolveGitInfo(rootPaths[0]!);
+        for (const p of rootPaths) {
+          results[p] = info;
+        }
+      }),
+    );
 
     return results;
   }

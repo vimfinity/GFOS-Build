@@ -305,7 +305,7 @@ export class AppRuntime {
     return this.gitInfoReader.getInfo(projectPath);
   }
 
-  getGitInfoBatch(paths: string[]): Record<string, GitInfoResponse> {
+  getGitInfoBatch(paths: string[]): Promise<Record<string, GitInfoResponse>> {
     return this.gitInfoReader.getBatch(paths);
   }
 
