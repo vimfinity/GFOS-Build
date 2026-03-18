@@ -38,13 +38,20 @@ jobs:
         shell: bash
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
-          root_version="$(node -p "require('./package.json').version")"
-          gui_version="$(node -p "require('./gui/package.json').version")"
+          package_paths=(
+            "package.json"
+            "apps/cli/package.json"
+            "apps/desktop/package.json"
+          )
 
-          if [[ "$tag_version" != "$root_version" || "$tag_version" != "$gui_version" ]]; then
-            echo "Tag/package version mismatch: tag=$tag_version root=$root_version gui=$gui_version" >&2
-            exit 1
-          fi
+          for package_path in "${package_paths[@]}"; do
+            package_version="$(node -p "require('./${package_path}').version")"
+
+            if [[ "$tag_version" != "$package_version" ]]; then
+              echo "Tag/package version mismatch: tag=$tag_version package=$package_path version=$package_version" >&2
+              exit 1
+            fi
+          done
 
       - name: Build Windows desktop release
         run: bun run dist:desktop:win
