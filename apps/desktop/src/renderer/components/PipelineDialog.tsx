@@ -775,17 +775,19 @@ export function PipelineDialog({
               value={description}
               onChange={(e) => { setIsDirty(true); setDescription(e.target.value); }}
             />
-            <button
-              type="button"
-              aria-pressed={failFast}
-              onClick={() => { setIsDirty(true); setFailFast((current) => !current); }}
-              className={cn('toggle-pill', failFast && 'is-active')}
-            >
-              <span className="toggle-pill-indicator">
-                {failFast ? <Check size={11} /> : null}
-              </span>
-              Fail fast
-            </button>
+            <Tooltip content="Stop the pipeline execution immediately if a step fails." side="top">
+              <button
+                type="button"
+                aria-pressed={failFast}
+                onClick={() => { setIsDirty(true); setFailFast((current) => !current); }}
+                className={cn('toggle-pill', failFast && 'is-active')}
+              >
+                <span className="toggle-pill-indicator">
+                  {failFast ? <Check size={11} /> : null}
+                </span>
+                Fail fast
+              </button>
+            </Tooltip>
           </div>
 
           <div className="mt-5 min-h-0 flex-1 overflow-y-auto overflow-x-visible px-1 py-1 -mx-1 -my-1 pr-3">
