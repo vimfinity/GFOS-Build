@@ -28,7 +28,7 @@ import { getNodeScriptChoices, getNodeScriptComboboxOptions } from '@/lib/node-s
 import { cn } from '@/lib/utils';
 import { useGitInfo } from '@/api/queries';
 import { BranchBadge } from '@/components/BranchBadge';
-import type { ExecutionMode, MavenOptionKey, MavenProfileState, NodeCommandType, Project } from '@gfos-build/contracts';
+import type { ExecutionMode, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType, Project } from '@gfos-build/contracts';
 
 export const Route = createFileRoute('/projects/')({
   component: ProjectsView,
@@ -78,6 +78,7 @@ function QuickRunDialog({
   onRun: (payload: {
     buildSystem: 'maven' | 'node';
     modulePath?: string;
+    submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
     goals?: string[];
     optionKeys?: MavenOptionKey[];
     profileStates?: Record<string, MavenProfileState>;
@@ -112,6 +113,7 @@ function QuickRunDialog({
 
   const [mavenCommand, setMavenCommand] = useState<MavenCommandValue>({
     modulePath: '',
+    submoduleBuildStrategy: 'root-pl',
     goals: defaultGoals,
     optionKeys: defaultOptionKeys,
     profileStates: {},
@@ -133,6 +135,7 @@ function QuickRunDialog({
     if (project !== null) {
       setMavenCommand({
         modulePath: '',
+        submoduleBuildStrategy: 'root-pl',
         goals: defaultGoals,
         optionKeys: defaultOptionKeys,
         profileStates: Object.fromEntries(
@@ -164,6 +167,7 @@ function QuickRunDialog({
     onRun({
       buildSystem: 'maven',
       modulePath: mavenCommand.modulePath || undefined,
+      submoduleBuildStrategy: mavenCommand.modulePath ? mavenCommand.submoduleBuildStrategy : undefined,
       goals: mavenCommand.goals,
       optionKeys: mavenCommand.optionKeys,
       profileStates: mavenCommand.profileStates,
@@ -586,6 +590,7 @@ function ProjectsView() {
   async function handleBuildRun(payload: {
     buildSystem: 'maven' | 'node';
     modulePath?: string;
+    submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
     goals?: string[];
     optionKeys?: MavenOptionKey[];
     profileStates?: Record<string, MavenProfileState>;
@@ -602,6 +607,7 @@ function ProjectsView() {
         path: buildTarget.path,
         buildSystem: payload.buildSystem,
         modulePath: payload.modulePath,
+        submoduleBuildStrategy: payload.submoduleBuildStrategy,
         goals: payload.goals,
         optionKeys: payload.optionKeys,
         profileStates: payload.profileStates,
@@ -890,12 +896,15 @@ function buildMavenPreview(command: MavenCommandValue): string {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([profileId, state]) => (state === 'disabled' ? `!${profileId}` : profileId));
 
-  return [
+  const useSubmoduleDir = command.modulePath && command.submoduleBuildStrategy === 'submodule-dir';
+  const prefix = useSubmoduleDir ? `cd ${command.modulePath} && ` : '';
+
+  return prefix + [
     'mvn',
     ...command.goals,
     ...command.optionKeys.map((optionKey) => MAVEN_OPTION_FLAGS[optionKey]),
     ...(explicitProfiles.length > 0 ? ['-P', explicitProfiles.join(',')] : []),
-    ...(command.modulePath ? ['-pl', command.modulePath] : []),
+    ...(!useSubmoduleDir && command.modulePath ? ['-pl', command.modulePath] : []),
     ...command.extraOptions,
   ].join(' ');
 }

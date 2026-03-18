@@ -54,6 +54,7 @@ export function resolveStep(stepConfig: BuildStepConfig, config: AppConfig): Bui
     path: resolvedPath,
     buildSystem: 'maven',
     modulePath: stepConfig.modulePath,
+    submoduleBuildStrategy: stepConfig.submoduleBuildStrategy,
     goals,
     optionKeys: stepConfig.optionKeys ?? config.maven.defaultOptionKeys,
     profileStates: stepConfig.profileStates ?? {},

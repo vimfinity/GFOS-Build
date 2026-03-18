@@ -515,6 +515,7 @@ export class AppRuntime {
         label: input['label'],
         buildSystem: 'maven',
         modulePath: input['modulePath'],
+        submoduleBuildStrategy: input['submoduleBuildStrategy'],
         goals: input['goals'],
         optionKeys: input['optionKeys'],
         profileStates: input['profileStates'],

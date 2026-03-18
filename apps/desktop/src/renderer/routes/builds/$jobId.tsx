@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCancelJob, useGitInfo } from '@/api/queries';
+import { useCancelJob, useGitInfo, useRunPipeline } from '@/api/queries';
 import { useJobEvents } from '@/api/run-events';
 import { StepTimeline } from '@/components/StepTimeline';
 import { BuildOutput } from '@/components/BuildOutput';
@@ -18,6 +18,8 @@ import {
   Loader2,
   Clock3,
   Activity,
+  RotateCcw,
+  Play,
 } from 'lucide-react';
 import type { BuildEvent } from '@gfos-build/contracts';
 
@@ -31,6 +33,7 @@ function LiveBuildView() {
   const queryClient = useQueryClient();
   const { events, done, error, startMs, eventVersion } = useJobEvents(jobId);
   const cancelJob = useCancelJob();
+  const runPipeline = useRunPipeline();
 
   const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - startMs));
 
@@ -114,6 +117,12 @@ function LiveBuildView() {
   async function handleCancel() {
     await cancelJob.mutateAsync(jobId);
     void navigate({ to: '/builds', search: { runId: undefined } });
+  }
+
+  async function handleRestart(from?: string) {
+    if (!pipelineName) return;
+    const { jobId: newJobId } = await runPipeline.mutateAsync({ name: pipelineName, from });
+    void navigate({ to: '/builds/$jobId', params: { jobId: newJobId } });
   }
 
   return (
@@ -214,6 +223,7 @@ function LiveBuildView() {
             {runDoneEvent.result.stoppedAt != null && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Stopped at step {runDoneEvent.result.stoppedAt + 1}
+                {stepLabels[runDoneEvent.result.stoppedAt] && ` · "${stepLabels[runDoneEvent.result.stoppedAt]}"`}
               </p>
             )}
           </div>
@@ -237,6 +247,32 @@ function LiveBuildView() {
                   {runDoneEvent.result.results.filter((result) => result.status === 'failed').length} failed
                 </span>
               )}
+            </div>
+          )}
+
+          {runStatus === 'failed' && pipelineName && (
+            <div className="flex items-center gap-2">
+              {runDoneEvent.result.stoppedAt != null && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleRestart(String(runDoneEvent.result.stoppedAt! + 1))}
+                  disabled={runPipeline.isPending}
+                  title={`Restart from "${stepLabels[runDoneEvent.result.stoppedAt] ?? `Step ${runDoneEvent.result.stoppedAt + 1}`}"`}
+                >
+                  <RotateCcw size={12} />
+                  Restart from failed step
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleRestart()}
+                disabled={runPipeline.isPending}
+              >
+                <Play size={12} />
+                Restart from beginning
+              </Button>
             </div>
           )}
         </div>
