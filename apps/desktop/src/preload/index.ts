@@ -22,6 +22,7 @@ const bridge: ElectronBridge = {
   clearRunLogs: () => ipcRenderer.invoke(IPC.CLEAR_RUN_LOGS),
   clearRuns: () => ipcRenderer.invoke(IPC.CLEAR_RUNS),
   openDirectory: () => ipcRenderer.invoke(IPC.OPEN_DIRECTORY),
+  getGitInfo: (projectPath) => ipcRenderer.invoke(IPC.GET_GIT_INFO, projectPath),
   onRunEvent: (jobId, listener) => {
     const wrapped = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof listener>[0]) => {
       if (payload.jobId === jobId) {

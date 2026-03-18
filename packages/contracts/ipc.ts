@@ -3,6 +3,7 @@ import type {
   BuildRunRowApi,
   BuildStatsApi,
   ConfigResponse,
+  GitInfoResponse,
   JdkDetectionResponse,
   PipelineListItem,
   ProjectInspectionResponse,
@@ -31,6 +32,7 @@ export const IPC = {
   CLEAR_RUN_LOGS: 'gfos:clear-run-logs',
   CLEAR_RUNS: 'gfos:clear-runs',
   OPEN_DIRECTORY: 'gfos:open-directory',
+  GET_GIT_INFO: 'gfos:get-git-info',
   RUN_SUBSCRIBE: 'gfos:run-subscribe',
   RUN_UNSUBSCRIBE: 'gfos:run-unsubscribe',
   RUN_EVENT: 'gfos:run-event',
@@ -57,5 +59,6 @@ export interface ElectronBridge {
   clearRunLogs: () => Promise<void>;
   clearRuns: () => Promise<void>;
   openDirectory: () => Promise<string | null>;
+  getGitInfo: (path: string) => Promise<GitInfoResponse>;
   onRunEvent: (jobId: string, listener: (event: import('./api.js').RunEventEnvelope) => void) => () => void;
 }

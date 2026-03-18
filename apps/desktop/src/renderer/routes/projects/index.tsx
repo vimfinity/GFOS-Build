@@ -26,6 +26,8 @@ import { SearchField } from '@/components/ui/search-field';
 import { Tooltip } from '@/components/ui/tooltip';
 import { getNodeScriptChoices, getNodeScriptComboboxOptions } from '@/lib/node-script-options';
 import { cn } from '@/lib/utils';
+import { useGitInfo } from '@/api/queries';
+import { BranchBadge } from '@/components/BranchBadge';
 import type { ExecutionMode, MavenOptionKey, MavenProfileState, NodeCommandType, Project } from '@gfos-build/contracts';
 
 export const Route = createFileRoute('/projects/')({
@@ -89,6 +91,7 @@ function QuickRunDialog({
   isRunning: boolean;
 }) {
   const { data: configData } = useQuery(configQuery);
+  const { data: gitInfo } = useGitInfo(project?.path ?? '');
 
   const defaultGoals = useMemo(
     () => configData?.config.maven.defaultGoals ?? ['clean', 'install'],
@@ -191,7 +194,10 @@ function QuickRunDialog({
         <div className="mt-5 flex flex-col gap-4 overflow-y-auto">
           {project && (
             <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs font-mono text-muted-foreground break-all">
-              {project.path}
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 break-all">{project.path}</span>
+                <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
+              </div>
             </div>
           )}
 
@@ -368,6 +374,7 @@ function ProjectRow({
   const isAggregator = project.maven?.isAggregator ?? false;
   const version = project.node?.version;
   const javaVersion = project.maven?.javaVersion;
+  const { data: gitInfo } = useGitInfo(project.path);
 
   return (
     <div className="group/row flex items-center gap-3 rounded-[18px] px-4 py-3 transition-colors hover:bg-accent/55">
@@ -390,6 +397,7 @@ function ProjectRow({
         <div className="flex-1" />
       )}
       <SystemBadge system={project.buildSystem} />
+      <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
       {project.node?.packageManager && (
         <span className="text-xs uppercase text-muted-foreground">{project.node.packageManager}</span>
       )}
@@ -424,6 +432,7 @@ function FlatProjectRow({
   const isAggregator = project.maven?.isAggregator ?? false;
   const version = project.node?.version;
   const javaVersion = project.maven?.javaVersion;
+  const { data: gitInfo } = useGitInfo(project.path);
 
   return (
     <div className="group/row flex items-center gap-3 rounded-[18px] px-4 py-3 transition-colors hover:bg-accent/55">
@@ -440,6 +449,7 @@ function FlatProjectRow({
         {relPath}
       </span>
       <SystemBadge system={project.buildSystem} />
+      <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
       {project.node?.packageManager && (
         <span className="text-xs uppercase text-muted-foreground">{project.node.packageManager}</span>
       )}

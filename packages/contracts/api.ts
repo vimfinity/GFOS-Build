@@ -84,6 +84,7 @@ export interface BuildRunRowApi {
   duration_ms: number | null;
   exit_code: number | null;
   status: string;
+  branch: string | null;
 }
 
 /** One persisted log line. */
@@ -135,6 +136,11 @@ export interface DetectedJdkApi {
 export interface JdkDetectionResponse {
   baseDir: string;
   jdks: DetectedJdkApi[];
+}
+
+export interface GitInfoResponse {
+  branch: string | null;
+  isDirty: boolean;
 }
 
 /** Live run event envelope delivered over the desktop bridge. */

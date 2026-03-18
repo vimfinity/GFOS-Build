@@ -1,4 +1,5 @@
 export * from './build-executor.js';
+export * from './git-info.js';
 export * from './build-runner.js';
 export * from './file-system.js';
 export * from './jdk-resolver.js';

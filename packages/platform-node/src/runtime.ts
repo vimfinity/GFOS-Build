@@ -5,6 +5,7 @@ import type {
   BuildRunRowApi,
   BuildStatsApi,
   ConfigResponse,
+  GitInfoResponse,
   HealthResponse,
   JdkDetectionResponse,
   PipelineListItem,
@@ -45,6 +46,7 @@ import {
   getDbPath,
   getScanCacheDir,
 } from './paths.js';
+import { NodeGitInfoReader } from './git-info.js';
 import { NodeProcessRunner } from './process-runner.js';
 import { resolvePipeline, resolveStep } from './resolver.js';
 import { FileScanCacheStore } from './scan-cache.js';
@@ -78,6 +80,7 @@ export class AppRuntime {
   private readonly db: IDatabase;
   private readonly fs: NodeFileSystem;
   private readonly processRunner: NodeProcessRunner;
+  private readonly gitInfoReader: NodeGitInfoReader;
   private readonly scanner: CachedScanner;
   private readonly buildRunner: BuildRunner;
   private readonly pipelineRunner: PipelineRunner;
@@ -89,6 +92,7 @@ export class AppRuntime {
     this.stateRootDir = options.stateRootDir;
     this.fs = new NodeFileSystem();
     this.processRunner = new NodeProcessRunner();
+    this.gitInfoReader = new NodeGitInfoReader();
     // Validate settings eagerly so startup can use the same recovery flow as schema failures.
     loadSettings(this.getSettingsPath());
     this.scanner = new CachedScanner(
@@ -101,7 +105,7 @@ export class AppRuntime {
       this.fs,
     );
     this.db = new AppDatabase(getDbPath(this.stateRootDir));
-    this.pipelineRunner = new PipelineRunner(this.buildRunner, this.db);
+    this.pipelineRunner = new PipelineRunner(this.buildRunner, this.db, this.gitInfoReader);
   }
 
   getHealth(): HealthResponse {
@@ -297,6 +301,10 @@ export class AppRuntime {
     this.db.clearAllBuilds();
   }
 
+  getGitInfo(projectPath: string): GitInfoResponse {
+    return this.gitInfoReader.getInfo(projectPath);
+  }
+
   async *scanProjects(
     options?: { roots?: Record<string, string>; includeHidden?: boolean; exclude?: string[]; noCache?: boolean },
   ): AsyncGenerator<ScanEvent> {
@@ -366,6 +374,7 @@ export class AppRuntime {
     try {
       for await (const event of this.buildRunner.run(step, 0, 1, undefined, job.controller?.signal)) {
         if (event.type === 'step:start') {
+          const gitInfo = this.gitInfoReader.getInfo(event.step.path);
           persistedStepRunId = this.db.createStepRun({
             runId,
             jobId: job.jobId,
@@ -378,6 +387,7 @@ export class AppRuntime {
             javaHome: event.step.buildSystem === 'maven' ? event.step.javaHome : undefined,
             stepIndex: 0,
             stepLabel: event.step.label,
+            branch: gitInfo.branch ?? undefined,
           });
           this.emit(job, {
             type: 'event',

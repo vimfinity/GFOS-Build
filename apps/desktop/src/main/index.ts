@@ -214,6 +214,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.DETECT_JDKS, (_event, baseDir: string) => getRuntime().detectJdks(baseDir));
   ipcMain.handle(IPC.CLEAR_RUN_LOGS, () => getRuntime().clearRunLogs());
   ipcMain.handle(IPC.CLEAR_RUNS, () => getRuntime().clearRuns());
+  ipcMain.handle(IPC.GET_GIT_INFO, (_event, projectPath: string) => getRuntime().getGitInfo(projectPath));
 
   ipcMain.handle(IPC.OPEN_DIRECTORY, async () => {
     const ownerWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined;

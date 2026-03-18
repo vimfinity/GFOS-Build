@@ -9,7 +9,7 @@ import { StateCompatibilityError } from './state-errors.js';
 
 const require = createRequire(import.meta.url);
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const SCHEMA_SQL = `
 CREATE TABLE schema_meta (
   version INTEGER NOT NULL
@@ -54,6 +54,7 @@ CREATE TABLE pipeline_step_runs (
   duration_ms INTEGER,
   exit_code INTEGER,
   status TEXT NOT NULL DEFAULT 'running',
+  branch TEXT,
   FOREIGN KEY (run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE
 );
 
@@ -111,6 +112,7 @@ export interface StartStepRunParams {
   pipelineName?: string;
   stepIndex?: number;
   stepLabel: string;
+  branch?: string;
 }
 
 export interface FinishStepRunParams {
@@ -274,8 +276,8 @@ export class AppDatabase implements IDatabase {
     const result = this.db
       .prepare(
         `INSERT INTO pipeline_step_runs
-          (run_id, job_id, project_path, project_name, build_system, package_manager, execution_mode, command, java_home, pipeline_name, step_index, step_label, started_at, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')`,
+          (run_id, job_id, project_path, project_name, build_system, package_manager, execution_mode, command, java_home, pipeline_name, step_index, step_label, started_at, status, branch)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
       )
       .run(
         params.runId,
@@ -291,6 +293,7 @@ export class AppDatabase implements IDatabase {
         params.stepIndex ?? null,
         params.stepLabel,
         now,
+        params.branch ?? null,
       ) as { lastInsertRowid: number | bigint };
     return Number(result.lastInsertRowid);
   }
@@ -329,7 +332,8 @@ export class AppDatabase implements IDatabase {
         s.finished_at,
         s.duration_ms,
         s.exit_code,
-        s.status
+        s.status,
+        s.branch
       FROM pipeline_step_runs s
     `;
 
@@ -529,9 +533,22 @@ export class AppDatabase implements IDatabase {
       }
 
       const row = this.db.prepare('SELECT version FROM schema_meta LIMIT 1').get() as { version: number } | undefined;
-      if (!row || row.version !== SCHEMA_VERSION) {
+      const currentVersion = row?.version ?? 0;
+
+      if (currentVersion === SCHEMA_VERSION) {
+        return;
+      }
+
+      // Migrate v2 → v3: add branch column to pipeline_step_runs
+      if (currentVersion === 2 && SCHEMA_VERSION >= 3) {
+        this.db.exec('ALTER TABLE pipeline_step_runs ADD COLUMN branch TEXT');
+        this.db.prepare('UPDATE schema_meta SET version = ?').run(SCHEMA_VERSION);
+        return;
+      }
+
+      if (currentVersion !== SCHEMA_VERSION) {
         throw new StateCompatibilityError(
-          `State schema version ${row?.version ?? 'unknown'} is incompatible with version ${SCHEMA_VERSION}.`,
+          `State schema version ${currentVersion} is incompatible with version ${SCHEMA_VERSION}.`,
         );
       }
     } catch (error) {

@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCancelJob } from '@/api/queries';
+import { useCancelJob, useGitInfo } from '@/api/queries';
 import { useJobEvents } from '@/api/run-events';
 import { StepTimeline } from '@/components/StepTimeline';
 import { BuildOutput } from '@/components/BuildOutput';
+import { BranchBadge } from '@/components/BranchBadge';
 import { Button } from '@/components/ui/button';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { formatDuration, cn } from '@/lib/utils';
@@ -97,6 +98,14 @@ function LiveBuildView() {
     return firstStep?.type === 'step:start' ? firstStep.step.label : null;
   }, [pipelineName, buildEvents]);
 
+  const currentStepPath = useMemo(() => {
+    const stepStarts = buildEvents.filter((e) => e.type === 'step:start');
+    const last = stepStarts[stepStarts.length - 1];
+    return last?.type === 'step:start' ? last.step.path : '';
+  }, [buildEvents]);
+
+  const { data: gitInfo } = useGitInfo(currentStepPath);
+
   const showStepTimeline = Boolean(pipelineName) || stepLabels.length > 1;
 
   const finalDurationMs =
@@ -116,9 +125,12 @@ function LiveBuildView() {
         </Button>
 
         <div className="min-w-0 flex-1">
-          <h1 className="page-title truncate text-[1.6rem] font-semibold leading-tight text-foreground">
-            {buildTitle ?? 'Build'}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="page-title truncate text-[1.6rem] font-semibold leading-tight text-foreground">
+              {buildTitle ?? 'Build'}
+            </h1>
+            <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Streaming output for job {jobId}.
           </p>

@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BranchBadge } from '@/components/BranchBadge';
+import { useGitInfo } from '@/api/queries';
 import { formatDuration, timeAgo } from '@/lib/utils';
 import type { PipelineListItem } from '@gfos-build/contracts';
 
@@ -22,7 +25,15 @@ function LastRunIcon({ status }: { status: string }) {
   return <Clock3 size={14} className="text-muted-foreground shrink-0" />;
 }
 
+function StepBranchBadge({ path }: { path: string }) {
+  const { data: gitInfo } = useGitInfo(path);
+  return <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />;
+}
+
 export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: PipelineCardProps) {
+  const uniquePaths = useMemo(() => [...new Set(pipeline.steps.map((s) => s.path))], [pipeline.steps]);
+  const hasMultipleRepos = uniquePaths.length > 1;
+
   return (
     <Card className="overflow-hidden">
       <CardContent className="flex h-full flex-col gap-5 p-5">
@@ -35,6 +46,7 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
               <span className="pill-meta rounded-full bg-secondary text-muted-foreground">
                 {pipeline.steps.length} step{pipeline.steps.length !== 1 ? 's' : ''}
               </span>
+              {!hasMultipleRepos && uniquePaths[0] && <StepBranchBadge path={uniquePaths[0]} />}
             </div>
             <p className="mt-2 min-h-10 text-sm leading-relaxed text-muted-foreground">
               {pipeline.description || 'Reusable build flow for repeated multi-step execution.'}
@@ -51,10 +63,11 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
           {pipeline.steps.map((step, index) => (
             <span
               key={`${step.label}-${index}`}
-              className="pill-meta rounded-full border border-border bg-secondary text-secondary-foreground"
+              className="inline-flex items-center gap-1.5 pill-meta rounded-full border border-border bg-secondary text-secondary-foreground"
             >
               {step.label || `Step ${index + 1}`}
               {step.buildSystem === 'node' && step.executionMode === 'external' ? ' · external' : ''}
+              {hasMultipleRepos && <StepBranchBadge path={step.path} />}
             </span>
           ))}
         </div>
