@@ -171,14 +171,14 @@ export function useGitInfo(path: string) {
 }
 
 export function useGitInfoBatch(paths: string[]) {
-  const key = paths.slice().sort().join('\0');
   return useQuery({
-    queryKey: ['git-info-batch', key],
+    queryKey: ['git-info-batch'],
     queryFn: (): Promise<Record<string, GitInfoResponse>> =>
       getDesktopApi().getGitInfoBatch(paths),
-    staleTime: 60_000,
+    staleTime: 15_000,
     gcTime: 300_000,
     refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
     enabled: paths.length > 0,
   });
 }
