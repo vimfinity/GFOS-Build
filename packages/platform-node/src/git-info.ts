@@ -5,6 +5,7 @@ import type { GitInfo, GitInfoReader } from '@gfos-build/application';
 const execAsync = promisify(exec);
 const GIT_OPTS = { timeout: 3000, encoding: 'utf8' as const };
 const NULL_INFO: GitInfo = { branch: null, isDirty: false };
+const MAX_CONCURRENCY = 4;
 
 async function gitExec(cmd: string, cwd: string): Promise<string> {
   const { stdout } = await execAsync(cmd, { ...GIT_OPTS, cwd });
@@ -28,6 +29,23 @@ async function resolveGitInfo(cwd: string): Promise<GitInfo> {
   }
 
   return { branch, isDirty };
+}
+
+async function mapConcurrent<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]!);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
 }
 
 export class NodeGitInfoReader implements GitInfoReader {
@@ -62,16 +80,14 @@ export class NodeGitInfoReader implements GitInfoReader {
   }
 
   async getBatch(paths: string[]): Promise<Record<string, GitInfo>> {
-    // Resolve git roots for all paths in parallel (non-blocking)
-    const rootEntries = await Promise.all(
-      paths.map(async (p) => {
-        try {
-          return { path: p, root: await gitExec('git rev-parse --show-toplevel', p) };
-        } catch {
-          return { path: p, root: null };
-        }
-      }),
-    );
+    // Resolve git roots with concurrency limit (avoid spawning too many child processes)
+    const rootEntries = await mapConcurrent(paths, MAX_CONCURRENCY, async (p) => {
+      try {
+        return { path: p, root: await gitExec('git rev-parse --show-toplevel', p) };
+      } catch {
+        return { path: p, root: null };
+      }
+    });
 
     // Group paths by git root
     const byRoot = new Map<string, string[]>();
@@ -86,15 +102,14 @@ export class NodeGitInfoReader implements GitInfoReader {
       byRoot.get(root)!.push(p);
     }
 
-    // Resolve branch + dirty for each unique root in parallel
-    await Promise.all(
-      [...byRoot.entries()].map(async ([, rootPaths]) => {
-        const info = await resolveGitInfo(rootPaths[0]!);
-        for (const p of rootPaths) {
-          results[p] = info;
-        }
-      }),
-    );
+    // Resolve branch + dirty for each unique root with concurrency limit
+    const rootGroups = [...byRoot.entries()];
+    await mapConcurrent(rootGroups, MAX_CONCURRENCY, async ([, rootPaths]) => {
+      const info = await resolveGitInfo(rootPaths[0]!);
+      for (const p of rootPaths) {
+        results[p] = info;
+      }
+    });
 
     return results;
   }

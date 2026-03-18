@@ -171,14 +171,15 @@ export function useGitInfo(path: string) {
 }
 
 export function useGitInfoBatch(paths: string[]) {
+  const sorted = [...paths].sort();
   return useQuery({
-    queryKey: ['git-info-batch'],
+    queryKey: ['git-info', 'batch', sorted],
     queryFn: (): Promise<Record<string, GitInfoResponse>> =>
-      getDesktopApi().getGitInfoBatch(paths),
+      getDesktopApi().getGitInfoBatch(sorted),
     staleTime: 15_000,
     gcTime: 300_000,
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
-    enabled: paths.length > 0,
+    enabled: sorted.length > 0,
   });
 }

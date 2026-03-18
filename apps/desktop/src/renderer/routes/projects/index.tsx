@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { scanQuery, configQuery, useRefreshScan, useQuickRun } from '@/api/queries';
 import { waitForJobCompletion } from '@/api/run-events';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useDeferredValue } from 'react';
 import {
   FolderSearch,
   RefreshCw,
@@ -496,7 +496,8 @@ function ProjectsView() {
   const roots = configData?.config.roots ?? {};
 
   const uniqueProjectPaths = useMemo(() => [...new Set(projects.map((p) => p.path))], [projects]);
-  const { data: gitInfoMap } = useGitInfoBatch(uniqueProjectPaths);
+  const { data: rawGitInfoMap } = useGitInfoBatch(uniqueProjectPaths);
+  const gitInfoMap = useDeferredValue(rawGitInfoMap);
 
   const filtered = useMemo(() => {
     return projects.filter((project) => {
