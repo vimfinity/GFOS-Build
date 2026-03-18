@@ -126,6 +126,11 @@ export function ComboboxField({
 
           if (event.key === 'Escape') {
             event.preventDefault();
+            if (open) {
+              // Prevent the parent dialog from seeing this Escape so it doesn't
+              // trigger the discard-confirmation while just closing the dropdown.
+              event.nativeEvent.stopImmediatePropagation();
+            }
             setOpen(false);
             setQuery('');
             inputRef.current?.blur();
