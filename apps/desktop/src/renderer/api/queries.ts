@@ -160,11 +160,25 @@ export const gitInfoQuery = (path: string) =>
   queryOptions({
     queryKey: ['git-info', path],
     queryFn: (): Promise<GitInfoResponse> => getDesktopApi().getGitInfo(path),
-    staleTime: 30_000,
-    gcTime: 120_000,
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchOnWindowFocus: false,
     enabled: !!path,
   });
 
 export function useGitInfo(path: string) {
   return useQuery(gitInfoQuery(path));
+}
+
+export function useGitInfoBatch(paths: string[]) {
+  const key = paths.slice().sort().join('\0');
+  return useQuery({
+    queryKey: ['git-info-batch', key],
+    queryFn: (): Promise<Record<string, GitInfoResponse>> =>
+      getDesktopApi().getGitInfoBatch(paths),
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchOnWindowFocus: false,
+    enabled: paths.length > 0,
+  });
 }

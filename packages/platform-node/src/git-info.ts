@@ -31,4 +31,34 @@ export class NodeGitInfoReader implements GitInfoReader {
 
     return { branch, isDirty };
   }
+
+  getBatch(paths: string[]): Record<string, GitInfo> {
+    const results: Record<string, GitInfo> = {};
+    const rootCache = new Map<string, GitInfo>();
+
+    for (const p of paths) {
+      try {
+        const root = execSync('git rev-parse --show-toplevel', {
+          cwd: p,
+          encoding: 'utf8',
+          timeout: 3000,
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+
+        const cached = rootCache.get(root);
+        if (cached) {
+          results[p] = cached;
+          continue;
+        }
+
+        const info = this.getInfo(p);
+        rootCache.set(root, info);
+        results[p] = info;
+      } catch {
+        results[p] = { branch: null, isDirty: false };
+      }
+    }
+
+    return results;
+  }
 }

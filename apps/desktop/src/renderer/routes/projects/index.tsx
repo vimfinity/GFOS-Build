@@ -26,7 +26,7 @@ import { SearchField } from '@/components/ui/search-field';
 import { Tooltip } from '@/components/ui/tooltip';
 import { getNodeScriptChoices, getNodeScriptComboboxOptions } from '@/lib/node-script-options';
 import { cn } from '@/lib/utils';
-import { useGitInfo } from '@/api/queries';
+import { useGitInfo, useGitInfoBatch } from '@/api/queries';
 import { BranchBadge } from '@/components/BranchBadge';
 import type { ExecutionMode, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType, Project } from '@gfos-build/contracts';
 
@@ -368,17 +368,18 @@ function ProjectRow({
   project,
   subPath,
   onBuild,
+  gitInfo,
   disabled = false,
 }: {
   project: Project;
   subPath: string;
   onBuild: (project: Project) => void;
+  gitInfo?: { branch: string | null; isDirty?: boolean };
   disabled?: boolean;
 }) {
   const isAggregator = project.maven?.isAggregator ?? false;
   const version = project.node?.version;
   const javaVersion = project.maven?.javaVersion;
-  const { data: gitInfo } = useGitInfo(project.path);
 
   return (
     <div className="group/row flex items-center gap-3 rounded-[18px] px-4 py-3 transition-colors hover:bg-accent/55">
@@ -425,18 +426,19 @@ function FlatProjectRow({
   project,
   roots,
   onBuild,
+  gitInfo,
   disabled = false,
 }: {
   project: Project;
   roots: Record<string, string>;
   onBuild: (project: Project) => void;
+  gitInfo?: { branch: string | null; isDirty?: boolean };
   disabled?: boolean;
 }) {
   const relPath = getRelativePath(project, roots);
   const isAggregator = project.maven?.isAggregator ?? false;
   const version = project.node?.version;
   const javaVersion = project.maven?.javaVersion;
-  const { data: gitInfo } = useGitInfo(project.path);
 
   return (
     <div className="group/row flex items-center gap-3 rounded-[18px] px-4 py-3 transition-colors hover:bg-accent/55">
@@ -492,6 +494,9 @@ function ProjectsView() {
 
   const projects = scanData?.projects ?? [];
   const roots = configData?.config.roots ?? {};
+
+  const uniqueProjectPaths = useMemo(() => [...new Set(projects.map((p) => p.path))], [projects]);
+  const { data: gitInfoMap } = useGitInfoBatch(uniqueProjectPaths);
 
   const filtered = useMemo(() => {
     return projects.filter((project) => {
@@ -797,6 +802,7 @@ function ProjectsView() {
                         project={project}
                         roots={roots}
                         onBuild={setBuildTarget}
+                        gitInfo={gitInfoMap?.[project.path]}
                       />
                     ))}
                   </div>
@@ -829,6 +835,7 @@ function ProjectsView() {
                                     project={project}
                                     subPath={subPath}
                                     onBuild={setBuildTarget}
+                                    gitInfo={gitInfoMap?.[project.path]}
                                   />
                                 );
                               })}

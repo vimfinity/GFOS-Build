@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react';
+import { Fragment } from 'react';
 import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight, ChevronRight, RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,8 +31,6 @@ function StepBranchBadge({ path }: { path: string }) {
 }
 
 export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: PipelineCardProps) {
-  const uniquePaths = useMemo(() => [...new Set(pipeline.steps.map((s) => s.path))], [pipeline.steps]);
-  const hasMultipleRepos = uniquePaths.length > 1;
   const lastRunFailed = pipeline.lastRun?.status === 'failed';
   const resumeFrom = pipeline.lastRun?.stoppedAt;
   const canResume = lastRunFailed && resumeFrom != null;
@@ -50,7 +48,7 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
               <span className="pill-meta rounded-full bg-secondary text-muted-foreground">
                 {pipeline.steps.length} step{pipeline.steps.length !== 1 ? 's' : ''}
               </span>
-              {!hasMultipleRepos && uniquePaths[0] && <StepBranchBadge path={uniquePaths[0]} />}
+              {pipeline.steps[0] && <StepBranchBadge path={pipeline.steps[0].path} />}
             </div>
             <p className="mt-2 min-h-10 text-sm leading-relaxed text-muted-foreground">
               {pipeline.description || 'Reusable build flow for repeated multi-step execution.'}
@@ -90,7 +88,6 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
                 {step.label || `Step ${index + 1}`}
                 {step.buildSystem === 'node' && step.executionMode === 'external' ? ' · external' : ''}
               </button>
-              {hasMultipleRepos && <StepBranchBadge path={step.path} />}
             </Fragment>
           ))}
         </div>
