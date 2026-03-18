@@ -138,7 +138,7 @@ export interface IDatabase {
   appendStepLog(stepRunId: number, seq: number, stream: string, line: string): void;
   getRecentRuns(opts: { limit: number; pipeline?: string; project?: string }): BuildRunRowApi[];
   getBuildStats(): BuildStatsApi;
-  getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null }>;
+  getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }>;
   getLastFailedStepIndex(pipelineName: string): number | null;
   getBuildLogs(stepRunId: number, opts?: { limit?: number; beforeSeq?: number }): BuildLogPage;
   clearBuildLogs(): void;
@@ -426,10 +426,10 @@ export class AppDatabase implements IDatabase {
     };
   }
 
-  getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null }> {
+  getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }> {
     const rows = this.db
       .prepare(
-        `SELECT pipeline_name, status, started_at, duration_ms
+        `SELECT pipeline_name, status, started_at, duration_ms, stopped_at
          FROM pipeline_runs
          WHERE pipeline_name IS NOT NULL
            AND id IN (
@@ -439,14 +439,15 @@ export class AppDatabase implements IDatabase {
              GROUP BY pipeline_name
            )`,
       )
-      .all() as Array<{ pipeline_name: string; status: string; started_at: string; duration_ms: number | null }>;
+      .all() as Array<{ pipeline_name: string; status: string; started_at: string; duration_ms: number | null; stopped_at: number | null }>;
 
-    const result: Record<string, { status: string; startedAt: string; durationMs: number | null }> = {};
+    const result: Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }> = {};
     for (const row of rows) {
       result[row.pipeline_name] = {
         status: row.status,
         startedAt: row.started_at,
         durationMs: row.duration_ms,
+        stoppedAt: row.stopped_at,
       };
     }
     return result;

@@ -1,4 +1,4 @@
-import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight } from 'lucide-react';
+import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight, RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatDuration, timeAgo } from '@/lib/utils';
@@ -6,7 +6,7 @@ import type { PipelineListItem } from '@gfos-build/contracts';
 
 interface PipelineCardProps {
   pipeline: PipelineListItem;
-  onRun: (name: string) => void;
+  onRun: (name: string, from?: string) => void;
   onEdit: () => void;
   onDelete: () => void;
   isRunning?: boolean;
@@ -23,6 +23,11 @@ function LastRunIcon({ status }: { status: string }) {
 }
 
 export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: PipelineCardProps) {
+  const lastRunFailed = pipeline.lastRun?.status === 'failed';
+  const resumeFrom = pipeline.lastRun?.stoppedAt;
+  const canResume = lastRunFailed && resumeFrom != null;
+  const resumeStepLabel = canResume ? (pipeline.steps[resumeFrom]?.label ?? `Step ${resumeFrom + 1}`) : null;
+
   return (
     <Card className="overflow-hidden">
       <CardContent className="flex h-full flex-col gap-5 p-5">
@@ -41,21 +46,41 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
             </p>
           </div>
 
-          <Button size="sm" onClick={() => onRun(pipeline.name)} disabled={isRunning}>
-            {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-            {isRunning ? 'Running' : 'Run'}
-          </Button>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <Button size="sm" onClick={() => onRun(pipeline.name)} disabled={isRunning}>
+              {isRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+              {isRunning ? 'Running' : 'Run'}
+            </Button>
+            {canResume && !isRunning && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onRun(pipeline.name, String(resumeFrom + 1))}
+                title={`Restart from "${resumeStepLabel}"`}
+              >
+                <RotateCcw size={12} />
+                Resume
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           {pipeline.steps.map((step, index) => (
-            <span
+            <button
               key={`${step.label}-${index}`}
-              className="pill-meta rounded-full border border-border bg-secondary text-secondary-foreground"
+              type="button"
+              disabled={isRunning}
+              onClick={() => !isRunning && onRun(pipeline.name, String(index + 1))}
+              title={`Run from "${step.label}"`}
+              className="pill-meta group cursor-pointer rounded-full border border-border bg-secondary text-secondary-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary disabled:cursor-default disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-secondary disabled:hover:text-secondary-foreground"
             >
+              <span className="hidden group-hover:not-disabled:inline-block group-enabled:group-hover:inline-block">
+                <Play size={9} />
+              </span>
               {step.label || `Step ${index + 1}`}
               {step.buildSystem === 'node' && step.executionMode === 'external' ? ' · external' : ''}
-            </span>
+            </button>
           ))}
         </div>
 
@@ -68,6 +93,12 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
                 <>
                   <span className="text-border">·</span>
                   <span className="font-mono">{formatDuration(pipeline.lastRun.durationMs)}</span>
+                </>
+              )}
+              {canResume && (
+                <>
+                  <span className="text-border">·</span>
+                  <span className="text-destructive">Failed at &ldquo;{resumeStepLabel}&rdquo;</span>
                 </>
               )}
             </div>

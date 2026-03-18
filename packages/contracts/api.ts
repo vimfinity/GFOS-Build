@@ -63,6 +63,7 @@ export interface PipelineListItem {
     status: string;
     startedAt: string;
     durationMs: number | null;
+    stoppedAt: number | null;
   } | null;
 }
 

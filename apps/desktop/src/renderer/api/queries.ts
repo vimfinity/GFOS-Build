@@ -64,7 +64,7 @@ export const scanQuery = queryOptions({
 
 export function useRunPipeline() {
   return useMutation({
-    mutationFn: (name: string) => getDesktopApi().runPipeline({ name }),
+    mutationFn: (input: { name: string; from?: string }) => getDesktopApi().runPipeline(input),
   });
 }
 
