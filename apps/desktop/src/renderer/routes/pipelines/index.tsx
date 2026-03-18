@@ -38,10 +38,10 @@ function PipelinesView() {
     return pipeline.name.toLowerCase().includes(searchText.trim().toLowerCase());
   });
 
-  async function handleRun(name: string) {
+  async function handleRun(name: string, from?: string) {
     setRunningPipelines((s) => new Set(s).add(name));
     try {
-      const { jobId } = await runPipeline.mutateAsync(name);
+      const { jobId } = await runPipeline.mutateAsync({ name, from });
       void navigate({ to: '/builds/$jobId', params: { jobId } });
     } finally {
       setRunningPipelines((s) => {

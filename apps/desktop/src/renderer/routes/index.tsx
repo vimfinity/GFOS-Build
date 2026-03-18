@@ -331,7 +331,7 @@ function Dashboard() {
   async function handleRun(name: string) {
     setRunningPipelines((s) => new Set(s).add(name));
     try {
-      const { jobId } = await runPipeline.mutateAsync(name);
+      const { jobId } = await runPipeline.mutateAsync({ name });
       void navigate({ to: '/builds/$jobId', params: { jobId } });
     } finally {
       setRunningPipelines((s) => {
