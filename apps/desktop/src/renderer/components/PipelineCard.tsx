@@ -1,4 +1,5 @@
-import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight } from 'lucide-react';
+import { Fragment } from 'react';
+import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatDuration, timeAgo } from '@/lib/utils';
@@ -47,15 +48,15 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning }: P
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-1">
           {pipeline.steps.map((step, index) => (
-            <span
-              key={`${step.label}-${index}`}
-              className="pill-meta rounded-full border border-border bg-secondary text-secondary-foreground"
-            >
-              {step.label || `Step ${index + 1}`}
-              {step.buildSystem === 'node' && step.executionMode === 'external' ? ' · external' : ''}
-            </span>
+            <Fragment key={`${step.label}-${index}`}>
+              {index > 0 && <ChevronRight size={12} className="shrink-0 text-muted-foreground" />}
+              <span className="pill-meta rounded-full border border-border bg-secondary text-secondary-foreground">
+                {step.label || `Step ${index + 1}`}
+                {step.buildSystem === 'node' && step.executionMode === 'external' ? ' · external' : ''}
+              </span>
+            </Fragment>
           ))}
         </div>
 
