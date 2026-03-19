@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -113,7 +114,7 @@ function ProjectPathPicker({
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const { data: scanData, isLoading: scanLoading } = useQuery(scanQuery);
   const { data: configData } = useQuery(configQuery);
   const roots = configData?.config.roots ?? {};
@@ -143,13 +144,48 @@ function ProjectPathPicker({
       .slice(0, 30);
   }, [scanData, query]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const inputEl = inputRef.current;
+    const dropdownEl = dropdownRef.current;
+    if (!inputEl || !dropdownEl) return;
+
+    function applyPosition() {
+      if (!inputEl || !dropdownEl) return;
+      const rect = inputEl.getBoundingClientRect();
+      const GAP = 6;
+      const MAX_H = 240;
+      const spaceBelow = window.innerHeight - rect.bottom - GAP;
+      const spaceAbove = rect.top - GAP;
+      dropdownEl.style.left = `${rect.left}px`;
+      dropdownEl.style.width = `${rect.width}px`;
+      if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+        dropdownEl.style.top = `${rect.bottom + GAP}px`;
+        dropdownEl.style.bottom = '';
+        dropdownEl.style.maxHeight = `${Math.max(Math.min(MAX_H, spaceBelow), 80)}px`;
+      } else {
+        dropdownEl.style.top = '';
+        dropdownEl.style.bottom = `${window.innerHeight - rect.top + GAP}px`;
+        dropdownEl.style.maxHeight = `${Math.max(Math.min(MAX_H, spaceAbove), 80)}px`;
+      }
+    }
+
+    applyPosition();
+    window.addEventListener('scroll', applyPosition, { capture: true, passive: true });
+    window.addEventListener('resize', applyPosition, { passive: true } as EventListenerOptions);
+    return () => {
+      window.removeEventListener('scroll', applyPosition, { capture: true } as EventListenerOptions);
+      window.removeEventListener('resize', applyPosition);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-        setQuery('');
-      }
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target) || dropdownRef.current?.contains(target)) return;
+      setOpen(false);
+      setQuery('');
     }
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
@@ -171,6 +207,7 @@ function ProjectPathPicker({
     onResolvedPath?.(project.path, project);
     setOpen(false);
     setQuery('');
+    inputRef.current?.blur();
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -210,10 +247,8 @@ function ProjectPathPicker({
             ref={inputRef}
             value={open ? query : displayValue}
             onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => {
-              setOpen(true);
-              setQuery('');
-            }}
+            onFocus={() => { setOpen(true); setQuery(''); }}
+            onClick={() => setOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder={open ? 'Search projects or type an absolute path...' : 'Select a project...'}
             className="field-input h-11 w-full rounded-2xl border pl-4 pr-10 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
@@ -225,52 +260,6 @@ function ProjectPathPicker({
               open && 'rotate-180',
             )}
           />
-
-          {open && (
-            <div className="glass-card listbox-panel absolute left-0 right-0 top-full z-50 mt-2 max-h-60 overflow-auto">
-              {scanLoading ? (
-                <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
-                  <Loader2 size={12} className="shrink-0 animate-spin" />
-                  Loading projects...
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="px-4 py-3 text-xs text-muted-foreground">
-                  {query.trim() ? 'No matching projects' : 'No projects found'}
-                </div>
-              ) : (
-                filtered.map((project) => {
-                  const relPath = getRelativePath(project, roots);
-                  return (
-                    <button
-                      key={project.path}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => selectProject(project)}
-                      className={cn(
-                        'listbox-option transition-colors',
-                        value === project.path && 'is-active',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'pill-meta font-semibold',
-                          project.buildSystem === 'maven'
-                            ? 'bg-primary/10 text-primary'
-                            : 'bg-success/10 text-success',
-                        )}
-                      >
-                        {project.buildSystem === 'maven' ? 'Maven' : 'Node'}
-                      </span>
-                      <span className="shrink-0 text-sm font-medium text-foreground">{project.name}</span>
-                      <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                        {relPath}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          )}
         </div>
 
         <Tooltip content="Browse directory" side="bottom">
@@ -286,6 +275,56 @@ function ProjectPathPicker({
           </Button>
         </Tooltip>
       </div>
+
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          className="glass-card listbox-panel fixed z-[9999] overflow-auto"
+        >
+          {scanLoading ? (
+            <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+              <Loader2 size={12} className="shrink-0 animate-spin" />
+              Loading projects...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="px-4 py-3 text-xs text-muted-foreground">
+              {query.trim() ? 'No matching projects' : 'No projects found'}
+            </div>
+          ) : (
+            filtered.map((project) => {
+              const relPath = getRelativePath(project, roots);
+              return (
+                <button
+                  key={project.path}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => selectProject(project)}
+                  className={cn(
+                    'listbox-option transition-colors',
+                    value === project.path && 'is-active',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'pill-meta font-semibold',
+                      project.buildSystem === 'maven'
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-success/10 text-success',
+                    )}
+                  >
+                    {project.buildSystem === 'maven' ? 'Maven' : 'Node'}
+                  </span>
+                  <span className="shrink-0 text-sm font-medium text-foreground">{project.name}</span>
+                  <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+                    {relPath}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -405,7 +444,7 @@ function StepCard({
       </div>
 
       <div className={cn('grid transition-[grid-template-rows] duration-200 ease-in-out', collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]')}>
-        <div className="overflow-hidden">
+        <div className={cn('min-h-0 transition-opacity duration-200', collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100')}>
           <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <Input
               label="Label"
@@ -846,7 +885,7 @@ export function PipelineDialog({
             </Tooltip>
           </div>
 
-          <div className="mt-5 min-h-0 flex-1 overflow-y-auto overflow-x-visible px-1 py-1 -mx-1 -my-1 pr-3">
+          <div className="mt-5 min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] px-1 py-1 -mx-1 -my-1 pr-3">
             <div className="flex flex-col gap-4">
               {steps.map((step, index) => (
                 <StepCard

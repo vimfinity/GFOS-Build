@@ -1,5 +1,6 @@
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface ComboboxOption {
@@ -31,7 +32,6 @@ export function ComboboxField({
   const inputRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
-
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value),
     [options, value],
@@ -55,20 +55,54 @@ export function ComboboxField({
 
   useEffect(() => {
     if (!open) return;
-
     const listbox = listboxRef.current;
     const activeOption = listbox?.querySelector<HTMLElement>(`[data-option-index="${highlightedIndex}"]`);
     activeOption?.scrollIntoView({ block: 'nearest' });
   }, [highlightedIndex, open]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const inputEl = inputRef.current;
+    const dropdownEl = listboxRef.current;
+    if (!inputEl || !dropdownEl) return;
+
+    function applyPosition() {
+      if (!inputEl || !dropdownEl) return;
+      const rect = inputEl.getBoundingClientRect();
+      const GAP = 6;
+      const MAX_H = 256;
+      const spaceBelow = window.innerHeight - rect.bottom - GAP;
+      const spaceAbove = rect.top - GAP;
+      dropdownEl.style.left = `${rect.left}px`;
+      dropdownEl.style.width = `${rect.width}px`;
+      if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+        dropdownEl.style.top = `${rect.bottom + GAP}px`;
+        dropdownEl.style.bottom = '';
+        dropdownEl.style.maxHeight = `${Math.max(Math.min(MAX_H, spaceBelow), 80)}px`;
+      } else {
+        dropdownEl.style.top = '';
+        dropdownEl.style.bottom = `${window.innerHeight - rect.top + GAP}px`;
+        dropdownEl.style.maxHeight = `${Math.max(Math.min(MAX_H, spaceAbove), 80)}px`;
+      }
+    }
+
+    applyPosition();
+    window.addEventListener('scroll', applyPosition, { capture: true, passive: true });
+    window.addEventListener('resize', applyPosition, { passive: true } as EventListenerOptions);
+    return () => {
+      window.removeEventListener('scroll', applyPosition, { capture: true } as EventListenerOptions);
+      window.removeEventListener('resize', applyPosition);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return undefined;
 
     function onPointerDown(event: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-        setQuery('');
-      }
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target) || listboxRef.current?.contains(target)) return;
+      setOpen(false);
+      setQuery('');
     }
 
     document.addEventListener('pointerdown', onPointerDown);
@@ -147,12 +181,12 @@ export function ComboboxField({
         )}
       />
 
-      {open && (
+      {open && createPortal(
         <div
           ref={listboxRef}
           id={listboxId}
           role="listbox"
-          className="glass-card listbox-panel absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-auto"
+          className="glass-card listbox-panel fixed z-[9999] overflow-auto"
         >
           {filteredOptions.length === 0 ? (
             <div className="px-4 py-3 text-xs text-muted-foreground">{emptyText}</div>
@@ -186,7 +220,8 @@ export function ComboboxField({
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

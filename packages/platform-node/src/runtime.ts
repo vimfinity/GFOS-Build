@@ -568,6 +568,7 @@ function toPipelineStep(step: BuildStep): PipelineStep {
     buildSystem: step.buildSystem,
     executionMode: step.executionMode,
     modulePath: step.modulePath,
+    submoduleBuildStrategy: step.submoduleBuildStrategy,
     goals: step.goals,
     optionKeys: step.optionKeys,
     profileStates: step.profileStates,

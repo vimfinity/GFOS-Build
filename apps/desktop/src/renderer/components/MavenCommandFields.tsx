@@ -450,8 +450,8 @@ function ModulePicker({
           </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground/72">
             {strategy === 'submodule-dir'
-              ? <>Maven runs directly inside <span className="font-mono">{value}</span> — faster for standalone modules.</>
-              : <>Maven runs from the project root with <span className="font-mono">-pl {value}</span> — inherits parent POM settings.</>}
+              ? <>Maven runs directly inside <span className="font-mono">{value}</span>.</>
+              : <>Maven runs from the project root with <span className="font-mono">-pl {value}</span>.</>}
           </p>
         </div>
       ) : (
