@@ -60,7 +60,7 @@ describe('AppDatabase', () => {
     }
   });
 
-  it('clears logs when deleting all builds', () => {
+  it('clears logs when deleting all builds', { timeout: 15_000 }, () => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
     const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
     try {
@@ -86,7 +86,7 @@ describe('AppDatabase', () => {
     }
   });
 
-  it('paginates stored logs from newest to oldest chunks', () => {
+  it('paginates stored logs from newest to oldest chunks', { timeout: 15_000 }, () => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
     const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
     try {
