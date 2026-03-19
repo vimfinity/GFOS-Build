@@ -339,7 +339,12 @@ export class AppRuntime {
     };
   }
 
+  watchGitHeads(onChange: () => void): () => void {
+    return this.gitInfoReader.watchHeads(onChange);
+  }
+
   close(): void {
+    this.gitInfoReader.close();
     this.db.close();
     this.jobs.clear();
   }

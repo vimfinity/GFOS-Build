@@ -176,8 +176,10 @@ export function useGitInfoBatch(paths: string[]) {
     queryKey: ['git-info', 'batch', sorted],
     queryFn: (): Promise<Record<string, GitInfoResponse>> =>
       getDesktopApi().getGitInfoBatch(sorted),
-    staleTime: 15_000,
+    staleTime: 60_000,
     gcTime: 300_000,
+    // Branch updates are pushed via gfos:git-head-changed (fs.watch on .git/HEAD).
+    // Window focus refetch is not needed.
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
     enabled: sorted.length > 0,

@@ -37,6 +37,7 @@ export const IPC = {
   RUN_SUBSCRIBE: 'gfos:run-subscribe',
   RUN_UNSUBSCRIBE: 'gfos:run-unsubscribe',
   RUN_EVENT: 'gfos:run-event',
+  GIT_HEAD_CHANGED: 'gfos:git-head-changed',
 } as const;
 
 export interface ElectronBridge {
@@ -63,4 +64,5 @@ export interface ElectronBridge {
   getGitInfo: (path: string) => Promise<GitInfoResponse>;
   getGitInfoBatch: (paths: string[]) => Promise<Record<string, GitInfoResponse>>;
   onRunEvent: (jobId: string, listener: (event: import('./api.js').RunEventEnvelope) => void) => () => void;
+  onGitHeadChanged: (listener: () => void) => () => void;
 }
