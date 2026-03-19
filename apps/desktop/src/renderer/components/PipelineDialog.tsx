@@ -699,7 +699,8 @@ export function PipelineDialog({
     setDescription(initialData?.description ?? '');
     setFailFast(initialData?.failFast ?? true);
     setSteps(nextSteps);
-    setCollapsedSteps(new Set());
+    // Collapse all steps when opening an existing pipeline; new pipelines start expanded
+    setCollapsedSteps(initialData?.steps.length ? new Set(initialData.steps.map((_, i) => i)) : new Set());
 
     void (async () => {
       for (let index = 0; index < nextSteps.length; index++) {
