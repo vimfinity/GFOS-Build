@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Play, CheckCircle2, XCircle, Loader2, Clock3, Pencil, Trash2, ArrowUpRight, ChevronRight, RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { BranchBadge } from '@/components/BranchBadge';
 import { formatDuration, timeAgo, cn } from '@/lib/utils';
 import type { GitInfoResponse, PipelineListItem } from '@gfos-build/contracts';
@@ -70,15 +71,16 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning, git
               {isRunning ? 'Running' : 'Run'}
             </Button>
             {canResume && !isRunning && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onRun(pipeline.name, String(resumeFrom + 1))}
-                title={`Restart from "${resumeStepLabel}"`}
-              >
-                <RotateCcw size={12} />
-                Resume
-              </Button>
+              <Tooltip content={`Restart from "${resumeStepLabel}"`} side="left">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onRun(pipeline.name, String(resumeFrom + 1))}
+                >
+                  <RotateCcw size={12} />
+                  Resume
+                </Button>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -90,7 +92,7 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning, git
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="flex w-full items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]"
+            className={cn('flex w-full items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]', expanded ? 'rounded-t-2xl' : 'rounded-2xl')}
           >
             <ChevronRight
               size={12}
@@ -137,11 +139,16 @@ export function PipelineCard({ pipeline, onRun, onEdit, onDelete, isRunning, git
                     type="button"
                     disabled={isRunning}
                     onClick={() => !isRunning && onRun(pipeline.name, String(index + 1))}
-                    title={`Run from "${label}"`}
                     className="group flex w-full items-center gap-3 border-t border-border/50 px-3.5 py-2 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)] disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
                   >
-                    <span className="w-4 shrink-0 text-right font-mono text-[11px] text-muted-foreground/40">
-                      {index + 1}
+                    <span className="relative h-4 w-4 shrink-0">
+                      <span className={cn('absolute inset-0 flex items-center justify-center font-mono text-[11px] text-muted-foreground/40 transition-opacity duration-150', !isRunning && 'group-hover:opacity-0')}>
+                        {index + 1}
+                      </span>
+                      <Play
+                        size={12}
+                        className={cn('absolute inset-0 m-auto text-primary opacity-0 transition-opacity duration-150', !isRunning && 'group-hover:opacity-100')}
+                      />
                     </span>
                     <ChevronRight
                       size={10}

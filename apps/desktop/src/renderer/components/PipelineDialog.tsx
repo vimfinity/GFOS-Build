@@ -294,6 +294,8 @@ function StepCard({
   step,
   index,
   total,
+  collapsed,
+  onToggleCollapsed,
   onUpdate,
   onResolvePath,
   onRemove,
@@ -303,6 +305,8 @@ function StepCard({
   step: StepFormData;
   index: number;
   total: number;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   onUpdate: (updater: (current: StepFormData) => StepFormData) => void;
   onResolvePath: (path: string, project?: Project) => void;
   onRemove: () => void;
@@ -311,7 +315,6 @@ function StepCard({
 }) {
   const { data: configData } = useQuery(configQuery);
   const jdkVersions = useMemo(() => Object.keys(configData?.config.jdkRegistry ?? {}), [configData]);
-  const [collapsed, setCollapsed] = useState(false);
   const { data: gitInfo } = useGitInfo(step.path);
 
   function handleResolvedPath(path: string, project?: Project) {
@@ -328,7 +331,7 @@ function StepCard({
       <div className="flex items-start justify-between gap-3">
         <button
           type="button"
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
           className="min-w-0 flex-1 cursor-pointer text-left focus-visible:outline-none focus-visible:rounded-lg focus-visible:[box-shadow:0_0_0_1px_var(--color-ring)]"
         >
@@ -583,6 +586,7 @@ export function PipelineDialog({
   const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)]);
   const [isDirty, setIsDirty] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
 
   async function resolveStepPath(index: number, path: string, project?: Project) {
     const applyInspection = (current: StepFormData, resolvedProject: Project | null, error?: string): StepFormData => {
@@ -695,6 +699,7 @@ export function PipelineDialog({
     setDescription(initialData?.description ?? '');
     setFailFast(initialData?.failFast ?? true);
     setSteps(nextSteps);
+    setCollapsedSteps(new Set());
 
     void (async () => {
       for (let index = 0; index < nextSteps.length; index++) {
@@ -727,11 +732,21 @@ export function PipelineDialog({
 
   function addStep() {
     setIsDirty(true);
+    // Collapse all existing steps so the new one is immediately visible
+    setCollapsedSteps(new Set(steps.map((_, i) => i)));
     setSteps((current) => [...current, createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)]);
   }
 
   function removeStep(index: number) {
     setIsDirty(true);
+    setCollapsedSteps((current) => {
+      const next = new Set<number>();
+      for (const idx of current) {
+        if (idx < index) next.add(idx);
+        else if (idx > index) next.add(idx - 1);
+      }
+      return next;
+    });
     setSteps((current) => current.filter((_, i) => i !== index));
   }
 
@@ -744,6 +759,14 @@ export function PipelineDialog({
     const target = index + direction;
     if (target < 0 || target >= steps.length) return;
     setIsDirty(true);
+    setCollapsedSteps((current) => {
+      const next = new Set(current);
+      const indexCollapsed = current.has(index);
+      const targetCollapsed = current.has(target);
+      if (indexCollapsed) next.add(target); else next.delete(target);
+      if (targetCollapsed) next.add(index); else next.delete(index);
+      return next;
+    });
     setSteps((current) => {
       const copy = [...current];
       [copy[index], copy[target]] = [copy[target]!, copy[index]!];
@@ -830,6 +853,14 @@ export function PipelineDialog({
                   step={step}
                   index={index}
                   total={steps.length}
+                  collapsed={collapsedSteps.has(index)}
+                  onToggleCollapsed={() =>
+                    setCollapsedSteps((current) => {
+                      const next = new Set(current);
+                      if (next.has(index)) next.delete(index); else next.add(index);
+                      return next;
+                    })
+                  }
                   onUpdate={(updater) => updateStep(index, updater)}
                   onResolvePath={(path, project) => void resolveStepPath(index, path, project)}
                   onRemove={() => removeStep(index)}
