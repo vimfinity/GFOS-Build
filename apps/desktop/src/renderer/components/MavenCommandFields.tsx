@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { TagInput } from '@/components/ui/tag-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ComboboxField } from '@/components/ui/combobox-field';
+import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type {
   ExecutionMode,
@@ -306,64 +307,73 @@ export function MavenCommandFields({ metadata, value, jdkVersions, onChange }: M
         </div>
       )}
 
-      <div className="flex flex-col gap-1.5">
-        <TagInput
-          label="Extra options"
-          value={value.extraOptions}
-          onChange={(nextOptions) => update('extraOptions', nextOptions)}
-          placeholder="e.g. -T4"
-        />
-        <p className="text-[11px] leading-relaxed text-muted-foreground/72">
-          Type an option and press <kbd className="rounded border border-border px-1 font-mono text-[10px]">Enter</kbd> to add it.
-        </p>
-      </div>
-
-      {jdkVersions.length > 0 ? (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            JAVA_HOME override
-          </label>
-          <Select value={value.javaVersion} onValueChange={(nextValue) => update('javaVersion', String(nextValue ?? ''))}>
-            <SelectTrigger>
-              <SelectValue placeholder="System default" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">System default</SelectItem>
-              {jdkVersions.map((version) => (
-                <SelectItem key={version} value={version}>
-                  Java {version}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-1.5 lg:col-span-2">
+          <TagInput
+            label="Extra options"
+            value={value.extraOptions}
+            onChange={(nextOptions) => update('extraOptions', nextOptions)}
+            placeholder="e.g. -T4"
+          />
           <p className="text-[11px] leading-relaxed text-muted-foreground/72">
-            Only registered JDKs can be used to set <span className="font-mono">JAVA_HOME</span> for a Maven run.
+            Type an option and press <kbd className="rounded border border-border px-1 font-mono text-[10px]">Enter</kbd> to add it.
           </p>
         </div>
-      ) : null}
 
-      <div className="flex flex-col gap-2">
-        <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          Execution mode
-        </label>
-        <div className="segmented-control w-fit">
-          {(['internal', 'external'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              aria-pressed={value.executionMode === mode}
-              onClick={() => update('executionMode', mode)}
-              className={cn('segmented-control-button', value.executionMode === mode && 'is-active')}
-            >
-              {mode === 'internal' ? 'In app' : 'External terminal'}
-            </button>
-          ))}
+        {jdkVersions.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              JAVA_HOME override
+            </label>
+            <Select value={value.javaVersion} onValueChange={(nextValue) => update('javaVersion', String(nextValue ?? ''))}>
+              <SelectTrigger>
+                <SelectValue placeholder="System default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">System default</SelectItem>
+                {jdkVersions.map((version) => (
+                  <SelectItem key={version} value={version}>
+                    Java {version}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+              Only registered JDKs can be used to set <span className="font-mono">JAVA_HOME</span> for a Maven run.
+            </p>
+          </div>
+        ) : null}
+
+        <div className={cn('flex flex-col gap-2', jdkVersions.length === 0 && 'lg:col-span-2')}>
+          <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Execution mode
+          </label>
+          <div className="segmented-control w-fit">
+            {(['internal', 'external'] as const).map((mode) => {
+              const button = (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={value.executionMode === mode}
+                  onClick={() => update('executionMode', mode)}
+                  className={cn('segmented-control-button', value.executionMode === mode && 'is-active')}
+                >
+                  {mode === 'internal' ? 'In app' : 'External terminal'}
+                </button>
+              );
+
+              return mode === 'external' ? (
+                <Tooltip
+                  key={mode}
+                  content="Fire-and-forget. GFOS Build launches a new terminal window and continues immediately."
+                  side="top"
+                >
+                  {button}
+                </Tooltip>
+              ) : button;
+            })}
+          </div>
         </div>
-        {value.executionMode === 'external' && (
-          <p className="text-xs leading-relaxed text-warning">
-            External runs are fire-and-forget. GFOS Build launches a new terminal window and continues immediately.
-          </p>
-        )}
       </div>
     </div>
   );
