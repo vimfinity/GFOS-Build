@@ -1,41 +1,596 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
-import { useCancelJob, useGitInfo, useRunPipeline } from '@/api/queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCancelJob, useRunPipeline, buildsQuery, useBuildLogs, pipelinesQuery } from '@/api/queries';
 import { useJobEvents } from '@/api/run-events';
 import { StepTimeline } from '@/components/StepTimeline';
-import { BuildOutput } from '@/components/BuildOutput';
+import {
+  BuildOutput,
+  MavenAwareLine,
+  getLineAccent,
+  ACCENT_CLASSES,
+} from '@/components/BuildOutput';
 import { BranchBadge } from '@/components/BranchBadge';
 import { Button } from '@/components/ui/button';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { formatDuration, cn } from '@/lib/utils';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ArrowLeft,
-  ArrowUpRight,
   Square,
-  CheckCircle2,
   XCircle,
   Loader2,
   Clock3,
   Activity,
   RotateCcw,
   Play,
+  ArrowUpRight,
+  CheckCircle,
+  Circle,
+  ChevronsDown,
+  Copy,
+  Check,
 } from 'lucide-react';
-import type { BuildEvent } from '@gfos-build/contracts';
+import type { BuildEvent, BuildRunRowApi, BuildLogEntry } from '@gfos-build/contracts';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 export const Route = createFileRoute('/builds/$jobId')({
-  component: LiveBuildView,
+  component: BuildDetailPage,
 });
 
-function LiveBuildView() {
+// ---------------------------------------------------------------------------
+// Status helpers
+// ---------------------------------------------------------------------------
+
+function deriveDbStatus(steps: BuildRunRowApi[]): string {
+  if (steps.length === 0) return 'running';
+  if (steps.some((s) => s.status === 'running')) return 'running';
+  if (steps.some((s) => s.status === 'failed')) return 'failed';
+  if (steps.every((s) => s.status === 'success')) return 'success';
+  if (steps.some((s) => s.status === 'launched')) return 'launched';
+  return steps[steps.length - 1]?.status ?? 'running';
+}
+
+// ---------------------------------------------------------------------------
+// Step pills (for completed pipeline timeline — DB-driven)
+// ---------------------------------------------------------------------------
+
+type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'launched';
+
+const stepIcons: Record<StepStatus, React.ReactNode> = {
+  pending:  <Circle size={15} className="text-muted-foreground" />,
+  running:  <Loader2 size={15} className="text-warning animate-spin" />,
+  success:  <CheckCircle size={15} className="text-success" />,
+  failed:   <XCircle size={15} className="text-destructive" />,
+  launched: <ArrowUpRight size={15} className="text-warning" />,
+};
+
+const stepPillColors: Record<StepStatus, string> = {
+  pending:  'border-border bg-card/70 text-muted-foreground',
+  running:  'border-primary/20 bg-primary/10 text-primary',
+  success:  'border-success/20 bg-success/10 text-success',
+  failed:   'border-destructive/20 bg-destructive/10 text-destructive',
+  launched: 'border-warning/20 bg-warning/10 text-warning',
+};
+
+function DbStepTimeline({
+  steps,
+  selectedIndex,
+  onSelect,
+}: {
+  steps: BuildRunRowApi[];
+  selectedIndex?: number | null;
+  onSelect?: (index: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3">
+      {steps.map((step, i) => {
+        const status: StepStatus =
+          step.status === 'success' || step.status === 'failed' ||
+          step.status === 'launched' || step.status === 'running'
+            ? (step.status as StepStatus)
+            : 'pending';
+        const isSelected = selectedIndex === i;
+        return (
+          <div
+            key={step.id}
+            onClick={() => onSelect?.(i)}
+            role={onSelect ? 'button' : undefined}
+            className={cn(
+              'pill-control border transition-all duration-200',
+              stepPillColors[status],
+              onSelect && 'cursor-pointer',
+              isSelected && 'ring-2 ring-current ring-offset-1 ring-offset-background',
+            )}
+          >
+            {stepIcons[status]}
+            <span>{step.step_label ?? `Step ${i + 1}`}</span>
+            {step.duration_ms != null && (
+              <span className="ml-0.5 opacity-60">{formatDuration(step.duration_ms)}</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Completed step card (one per pipeline step or the single quick-run step)
+// ---------------------------------------------------------------------------
+
+function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex gap-3 text-xs">
+      <span className="w-24 shrink-0 text-muted-foreground">{label}</span>
+      <span className={cn('break-all text-foreground/75', mono && 'font-mono')}>{value}</span>
+    </div>
+  );
+}
+
+function LogLine({ entry }: { entry: BuildLogEntry }) {
+  const isStderr = entry.stream === 'stderr';
+  const accent = getLineAccent(entry.line);
+  const accentClass = accent ? ACCENT_CLASSES[accent] : isStderr ? ACCENT_CLASSES.error : '';
+
+  return (
+    <div className={cn('flex font-mono text-xs leading-5 whitespace-pre-wrap break-all', accentClass)}>
+      <span className={cn('flex-1 px-3 py-px', isStderr ? 'text-destructive' : 'text-foreground/85')}>
+        <MavenAwareLine line={entry.line.length > 0 ? entry.line : ' '} />
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stored log viewer — same look/feel as BuildOutput but driven by useBuildLogs
+// ---------------------------------------------------------------------------
+
+function StoredLogViewer({ stepId }: { stepId: number }) {
+  const {
+    data: logsData,
+    isLoading,
+    isError,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useBuildLogs(stepId);
+  const logs = logsData?.pages.flatMap((p) => p.entries) ?? [];
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const atBottomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleAtBottomChange = useCallback((isAtBottom: boolean) => {
+    if (atBottomTimer.current) clearTimeout(atBottomTimer.current);
+    if (isAtBottom) {
+      setAtBottom(true);
+    } else {
+      atBottomTimer.current = setTimeout(() => setAtBottom(false), 120);
+    }
+  }, []);
+
+  // Start scrolled to the bottom
+  useEffect(() => {
+    if (logs.length > 0) {
+      virtuosoRef.current?.scrollToIndex({ index: logs.length - 1, align: 'end', behavior: 'auto' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({ index: logs.length - 1, align: 'end', behavior: 'smooth' });
+  }, [logs.length]);
+
+  async function handleCopyAll() {
+    const text = logs.map((l) => l.line).join('\n');
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 size={13} className="animate-spin" />
+        Loading logs…
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-1 items-center justify-center gap-2 text-sm text-destructive">
+        <XCircle size={13} />
+        Failed to load logs.
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <span className="font-mono text-sm text-muted-foreground">No output stored for this step.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {/* Copy all */}
+      <div className="absolute top-2 right-2 z-10">
+        <button
+          onClick={() => void handleCopyAll()}
+          className={cn(
+            'flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all',
+            'backdrop-blur-sm border',
+            'focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+            copied
+              ? 'border-success/30 bg-success/10 text-success'
+              : 'border-border bg-secondary/70 text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {copied ? <><Check size={11} />Copied</> : <><Copy size={11} />Copy all</>}
+        </button>
+      </div>
+
+      {/* Load older logs */}
+      {hasNextPage && (
+        <div className="shrink-0 border-b border-border/60 px-5 py-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage && <Loader2 size={11} className="animate-spin" />}
+            Load older logs
+          </Button>
+        </div>
+      )}
+
+      <Virtuoso
+        ref={virtuosoRef}
+        className="min-h-0 flex-1"
+        data={logs}
+        atBottomStateChange={handleAtBottomChange}
+        components={{
+          Header: () => <div className="h-10" aria-hidden="true" />,
+          Footer: () => <div className="h-10" aria-hidden="true" />,
+        }}
+        itemContent={(_index, entry) => <LogLine entry={entry} />}
+      />
+
+      {!atBottom && (
+        <button
+          onClick={scrollToBottom}
+          className={cn(
+            'absolute bottom-3 right-3 flex items-center gap-1.5',
+            'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+            'shadow-lg border border-border bg-secondary/80 text-muted-foreground hover:text-foreground',
+            'focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+          )}
+        >
+          <ChevronsDown size={12} />
+          Scroll to bottom
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Completed step detail panel — fills remaining height, selected via pill click
+// ---------------------------------------------------------------------------
+
+function CompletedStepDetail({ step, index, total }: { step: BuildRunRowApi; index: number; total: number }) {
+  const isPipeline = total > 1;
+
+  return (
+    <div className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-border">
+      {/* Step header */}
+      <div className="flex shrink-0 flex-wrap items-center gap-3 px-5 py-4">
+        {isPipeline && (
+          <span className="pill-meta rounded-full bg-secondary text-muted-foreground">
+            step {index + 1}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-foreground">
+            {step.step_label ?? step.project_name}
+          </p>
+          <p className="truncate font-mono text-[11px] text-muted-foreground">
+            {step.project_path}
+          </p>
+        </div>
+        <StatusBadge status={step.status} />
+        {step.duration_ms != null && (
+          <div className="pill-control rounded-full bg-secondary font-mono text-muted-foreground">
+            <Clock3 size={11} />
+            {formatDuration(step.duration_ms)}
+          </div>
+        )}
+        <BranchBadge branch={step.branch} />
+      </div>
+
+      {/* Metadata strip */}
+      <div className="grid shrink-0 gap-2 border-t border-border/60 bg-secondary/25 px-5 py-3">
+        <DetailRow label="Command" value={step.command} mono />
+        {step.exit_code != null && <DetailRow label="Exit code" value={String(step.exit_code)} />}
+        {step.java_home && <DetailRow label="JAVA_HOME" value={step.java_home} mono />}
+        {step.finished_at && (
+          <DetailRow label="Finished" value={new Date(step.finished_at).toLocaleString()} />
+        )}
+      </div>
+
+      {/* Log output */}
+      <div className="flex min-h-0 flex-1 flex-col border-t border-border/60">
+        <StoredLogViewer key={step.id} stepId={step.id} />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+
+function BuildDetailPage() {
   const { jobId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // Live events — always subscribe (no-op if job is not in memory)
   const { events, done, error, startMs, eventVersion } = useJobEvents(jobId);
+
+  // DB data — always load (cached, instant on revisit)
+  const allBuilds = useQuery(buildsQuery({ limit: 200 }));
+  const allPipelines = useQuery(pipelinesQuery);
+
+  // Mutations
   const cancelJob = useCancelJob();
   const runPipeline = useRunPipeline();
 
+  // Elapsed timer for live view
   const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - startMs));
+
+  // null = auto-follow the current running step; number = user pinned to a specific step
+  const [pinnedStep, setPinnedStep] = useState<number | null>(null);
+  // Tracks the scroll position of the live log — gates both within-step scroll and step switching
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  // Remembers the last displayed step so we can freeze on it when scrolled up
+  const lastShownStepRef = useRef<number | null>(null);
+  // Tracks the previous effectiveStepIndex to detect transitions
+  const prevEffectiveStepRef = useRef<number | null>(null);
+  // Suppresses false readings from Virtuoso's data-update layout pass after a step switch
+  const suppressAtBottomFalseUntilRef = useRef(0);
+  // Increment to imperatively scroll BuildOutput to the bottom
+  const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0);
+  // Selected step for completed view (defaults to first step)
+  const [selectedDbStep, setSelectedDbStep] = useState(0);
+
+  // Filter build events from the live stream
+  const buildEvents = useMemo(
+    () =>
+      events.filter(
+        (e): e is BuildEvent =>
+          'type' in e && (e.type.startsWith('step:') || e.type === 'run:done'),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [events, eventVersion],
+  );
+
+  // Map step index → its output events (step:output has no index field, so we infer
+  // from position: all step:output events between step:start(N) and the next step:start belong to N)
+  const stepOutputsMap = useMemo(() => {
+    const byStep = new Map<number, BuildEvent[]>();
+    let current = -1;
+    for (const e of buildEvents) {
+      if (e.type === 'step:start') {
+        current = e.index;
+        if (!byStep.has(current)) byStep.set(current, []);
+      } else if (e.type === 'step:output' && current >= 0) {
+        byStep.get(current)!.push(e);
+      }
+    }
+    return byStep;
+  }, [buildEvents]);
+
+  // The last step that fired step:start (stays on it even after done, until next step starts).
+  // Using "last started" rather than "currently running" avoids a brief null between steps
+  // that would cause two key changes and a double-remount.
+  const currentRunningStepIndex = useMemo(() => {
+    let last: number | null = null;
+    for (const e of buildEvents) {
+      if (e.type === 'step:start') last = e.index;
+    }
+    return last;
+  }, [buildEvents]);
+
+  // Determine which step to display:
+  //   pinned   → always that step
+  //   at bottom → live-track the current running step (auto-follow)
+  //   scrolled up → freeze on lastShownStep (don't jump to next step while reading)
+  const effectiveStepIndex = (() => {
+    let result: number | null;
+    if (pinnedStep !== null) {
+      result = pinnedStep;
+    } else if (isAtBottom) {
+      result = currentRunningStepIndex;
+    } else {
+      result = lastShownStepRef.current; // frozen
+    }
+    // Keep the ref current so freeze always has the latest "last seen" value
+    lastShownStepRef.current = result;
+    return result;
+  })();
+
+  // When auto-following and the effective step changes, Virtuoso fires atBottomStateChange(false)
+  // briefly during the data update. Suppress it so auto-follow isn't broken by layout jitter.
+  if (prevEffectiveStepRef.current !== effectiveStepIndex && isAtBottom) {
+    suppressAtBottomFalseUntilRef.current = Date.now() + 300;
+  }
+  prevEffectiveStepRef.current = effectiveStepIndex;
+
+  // Events passed to BuildOutput
+  const liveLogEvents = effectiveStepIndex !== null
+    ? (stepOutputsMap.get(effectiveStepIndex) ?? [])
+    : buildEvents;
+
+  // DB steps for this job, sorted by step_index
+  const dbSteps = useMemo(
+    () =>
+      (allBuilds.data ?? [])
+        .filter((b) => b.job_id === jobId || String(b.id) === jobId)
+        .sort((a, b) => (a.step_index ?? 0) - (b.step_index ?? 0)),
+    [allBuilds.data, jobId],
+  );
+
+  // Mode detection
+  const hasLiveEvents = buildEvents.length > 0;
+  const isRunningInDb = dbSteps.some((s) => s.status === 'running');
+  const isCompletedInDb = dbSteps.length > 0 && !isRunningInDb;
+
+  const viewMode =
+    hasLiveEvents          ? 'live' :
+    isCompletedInDb        ? 'completed' :
+    isRunningInDb          ? 'live' :
+    allBuilds.isLoading    ? 'loading' : 'not_found';
+
+  // ── Live view derived data ───────────────────────────────────────────────
+  const runDoneEvent = buildEvents.find((e) => e.type === 'run:done');
+  const runStatus    = runDoneEvent?.type === 'run:done' ? runDoneEvent.result.status : null;
+  const latestStepDone = [...buildEvents].reverse().find((e) => e.type === 'step:done');
+
+  const liveDisplayStatus = !done
+    ? 'running'
+    : runStatus === 'success'
+      ? 'success'
+      : runStatus === 'launched'
+        ? 'launched'
+        : runStatus === 'failed' || error ||
+          (latestStepDone?.type === 'step:done' && latestStepDone.status === 'failed')
+          ? 'failed'
+          : latestStepDone?.type === 'step:done' && latestStepDone.status === 'success'
+            ? 'success'
+            : latestStepDone?.type === 'step:done' && latestStepDone.status === 'launched'
+              ? 'launched'
+              : 'done';
+
+  const livePipelineName = useMemo(() => {
+    const e = buildEvents.find((ev) => ev.type === 'step:start');
+    return e?.type === 'step:start' ? e.pipelineName : undefined;
+  }, [buildEvents]);
+
+  const stepLabels = useMemo(() => {
+    const firstStart = buildEvents.find((e) => e.type === 'step:start');
+    const total = firstStart?.total ?? 0;
+    // Seed from pipeline definition so pending steps show their real label
+    const pipelineDef = livePipelineName
+      ? (allPipelines.data ?? []).find((p) => p.name === livePipelineName)
+      : undefined;
+    const labels = pipelineDef
+      ? pipelineDef.steps.map((s) => s.label)
+      : new Array<string>(total).fill('Step');
+    // Override with event-derived labels as steps start (handles dynamic label overrides)
+    for (const e of buildEvents) {
+      if (e.type === 'step:start' && e.index < labels.length) labels[e.index] = e.step.label;
+    }
+    return labels;
+  }, [buildEvents, livePipelineName, allPipelines.data]);
+
+  const liveBuildTitle = useMemo(() => {
+    if (livePipelineName) return livePipelineName;
+    const first = buildEvents.find((e) => e.type === 'step:start');
+    return first?.type === 'step:start' ? first.step.label : null;
+  }, [livePipelineName, buildEvents]);
+
+  const liveShowStepTimeline = Boolean(livePipelineName) || stepLabels.length > 1;
+  const finalDurationMs =
+    runDoneEvent?.type === 'run:done' ? runDoneEvent.result.durationMs : elapsedMs;
+  const liveStoppedAt =
+    runDoneEvent?.type === 'run:done' ? (runDoneEvent.result.stoppedAt ?? null) : null;
+
+  // ── Completed view derived data ──────────────────────────────────────────
+  const dbPipelineName = dbSteps[0]?.pipeline_name ?? null;
+  const dbTitle        = dbPipelineName ?? dbSteps[0]?.project_name ?? 'Build';
+  const dbStatus       = deriveDbStatus(dbSteps);
+  const dbTotalMs      = dbSteps.reduce((sum, s) => sum + (s.duration_ms ?? 0), 0);
+  const dbStartedAt    = dbSteps[0]?.started_at;
+  const dbShowStepTimeline = dbSteps.length > 1;
+  const dbStoppedAtIndex   = dbSteps.findIndex((s) => s.status === 'failed');
+
+  // ── Shared ────────────────────────────────────────────────────────────────
+  const pipelineName   = viewMode === 'live' ? (livePipelineName ?? null) : dbPipelineName;
+  const buildTitle     = viewMode === 'live' ? (liveBuildTitle ?? 'Build') : dbTitle;
+  const overallStatus  = viewMode === 'live' ? liveDisplayStatus : dbStatus;
+  const isLiveRunning  = viewMode === 'live' && !done;
+
+  // Has the effective step fired step:start yet? (false = pending, show "waiting" state)
+  const isSelectedStepStarted =
+    effectiveStepIndex === null ||
+    buildEvents.some((e) => e.type === 'step:start' && e.index === effectiveStepIndex);
+
+  // Is the effective step actively running? (started but no step:done yet)
+  const isSelectedStepRunning =
+    isLiveRunning &&
+    isSelectedStepStarted &&
+    (effectiveStepIndex === null ||
+      !buildEvents.some((e) => e.type === 'step:done' && e.index === effectiveStepIndex));
+
+  // Pill click: pin to a step or return to auto-follow.
+  // StepTimeline sends null when the currently-selected pill is clicked (deselect).
+  function handleStepPillClick(index: number | null) {
+    if (index === null) {
+      // Clicked the already-selected pill → unpin and scroll to bottom
+      lastShownStepRef.current = currentRunningStepIndex;
+      setPinnedStep(null);
+      setIsAtBottom(true);
+      setScrollToBottomTrigger((v) => v + 1);
+      return;
+    }
+    if (pinnedStep === null) {
+      if (index !== effectiveStepIndex) {
+        // Pin to a different step
+        setPinnedStep(index);
+      } else {
+        // Clicking the currently displayed step while auto-following → jump to bottom
+        setIsAtBottom(true);
+        setScrollToBottomTrigger((v) => v + 1);
+      }
+    } else {
+      if (index === currentRunningStepIndex || index === pinnedStep) {
+        // Back to auto-follow — snap ref to current step so we land there, not on a stale step
+        lastShownStepRef.current = currentRunningStepIndex;
+        setPinnedStep(null);
+        setIsAtBottom(true);
+        setScrollToBottomTrigger((v) => v + 1);
+      } else {
+        setPinnedStep(index);
+      }
+    }
+  }
+
+  const handleBuildAtBottomChange = useCallback((bottom: boolean) => {
+    if (!bottom && Date.now() < suppressAtBottomFalseUntilRef.current) return;
+    setIsAtBottom(bottom);
+  }, []);
+
+  const headerBorderClass =
+    overallStatus === 'failed'   ? 'border-destructive/20' :
+    overallStatus === 'launched' ? 'border-warning/20' :
+    'border-border';
+
+  // ── Effects ───────────────────────────────────────────────────────────────
+
+  // Reset per-build UI state when navigating to a different job (e.g. after "Run again").
+  // TanStack Router reuses the component instance across same-route navigations, so state
+  // must be reset manually when jobId changes.
+  useEffect(() => {
+    setPinnedStep(null);
+    setIsAtBottom(true);
+    lastShownStepRef.current = null;
+    setSelectedDbStep(0);
+  }, [jobId]);
 
   useEffect(() => {
     if (done) return;
@@ -56,232 +611,250 @@ function LiveBuildView() {
     }
   }, [done, queryClient]);
 
-  const buildEvents = useMemo(
-    () =>
-      events.filter(
-        (event): event is BuildEvent =>
-          'type' in event && (event.type.startsWith('step:') || event.type === 'run:done'),
-      ),
-    [events, eventVersion],
-  );
-
-  const runDoneEvent = buildEvents.find((event) => event.type === 'run:done');
-  const runStatus = runDoneEvent?.type === 'run:done' ? runDoneEvent.result.status : null;
-  const latestStepDone = [...buildEvents].reverse().find((event) => event.type === 'step:done');
-  const displayStatus = !done
-    ? 'running'
-    : runStatus === 'success'
-      ? 'success'
-      : runStatus === 'launched'
-        ? 'launched'
-        : runStatus === 'failed' || error || (latestStepDone?.type === 'step:done' && latestStepDone.status === 'failed')
-        ? 'failed'
-        : latestStepDone?.type === 'step:done' && latestStepDone.status === 'success'
-          ? 'success'
-          : latestStepDone?.type === 'step:done' && latestStepDone.status === 'launched'
-            ? 'launched'
-          : 'done';
-
-  const pipelineName = useMemo(() => {
-    const event = buildEvents.find((item) => item.type === 'step:start');
-    return event?.type === 'step:start' ? event.pipelineName : undefined;
-  }, [buildEvents]);
-
-  const stepLabels = useMemo(() => {
-    const total = buildEvents.find((event) => event.type === 'step:start')?.total ?? 0;
-    const labels = new Array<string>(total).fill('Step');
-    for (const event of buildEvents) {
-      if (event.type === 'step:start') labels[event.index] = event.step.label;
-    }
-    return labels;
-  }, [buildEvents]);
-
-  const buildTitle = useMemo(() => {
-    if (pipelineName) return pipelineName;
-    const firstStep = buildEvents.find((event) => event.type === 'step:start');
-    return firstStep?.type === 'step:start' ? firstStep.step.label : null;
-  }, [pipelineName, buildEvents]);
-
-  const currentStepPath = useMemo(() => {
-    const stepStarts = buildEvents.filter((e) => e.type === 'step:start');
-    const last = stepStarts[stepStarts.length - 1];
-    return last?.type === 'step:start' ? last.step.path : '';
-  }, [buildEvents]);
-
-  const { data: gitInfo } = useGitInfo(currentStepPath);
-
-  const showStepTimeline = Boolean(pipelineName) || stepLabels.length > 1;
-
-  const finalDurationMs =
-    runDoneEvent?.type === 'run:done' ? runDoneEvent.result.durationMs : elapsedMs;
-
+  // ── Handlers ──────────────────────────────────────────────────────────────
   async function handleCancel() {
-    await cancelJob.mutateAsync(jobId);
-    void navigate({ to: '/builds', search: { runId: undefined } });
+    try {
+      await cancelJob.mutateAsync(jobId);
+    } catch {
+      // error surfaced via cancelJob.isError / cancelJob.error
+    }
   }
 
   async function handleRestart(from?: string) {
     if (!pipelineName) return;
-    const { jobId: newJobId } = await runPipeline.mutateAsync({ name: pipelineName, from });
-    void navigate({ to: '/builds/$jobId', params: { jobId: newJobId } });
+    try {
+      const { jobId: newJobId } = await runPipeline.mutateAsync({ name: pipelineName, from });
+      void navigate({ to: '/builds/$jobId', params: { jobId: newJobId } });
+    } catch {
+      // error surfaced via runPipeline.isError / runPipeline.error
+    }
   }
 
+  // ── Loading state ─────────────────────────────────────────────────────────
+  if (viewMode === 'loading') {
+    return (
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
+        <div className="glass-card flex items-center gap-3 rounded-[24px] border border-border px-5 py-4 text-sm text-muted-foreground">
+          <Loader2 size={14} className="animate-spin" />
+          Loading build...
+        </div>
+      </div>
+    );
+  }
+
+  // ── Not found state ───────────────────────────────────────────────────────
+  if (viewMode === 'not_found') {
+    return (
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
+        <div className="glass-card flex flex-col items-center gap-4 rounded-[24px] border border-border px-8 py-16 text-center">
+          <div className="icon-chip flex h-14 w-14 items-center justify-center rounded-full">
+            <XCircle size={24} className="text-muted-foreground" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-foreground">Build not found</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This build could not be found. It may have been cleared or may no longer exist.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void navigate({ to: '/builds', search: { runId: undefined } })}
+          >
+            <ArrowLeft size={14} />
+            Back to builds
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-5 overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 rounded-[24px] border border-border bg-card px-5 py-4">
-        <Button variant="ghost" size="sm" onClick={() => void navigate({ to: '/builds', search: { runId: undefined } })}>
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div className={cn(
+        'glass-card flex flex-wrap items-center gap-3 rounded-[24px] border px-5 py-4',
+        headerBorderClass,
+      )}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void navigate({ to: '/builds', search: { runId: undefined } })}
+        >
           <ArrowLeft size={14} />
           Back
         </Button>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h1 className="page-title truncate text-[1.6rem] font-semibold leading-tight text-foreground">
-              {buildTitle ?? 'Build'}
-            </h1>
-            <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
-          </div>
+          <h1 className="page-title truncate text-[1.6rem] font-semibold leading-tight text-foreground">
+            {buildTitle}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Streaming output for job {jobId}.
+            {viewMode === 'live'
+              ? `Started ${new Date(startMs).toLocaleString()}`
+              : dbStartedAt
+                ? `Started ${new Date(dbStartedAt).toLocaleString()}`
+                : `Job ${jobId}`}
           </p>
         </div>
 
-        {displayStatus === 'running' ? (
+
+        {isLiveRunning ? (
           <Badge variant="default">
             <Loader2 size={11} className="animate-spin" />
             Running
           </Badge>
         ) : (
-          <StatusBadge status={displayStatus} />
+          <StatusBadge status={overallStatus} />
         )}
 
         <div className="pill-control rounded-full bg-secondary font-mono text-muted-foreground">
           <Clock3 size={11} />
-          {formatDuration(done ? finalDurationMs : elapsedMs)}
+          {viewMode === 'live'
+            ? formatDuration(done ? finalDurationMs : elapsedMs)
+            : formatDuration(dbTotalMs)}
         </div>
 
-        {!done && (
+        {isLiveRunning && (
           <Button variant="destructive" size="sm" onClick={() => void handleCancel()}>
             <Square size={12} />
             Cancel
           </Button>
         )}
+
+        {/* Restart buttons — live (after completion) */}
+        {viewMode === 'live' && done && pipelineName && (
+          <div className="flex items-center gap-2">
+            {runStatus === 'failed' && liveStoppedAt != null && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleRestart(String(liveStoppedAt + 1))}
+                disabled={runPipeline.isPending}
+                title={`Restart from "${stepLabels[liveStoppedAt] ?? `Step ${liveStoppedAt + 1}`}"`}
+              >
+                <RotateCcw size={12} />
+                Restart from failed step
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleRestart()}
+              disabled={runPipeline.isPending}
+            >
+              <Play size={12} />
+              Run again
+            </Button>
+          </div>
+        )}
+
+        {/* Restart buttons — completed view */}
+        {viewMode === 'completed' && pipelineName && (
+          <div className="flex items-center gap-2">
+            {dbStatus === 'failed' && dbStoppedAtIndex >= 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleRestart(String(dbStoppedAtIndex + 1))}
+                disabled={runPipeline.isPending}
+                title={`Restart from "${dbSteps[dbStoppedAtIndex]?.step_label ?? `Step ${dbStoppedAtIndex + 1}`}"`}
+              >
+                <RotateCcw size={12} />
+                Restart from failed step
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleRestart()}
+              disabled={runPipeline.isPending}
+            >
+              <Play size={12} />
+              Run again
+            </Button>
+          </div>
+        )}
       </div>
 
-      {showStepTimeline && (
-        <div className="rounded-[24px] border border-border bg-card px-5 py-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Activity size={14} className="text-primary" />
-            <p className="text-sm font-semibold text-foreground">Pipeline steps</p>
-          </div>
-          <StepTimeline events={buildEvents} stepLabels={stepLabels} />
-        </div>
-      )}
-
-      {error && (
-        <div className="flex items-center gap-3 rounded-[24px] border border-destructive/20 bg-card px-5 py-4 text-sm text-destructive">
+      {/* ── Error messages ───────────────────────────────────────────────── */}
+      {viewMode === 'live' && error && (
+        <div className="glass-card flex items-center gap-3 rounded-[24px] border border-destructive/20 px-5 py-4 text-sm text-destructive">
           <XCircle size={14} className="shrink-0" />
           {error}
         </div>
       )}
+      {cancelJob.isError && (
+        <div className="glass-card flex items-center gap-3 rounded-[24px] border border-destructive/20 px-5 py-4 text-sm text-destructive">
+          <XCircle size={14} className="shrink-0" />
+          Failed to cancel build.
+        </div>
+      )}
+      {runPipeline.isError && (
+        <div className="glass-card flex items-center gap-3 rounded-[24px] border border-destructive/20 px-5 py-4 text-sm text-destructive">
+          <XCircle size={14} className="shrink-0" />
+          Failed to start pipeline.
+        </div>
+      )}
 
-      {done && runDoneEvent?.type === 'run:done' && (
-        <div
-          className={cn(
-            'flex flex-wrap items-center gap-3 rounded-[24px] border bg-card px-5 py-4',
-            runStatus === 'success'
-              ? 'border-success/20'
-              : runStatus === 'launched'
-                ? 'border-warning/20'
-                : 'border-destructive/20',
-          )}
-        >
-          {runStatus === 'success' ? (
-            <CheckCircle2 size={16} className="text-success" />
-          ) : runStatus === 'launched' ? (
-            <ArrowUpRight size={16} className="text-warning" />
+      {/* ── Step timeline ─────────────────────────────────────────────────── */}
+      {viewMode === 'live' && liveShowStepTimeline && (
+        <div className="glass-card rounded-[24px] border border-border px-5 py-4">
+          <div className="mb-4 flex items-center gap-2">
+            <Activity size={14} className="text-primary" />
+            <p className="text-sm font-semibold text-foreground">Pipeline steps</p>
+          </div>
+          <StepTimeline
+            events={buildEvents}
+            stepLabels={stepLabels}
+            selectedIndex={effectiveStepIndex}
+            onSelect={handleStepPillClick}
+          />
+        </div>
+      )}
+
+      {viewMode === 'completed' && dbShowStepTimeline && (
+        <div className="glass-card shrink-0 rounded-[24px] border border-border px-5 py-4">
+          <div className="mb-4 flex items-center gap-2">
+            <Activity size={14} className="text-primary" />
+            <p className="text-sm font-semibold text-foreground">Pipeline steps</p>
+          </div>
+          <DbStepTimeline
+            steps={dbSteps}
+            selectedIndex={selectedDbStep}
+            onSelect={setSelectedDbStep}
+          />
+        </div>
+      )}
+
+      {/* ── Log / output area ─────────────────────────────────────────────── */}
+      {viewMode === 'live' && (
+        <div className="min-h-0 flex-1">
+          {effectiveStepIndex !== null && !isSelectedStepStarted ? (
+            <div className="glass-card flex h-full min-h-0 flex-1 items-center justify-center rounded-[24px] border border-border">
+              <span className="font-mono text-sm text-muted-foreground">Waiting to start…</span>
+            </div>
           ) : (
-            <XCircle size={16} className="text-destructive" />
-          )}
-
-          <div className="min-w-0 flex-1">
-            <p
-              className={cn(
-                'text-sm font-semibold',
-                runStatus === 'success'
-                  ? 'text-success'
-                  : runStatus === 'launched'
-                    ? 'text-warning'
-                    : 'text-destructive',
-              )}
-            >
-              {runStatus === 'success'
-                ? 'Build completed successfully'
-                : runStatus === 'launched'
-                  ? 'Build handed off to an external terminal'
-                  : 'Build failed'}
-            </p>
-            {runDoneEvent.result.stoppedAt != null && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Stopped at step {runDoneEvent.result.stoppedAt + 1}
-                {stepLabels[runDoneEvent.result.stoppedAt] && ` · "${stepLabels[runDoneEvent.result.stoppedAt]}"`}
-              </p>
-            )}
-          </div>
-
-          <div className="pill-control rounded-full bg-secondary font-mono text-muted-foreground">
-            {formatDuration(runDoneEvent.result.durationMs)}
-          </div>
-
-          {runDoneEvent.result.results.length > 0 && (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-success">
-                {runDoneEvent.result.results.filter((result) => result.status === 'success').length} passed
-              </span>
-              {runDoneEvent.result.results.some((result) => result.status === 'launched') && (
-                <span className="text-warning">
-                  {runDoneEvent.result.results.filter((result) => result.status === 'launched').length} launched
-                </span>
-              )}
-              {runDoneEvent.result.results.some((result) => result.status === 'failed') && (
-                <span className="text-destructive">
-                  {runDoneEvent.result.results.filter((result) => result.status === 'failed').length} failed
-                </span>
-              )}
-            </div>
-          )}
-
-          {runStatus === 'failed' && pipelineName && (
-            <div className="flex items-center gap-2">
-              {runDoneEvent.result.stoppedAt != null && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleRestart(String(runDoneEvent.result.stoppedAt! + 1))}
-                  disabled={runPipeline.isPending}
-                  title={`Restart from "${stepLabels[runDoneEvent.result.stoppedAt] ?? `Step ${runDoneEvent.result.stoppedAt + 1}`}"`}
-                >
-                  <RotateCcw size={12} />
-                  Restart from failed step
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void handleRestart()}
-                disabled={runPipeline.isPending}
-              >
-                <Play size={12} />
-                Restart from beginning
-              </Button>
-            </div>
+            <BuildOutput
+              events={liveLogEvents}
+              isRunning={isSelectedStepRunning}
+              onAtBottomChange={handleBuildAtBottomChange}
+              scrollToBottomTrigger={scrollToBottomTrigger}
+            />
           )}
         </div>
       )}
 
-      <div className="min-h-0 flex-1">
-        <BuildOutput events={buildEvents} isRunning={!done} />
-      </div>
+      {viewMode === 'completed' && dbSteps.length > 0 && (
+        <CompletedStepDetail
+          key={dbSteps[selectedDbStep]?.id ?? selectedDbStep}
+          step={dbSteps[selectedDbStep] ?? dbSteps[0]!}
+          index={selectedDbStep}
+          total={dbSteps.length}
+        />
+      )}
     </div>
   );
 }

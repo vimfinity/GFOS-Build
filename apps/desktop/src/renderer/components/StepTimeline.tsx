@@ -14,7 +14,7 @@ interface StepState {
   path?: string;
 }
 
-function deriveSteps(events: BuildEvent[], _totalFromPipeline: number, stepLabels: string[]): StepState[] {
+function deriveSteps(events: BuildEvent[], stepLabels: string[]): StepState[] {
   const states: StepState[] = stepLabels.map((label) => ({ label, status: 'pending' as StepStatus }));
 
   for (const event of events) {
@@ -44,6 +44,8 @@ function StepBranchBadge({ path }: { path: string }) {
 export interface StepTimelineProps {
   events: BuildEvent[];
   stepLabels: string[];
+  selectedIndex?: number | null;
+  onSelect?: (index: number | null) => void;
 }
 
 const icons: Record<StepStatus, React.ReactNode> = {
@@ -62,27 +64,35 @@ const pillColors: Record<StepStatus, string> = {
   launched: 'border-warning/20 bg-warning/10 text-warning',
 };
 
-export function StepTimeline({ events, stepLabels }: StepTimelineProps) {
-  const steps = deriveSteps(events as BuildEvent[], stepLabels.length, stepLabels);
+export function StepTimeline({ events, stepLabels, selectedIndex, onSelect }: StepTimelineProps) {
+  const steps = deriveSteps(events as BuildEvent[], stepLabels);
+  const isSelectable = onSelect != null;
 
   return (
     <div className="flex flex-wrap gap-3">
-      {steps.map((step, i) => (
-        <div
-          key={i}
-          className={cn(
-            'pill-control border transition-colors duration-200',
-            pillColors[step.status],
-          )}
-        >
-          {icons[step.status]}
-          <span>{step.label}</span>
-          {step.durationMs != null && (
-            <span className="opacity-60 ml-0.5">{formatDuration(step.durationMs)}</span>
-          )}
-          {step.path && <StepBranchBadge path={step.path} />}
-        </div>
-      ))}
+      {steps.map((step, i) => {
+        const isSelected = selectedIndex === i;
+        return (
+          <div
+            key={i}
+            onClick={isSelectable ? () => onSelect(isSelected ? null : i) : undefined}
+            role={isSelectable ? 'button' : undefined}
+            className={cn(
+              'pill-control border transition-all duration-200',
+              pillColors[step.status],
+              isSelectable && 'cursor-pointer',
+              isSelected && 'ring-2 ring-current ring-offset-1 ring-offset-background',
+            )}
+          >
+            {icons[step.status]}
+            <span>{step.label}</span>
+            {step.durationMs != null && (
+              <span className="opacity-60 ml-0.5">{formatDuration(step.durationMs)}</span>
+            )}
+            {step.path && <StepBranchBadge path={step.path} />}
+          </div>
+        );
+      })}
     </div>
   );
 }
