@@ -4,20 +4,45 @@ import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MavenCommandFields, getSuggestedJavaOverride, type MavenCommandValue } from '@/components/MavenCommandFields';
+import {
+  MavenCommandFields,
+  getSuggestedJavaOverride,
+  type MavenCommandValue,
+} from '@/components/MavenCommandFields';
 import { ComboboxField } from '@/components/ui/combobox-field';
 import { Tooltip } from '@/components/ui/tooltip';
-import { getNodeScriptChoices, getNodeScriptComboboxOptions, type NodeScriptChoice } from '@/lib/node-script-options';
+import {
+  getNodeScriptChoices,
+  getNodeScriptComboboxOptions,
+  type NodeScriptChoice,
+} from '@/lib/node-script-options';
 import { cn } from '@/lib/utils';
-import { Plus, Trash2, ArrowUp, ArrowDown, FolderOpen, Loader2, Check, ChevronDown } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  FolderOpen,
+  Loader2,
+  Check,
+  ChevronDown,
+} from 'lucide-react';
 import type { PipelineStep } from '@gfos-build/contracts';
-import type { ExecutionMode, MavenMetadata, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType, PackageManager, Project } from '@gfos-build/contracts';
+import type {
+  ExecutionMode,
+  MavenMetadata,
+  MavenOptionKey,
+  MavenProfileState,
+  MavenSubmoduleBuildStrategy,
+  NodeCommandType,
+  PackageManager,
+  Project,
+} from '@gfos-build/contracts';
 import { pickDirectory } from '@/api/bridge';
 import { inspectProject, scanQuery, configQuery, useGitInfo } from '@/api/queries';
 import { BranchBadge } from '@/components/BranchBadge';
 
 interface StepFormData {
-  clientId: string;
   label: string;
   path: string;
   buildSystem: 'maven' | 'node' | null;
@@ -38,13 +63,11 @@ interface StepFormData {
   inspectionError?: string;
 }
 
-type PipelineStepFormData = Omit<StepFormData, 'clientId'>;
-
 export interface PipelineFormData {
   name: string;
   description: string;
   failFast: boolean;
-  steps: PipelineStepFormData[];
+  steps: StepFormData[];
 }
 
 interface PipelineDialogProps {
@@ -55,16 +78,12 @@ interface PipelineDialogProps {
   mode: 'create' | 'edit';
 }
 
-let stepClientIdCounter = 0;
-
-function createStepClientId(): string {
-  stepClientIdCounter += 1;
-  return `pipeline-step-${stepClientIdCounter}`;
-}
-
-function createEmptyStep(mavenGoals: string, mavenOptionKeys: MavenOptionKey[] = [], mavenExtraOptions: string[] = []): StepFormData {
+function createEmptyStep(
+  mavenGoals: string,
+  mavenOptionKeys: MavenOptionKey[] = [],
+  mavenExtraOptions: string[] = []
+): StepFormData {
   return {
-    clientId: createStepClientId(),
     label: '',
     path: '',
     buildSystem: null,
@@ -85,13 +104,13 @@ function createEmptyStep(mavenGoals: string, mavenOptionKeys: MavenOptionKey[] =
 
 function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
   return {
-    clientId: createStepClientId(),
     label: step.label,
     path: step.path,
     buildSystem: step.buildSystem ?? null,
     mavenModulePath: step.modulePath ?? '',
     mavenSubmoduleBuildStrategy: step.submoduleBuildStrategy ?? 'root-pl',
-    mavenGoals: step.goals ?? (mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install']),
+    mavenGoals:
+      step.goals ?? (mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install']),
     mavenOptionKeys: step.optionKeys ?? [],
     mavenProfileStates: step.profileStates ?? {},
     mavenExtraOptions: step.extraOptions ?? [],
@@ -103,12 +122,6 @@ function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
     packageManager: step.packageManager,
     availableScripts: [],
   };
-}
-
-function toPipelineStepFormData(step: StepFormData): PipelineStepFormData {
-  const { clientId, ...pipelineStep } = step;
-  void clientId;
-  return pipelineStep;
 }
 
 function getRelativePath(project: Project, roots: Record<string, string>): string {
@@ -157,7 +170,7 @@ function ProjectPathPicker({
           project.name.toLowerCase().includes(q) ||
           project.path.toLowerCase().includes(q) ||
           (project.maven?.artifactId ?? '').toLowerCase().includes(q) ||
-          (project.node?.name ?? '').toLowerCase().includes(q),
+          (project.node?.name ?? '').toLowerCase().includes(q)
       )
       .slice(0, 30);
   }, [scanData, query]);
@@ -192,7 +205,9 @@ function ProjectPathPicker({
     window.addEventListener('scroll', applyPosition, { capture: true, passive: true });
     window.addEventListener('resize', applyPosition, { passive: true } as EventListenerOptions);
     return () => {
-      window.removeEventListener('scroll', applyPosition, { capture: true } as EventListenerOptions);
+      window.removeEventListener('scroll', applyPosition, {
+        capture: true,
+      } as EventListenerOptions);
       window.removeEventListener('resize', applyPosition);
     };
   }, [open]);
@@ -265,17 +280,22 @@ function ProjectPathPicker({
             ref={inputRef}
             value={open ? query : displayValue}
             onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => { setOpen(true); setQuery(''); }}
+            onFocus={() => {
+              setOpen(true);
+              setQuery('');
+            }}
             onClick={() => setOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder={open ? 'Search projects or type an absolute path...' : 'Select a project...'}
+            placeholder={
+              open ? 'Search projects or type an absolute path...' : 'Select a project...'
+            }
             className="field-input h-11 w-full rounded-2xl border pl-4 pr-10 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
           />
           <ChevronDown
             size={15}
             className={cn(
               'pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-transform',
-              open && 'rotate-180',
+              open && 'rotate-180'
             )}
           />
         </div>
@@ -294,82 +314,55 @@ function ProjectPathPicker({
         </Tooltip>
       </div>
 
-      {open && createPortal(
-        <div
-          ref={dropdownRef}
-          className="glass-card listbox-panel fixed z-[9999] overflow-auto"
-        >
-          {scanLoading ? (
-            <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
-              <Loader2 size={12} className="shrink-0 animate-spin" />
-              Loading projects...
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="px-4 py-3 text-xs text-muted-foreground">
-              {query.trim() ? 'No matching projects' : 'No projects found'}
-            </div>
-          ) : (
-            filtered.map((project) => {
-              const relPath = getRelativePath(project, roots);
-              return (
-                <button
-                  key={project.path}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => selectProject(project)}
-                  className={cn(
-                    'listbox-option transition-colors',
-                    value === project.path && 'is-active',
-                  )}
-                >
-                  <span
+      {open &&
+        createPortal(
+          <div ref={dropdownRef} className="glass-card listbox-panel fixed z-[9999] overflow-auto">
+            {scanLoading ? (
+              <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+                <Loader2 size={12} className="shrink-0 animate-spin" />
+                Loading projects...
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="px-4 py-3 text-xs text-muted-foreground">
+                {query.trim() ? 'No matching projects' : 'No projects found'}
+              </div>
+            ) : (
+              filtered.map((project) => {
+                const relPath = getRelativePath(project, roots);
+                return (
+                  <button
+                    key={project.path}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => selectProject(project)}
                     className={cn(
-                      'pill-meta font-semibold',
-                      project.buildSystem === 'maven'
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-success/10 text-success',
+                      'listbox-option transition-colors',
+                      value === project.path && 'is-active'
                     )}
                   >
-                    {project.buildSystem === 'maven' ? 'Maven' : 'Node'}
-                  </span>
-                  <span className="shrink-0 text-sm font-medium text-foreground">{project.name}</span>
-                  <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                    {relPath}
-                  </span>
-                </button>
-              );
-            })
-          )}
-        </div>,
-        document.body,
-      )}
-    </div>
-  );
-}
-
-function StepInsertControl({
-  onInsert,
-  afterStep,
-  beforeStep,
-}: {
-  onInsert: () => void;
-  afterStep: number;
-  beforeStep: number;
-}) {
-  return (
-    <div className="relative flex h-5 items-center px-3">
-      <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/45" aria-hidden="true" />
-      <div className="relative flex w-full justify-center">
-        <button
-          type="button"
-          onClick={onInsert}
-          className="group inline-flex cursor-pointer items-center gap-1 bg-[var(--color-dialog,transparent)] px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:[box-shadow:0_0_0_1px_var(--color-ring)]"
-          aria-label={`Insert a new step between step ${afterStep} and step ${beforeStep}`}
-        >
-          <Plus size={10} className="opacity-60 transition-opacity group-hover:opacity-100" />
-          Insert step
-        </button>
-      </div>
+                    <span
+                      className={cn(
+                        'pill-meta font-semibold',
+                        project.buildSystem === 'maven'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-success/10 text-success'
+                      )}
+                    >
+                      {project.buildSystem === 'maven' ? 'Maven' : 'Node'}
+                    </span>
+                    <span className="shrink-0 text-sm font-medium text-foreground">
+                      {project.name}
+                    </span>
+                    <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+                      {relPath}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -398,7 +391,10 @@ function StepCard({
   onMoveDown: () => void;
 }) {
   const { data: configData } = useQuery(configQuery);
-  const jdkVersions = useMemo(() => Object.keys(configData?.config.jdkRegistry ?? {}), [configData]);
+  const jdkVersions = useMemo(
+    () => Object.keys(configData?.config.jdkRegistry ?? {}),
+    [configData]
+  );
   const { data: gitInfo } = useGitInfo(step.path);
 
   function handleResolvedPath(path: string, project?: Project) {
@@ -424,7 +420,11 @@ function StepCard({
               Step {index + 1}
             </span>
             <span className="pill-meta rounded-full bg-secondary text-muted-foreground">
-              {step.buildSystem === 'maven' ? 'Maven' : step.buildSystem === 'node' ? 'Node' : 'Awaiting project'}
+              {step.buildSystem === 'maven'
+                ? 'Maven'
+                : step.buildSystem === 'node'
+                  ? 'Node'
+                  : 'Awaiting project'}
             </span>
             {step.packageManager && (
               <span className="pill-meta rounded-full bg-secondary text-muted-foreground uppercase">
@@ -440,14 +440,15 @@ function StepCard({
           <div className="mt-2 flex items-center gap-1.5">
             <ChevronDown
               size={13}
-              className={cn('shrink-0 text-muted-foreground transition-transform duration-200', collapsed && '-rotate-90')}
+              className={cn(
+                'shrink-0 text-muted-foreground transition-transform duration-200',
+                collapsed && '-rotate-90'
+              )}
             />
             <p className="truncate text-sm font-medium text-foreground">
               {step.label || 'Untitled step'}
             </p>
-            {gitInfo?.branch && (
-              <BranchBadge branch={gitInfo.branch} isDirty={gitInfo.isDirty} />
-            )}
+            {gitInfo?.branch && <BranchBadge branch={gitInfo.branch} isDirty={gitInfo.isDirty} />}
           </div>
         </button>
 
@@ -488,8 +489,18 @@ function StepCard({
         </div>
       </div>
 
-      <div className={cn('grid transition-[grid-template-rows] duration-200 ease-in-out', collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]')}>
-        <div className={cn('min-h-0 transition-opacity duration-200', collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100')}>
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows] duration-200 ease-in-out',
+          collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'
+        )}
+      >
+        <div
+          className={cn(
+            'min-h-0 transition-opacity duration-200',
+            collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          )}
+        >
           <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <Input
               label="Label"
@@ -544,10 +555,12 @@ function StepCard({
                   Command
                 </label>
                 <div className="segmented-control w-fit">
-                  {([
-                    { value: 'script', label: 'Run script' },
-                    { value: 'install', label: 'Install deps' },
-                  ] as const).map((option) => (
+                  {(
+                    [
+                      { value: 'script', label: 'Run script' },
+                      { value: 'install', label: 'Install deps' },
+                    ] as const
+                  ).map((option) => (
                     <button
                       key={option.value}
                       type="button"
@@ -566,7 +579,10 @@ function StepCard({
                               : undefined,
                         }))
                       }
-                      className={cn('segmented-control-button', step.commandType === option.value && 'is-active')}
+                      className={cn(
+                        'segmented-control-button',
+                        step.commandType === option.value && 'is-active'
+                      )}
                     >
                       {option.label}
                     </button>
@@ -582,9 +598,16 @@ function StepCard({
                     <ComboboxField
                       value={step.script}
                       options={getNodeScriptComboboxOptions(
-                        Object.fromEntries(step.availableScripts.map((scriptEntry) => [scriptEntry.name, scriptEntry.command])),
+                        Object.fromEntries(
+                          step.availableScripts.map((scriptEntry) => [
+                            scriptEntry.name,
+                            scriptEntry.command,
+                          ])
+                        )
                       )}
-                      onValueChange={(value) => onUpdate((current) => ({ ...current, script: value }))}
+                      onValueChange={(value) =>
+                        onUpdate((current) => ({ ...current, script: value }))
+                      }
                       placeholder="Select a script"
                       emptyText="No matching scripts"
                     />
@@ -601,7 +624,9 @@ function StepCard({
               )}
               <Input
                 label={step.commandType === 'install' ? 'Install args' : 'Optional args'}
-                placeholder={step.commandType === 'install' ? 'e.g. --frozen-lockfile' : 'e.g. --host 0.0.0.0'}
+                placeholder={
+                  step.commandType === 'install' ? 'e.g. --frozen-lockfile' : 'e.g. --host 0.0.0.0'
+                }
                 value={step.args}
                 onChange={(e) => onUpdate((current) => ({ ...current, args: e.target.value }))}
               />
@@ -616,7 +641,10 @@ function StepCard({
                       type="button"
                       aria-pressed={step.executionMode === mode}
                       onClick={() => onUpdate((current) => ({ ...current, executionMode: mode }))}
-                      className={cn('segmented-control-button', step.executionMode === mode && 'is-active')}
+                      className={cn(
+                        'segmented-control-button',
+                        step.executionMode === mode && 'is-active'
+                      )}
                     >
                       {mode === 'internal' ? 'In app' : 'External terminal'}
                     </button>
@@ -624,18 +652,22 @@ function StepCard({
                 </div>
                 {step.executionMode === 'external' && (
                   <p className="text-xs leading-relaxed text-warning">
-                    External steps launch a new terminal window and the pipeline continues immediately.
+                    External steps launch a new terminal window and the pipeline continues
+                    immediately.
                   </p>
                 )}
               </div>
             </div>
           ) : null}
 
-          {step.buildSystem === 'node' && step.availableScripts.length === 0 && !step.inspectionError && step.commandType === 'install' && (
-            <div className="mt-4 rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
-              Install is still available even though no scripts were found in this package.json.
-            </div>
-          )}
+          {step.buildSystem === 'node' &&
+            step.availableScripts.length === 0 &&
+            !step.inspectionError &&
+            step.commandType === 'install' && (
+              <div className="mt-4 rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
+                Install is still available even though no scripts were found in this package.json.
+              </div>
+            )}
         </div>
       </div>
     </div>
@@ -653,120 +685,136 @@ export function PipelineDialog({
   const defaultMavenGoals = configData?.config.maven.defaultGoals.join(' ') ?? 'clean install';
   const defaultMavenOptionKeys = useMemo(
     () => (configData?.config.maven.defaultOptionKeys ?? []) as MavenOptionKey[],
-    [configData],
+    [configData]
   );
   const defaultMavenExtraOptions = useMemo(
     () => configData?.config.maven.defaultExtraOptions ?? [],
-    [configData],
+    [configData]
   );
   const registeredJdkVersions = useMemo(
     () => Object.keys(configData?.config.jdkRegistry ?? {}),
-    [configData],
+    [configData]
   );
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [failFast, setFailFast] = useState(true);
-  const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)]);
+  const [steps, setSteps] = useState<StepFormData[]>([
+    createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions),
+  ]);
   const [isDirty, setIsDirty] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
-  const [collapsedSteps, setCollapsedSteps] = useState<Set<string>>(new Set());
+  const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
 
-  const resolveStepPath = useCallback(async (stepId: string, path: string, project?: Project) => {
-    const applyInspection = (current: StepFormData, resolvedProject: Project | null, error?: string): StepFormData => {
-      if (!resolvedProject) {
-        return {
-          ...current,
-          buildSystem: null,
-          mavenMetadata: undefined,
-          packageManager: undefined,
-          availableScripts: [],
-          script: '',
-          commandType: current.commandType,
-          inspectionError: error ?? 'No supported build manifest was found at this path.',
-        };
-      }
+  const resolveStepPath = useCallback(
+    async (index: number, path: string, project?: Project) => {
+      const applyInspection = (
+        current: StepFormData,
+        resolvedProject: Project | null,
+        error?: string
+      ): StepFormData => {
+        if (!resolvedProject) {
+          return {
+            ...current,
+            buildSystem: null,
+            mavenMetadata: undefined,
+            packageManager: undefined,
+            availableScripts: [],
+            script: '',
+            commandType: current.commandType,
+            inspectionError: error ?? 'No supported build manifest was found at this path.',
+          };
+        }
 
-      if (resolvedProject.buildSystem === 'node') {
-        const availableScripts = getNodeScriptChoices(resolvedProject.node?.scripts);
-        const nextScript =
-          current.script && availableScripts.some((scriptEntry) => scriptEntry.name === current.script)
-            ? current.script
-            : availableScripts[0]?.name ?? '';
+        if (resolvedProject.buildSystem === 'node') {
+          const availableScripts = getNodeScriptChoices(resolvedProject.node?.scripts);
+          const nextScript =
+            current.script &&
+            availableScripts.some((scriptEntry) => scriptEntry.name === current.script)
+              ? current.script
+              : (availableScripts[0]?.name ?? '');
+          return {
+            ...current,
+            label: current.label || resolvedProject.name,
+            buildSystem: 'node',
+            packageManager: resolvedProject.node?.packageManager,
+            availableScripts,
+            script: nextScript,
+            inspectionError:
+              current.commandType === 'script' &&
+              current.script &&
+              !availableScripts.some((scriptEntry) => scriptEntry.name === current.script)
+                ? `Script "${current.script}" is no longer defined in package.json.`
+                : current.commandType === 'script' && availableScripts.length === 0
+                  ? 'No scripts were found in this package.json.'
+                  : undefined,
+          };
+        }
+
         return {
           ...current,
           label: current.label || resolvedProject.name,
-          buildSystem: 'node',
-          packageManager: resolvedProject.node?.packageManager,
-          availableScripts,
-          script: nextScript,
-          inspectionError:
-            current.commandType === 'script' && current.script && !availableScripts.some((scriptEntry) => scriptEntry.name === current.script)
-              ? `Script "${current.script}" is no longer defined in package.json.`
-              : current.commandType === 'script' && availableScripts.length === 0
-                ? 'No scripts were found in this package.json.'
-                : undefined,
+          buildSystem: 'maven',
+          mavenMetadata: resolvedProject.maven,
+          packageManager: undefined,
+          availableScripts: [],
+          script: '',
+          inspectionError: undefined,
+          mavenGoals:
+            current.mavenGoals.length > 0
+              ? current.mavenGoals
+              : defaultMavenGoals.split(/\s+/).filter(Boolean),
+          mavenProfileStates: Object.fromEntries(
+            (resolvedProject.maven?.profiles ?? []).map((profile) => [
+              profile.id,
+              current.mavenProfileStates[profile.id] ?? 'default',
+            ])
+          ),
+          javaVersion:
+            current.javaVersion && registeredJdkVersions.includes(current.javaVersion)
+              ? current.javaVersion
+              : getSuggestedJavaOverride(resolvedProject.maven, registeredJdkVersions),
         };
+      };
+
+      if (project) {
+        setSteps((current) =>
+          current.map((step, stepIndex) =>
+            stepIndex === index ? applyInspection(step, project) : step
+          )
+        );
+        return;
       }
 
-      return {
-        ...current,
-        label: current.label || resolvedProject.name,
-        buildSystem: 'maven',
-        mavenMetadata: resolvedProject.maven,
-        packageManager: undefined,
-        availableScripts: [],
-        script: '',
-        inspectionError: undefined,
-        mavenGoals: current.mavenGoals.length > 0 ? current.mavenGoals : defaultMavenGoals.split(/\s+/).filter(Boolean),
-        mavenProfileStates: Object.fromEntries(
-          (resolvedProject.maven?.profiles ?? []).map((profile) => [
-            profile.id,
-            current.mavenProfileStates[profile.id] ?? 'default',
-          ]),
-        ),
-        javaVersion:
-          current.javaVersion && registeredJdkVersions.includes(current.javaVersion)
-            ? current.javaVersion
-            : getSuggestedJavaOverride(resolvedProject.maven, registeredJdkVersions),
-      };
-    };
-
-    if (project) {
-      setSteps((current) =>
-        current.map((step) =>
-          step.clientId === stepId ? applyInspection(step, project) : step,
-        ),
-      );
-      return;
-    }
-
-    try {
-      const result = await inspectProject(path);
-      setSteps((current) =>
-        current.map((step) =>
-          step.clientId === stepId ? applyInspection(step, result.project) : step,
-        ),
-      );
-    } catch (error) {
-      setSteps((current) =>
-        current.map((step) =>
-          step.clientId === stepId
-            ? {
-                ...step,
-                buildSystem: null,
-                mavenMetadata: undefined,
-                packageManager: undefined,
-                availableScripts: [],
-                script: '',
-                commandType: step.commandType,
-                inspectionError: error instanceof Error ? error.message : 'Could not inspect project path.',
-              }
-            : step,
-        ),
-      );
-    }
-  }, [defaultMavenGoals, registeredJdkVersions]);
+      try {
+        const result = await inspectProject(path);
+        setSteps((current) =>
+          current.map((step, stepIndex) =>
+            stepIndex === index ? applyInspection(step, result.project) : step
+          )
+        );
+      } catch (error) {
+        setSteps((current) =>
+          current.map((step, stepIndex) =>
+            stepIndex === index
+              ? {
+                  ...step,
+                  buildSystem: null,
+                  mavenMetadata: undefined,
+                  packageManager: undefined,
+                  availableScripts: [],
+                  script: '',
+                  commandType: step.commandType,
+                  inspectionError:
+                    error instanceof Error ? error.message : 'Could not inspect project path.',
+                }
+              : step
+          )
+        );
+      }
+    },
+    [defaultMavenGoals, registeredJdkVersions]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -774,30 +822,40 @@ export function PipelineDialog({
     setConfirmClose(false);
     let cancelled = false;
 
-    const nextSteps =
-      initialData?.steps.length
-        ? initialData.steps.map((step) => fromApiStep(step, defaultMavenGoals))
-        : [createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)];
+    const nextSteps = initialData?.steps.length
+      ? initialData.steps.map((step) => fromApiStep(step, defaultMavenGoals))
+      : [createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)];
 
     setName(initialData?.name ?? '');
     setDescription(initialData?.description ?? '');
     setFailFast(initialData?.failFast ?? true);
     setSteps(nextSteps);
     // Collapse all steps when opening an existing pipeline; new pipelines start expanded
-    setCollapsedSteps(initialData?.steps.length ? new Set(nextSteps.map((step) => step.clientId)) : new Set());
+    setCollapsedSteps(
+      initialData?.steps.length ? new Set(initialData.steps.map((_, i) => i)) : new Set()
+    );
 
     void (async () => {
-      for (const step of nextSteps) {
+      for (let index = 0; index < nextSteps.length; index++) {
         if (cancelled) return;
-        if (!step.path) continue;
-        await resolveStepPath(step.clientId, step.path);
+        const step = nextSteps[index];
+        if (!step?.path) continue;
+        await resolveStepPath(index, step.path);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [open, initialData, defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions, registeredJdkVersions, resolveStepPath]);
+  }, [
+    open,
+    initialData,
+    defaultMavenGoals,
+    defaultMavenOptionKeys,
+    defaultMavenExtraOptions,
+    registeredJdkVersions,
+    resolveStepPath,
+  ]);
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen && isDirty) {
@@ -814,41 +872,48 @@ export function PipelineDialog({
     onOpenChange(false);
   }
 
-  function insertStep(index: number) {
-    const nextStep = createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions);
+  function addStep() {
     setIsDirty(true);
-    // Collapse all existing steps so the new one is immediately visible.
-    setCollapsedSteps(new Set(steps.map((step) => step.clientId)));
+    // Collapse all existing steps so the new one is immediately visible
+    setCollapsedSteps(new Set(steps.map((_, i) => i)));
     setSteps((current) => [
-      ...current.slice(0, index),
-      nextStep,
-      ...current.slice(index),
+      ...current,
+      createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions),
     ]);
   }
 
-  function addStep() {
-    insertStep(steps.length);
-  }
-
-  function removeStep(stepId: string) {
+  function removeStep(index: number) {
     setIsDirty(true);
     setCollapsedSteps((current) => {
-      const next = new Set(current);
-      next.delete(stepId);
+      const next = new Set<number>();
+      for (const idx of current) {
+        if (idx < index) next.add(idx);
+        else if (idx > index) next.add(idx - 1);
+      }
       return next;
     });
-    setSteps((current) => current.filter((step) => step.clientId !== stepId));
+    setSteps((current) => current.filter((_, i) => i !== index));
   }
 
-  function updateStep(stepId: string, updater: (current: StepFormData) => StepFormData) {
+  function updateStep(index: number, updater: (current: StepFormData) => StepFormData) {
     setIsDirty(true);
-    setSteps((current) => current.map((step) => (step.clientId === stepId ? updater(step) : step)));
+    setSteps((current) => current.map((step, i) => (i === index ? updater(step) : step)));
   }
 
   function moveStep(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= steps.length) return;
     setIsDirty(true);
+    setCollapsedSteps((current) => {
+      const next = new Set(current);
+      const indexCollapsed = current.has(index);
+      const targetCollapsed = current.has(target);
+      if (indexCollapsed) next.add(target);
+      else next.delete(target);
+      if (targetCollapsed) next.add(index);
+      else next.delete(index);
+      return next;
+    });
     setSteps((current) => {
       const copy = [...current];
       [copy[index], copy[target]] = [copy[target]!, copy[index]!];
@@ -857,7 +922,7 @@ export function PipelineDialog({
   }
 
   function handleSubmit() {
-    onSave({ name, description, failFast, steps: steps.map(toPipelineStepFormData) });
+    onSave({ name, description, failFast, steps });
     onOpenChange(false);
   }
 
@@ -868,13 +933,14 @@ export function PipelineDialog({
       if (!step.path.trim()) return false;
       if (step.inspectionError) return false;
       if (step.buildSystem === 'maven') return step.mavenGoals.length > 0;
-      if (step.buildSystem === 'node') return step.commandType === 'install' || step.script.trim().length > 0;
+      if (step.buildSystem === 'node')
+        return step.commandType === 'install' || step.script.trim().length > 0;
       return false;
     });
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-5xl h-[min(90vh,860px)]">
+      <DialogContent className="max-w-5xl max-h-[min(78dvh,760px)] overflow-hidden">
         <DialogTitle>{mode === 'create' ? 'Create pipeline' : `Edit "${name}"`}</DialogTitle>
         <DialogDescription>
           Build a multi-step pipeline with detected Maven and Node step behavior.
@@ -884,7 +950,9 @@ export function PipelineDialog({
           <div className="absolute inset-0 z-[100] flex items-center justify-center rounded-[24px] bg-background/80 backdrop-blur-sm">
             <div className="rounded-[20px] border border-border bg-card p-6 text-center shadow-lg">
               <p className="font-semibold text-foreground">Discard changes?</p>
-              <p className="mt-1 text-sm text-muted-foreground">Any unsaved progress will be lost.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Any unsaved progress will be lost.
+              </p>
               <div className="mt-4 flex justify-center gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setConfirmClose(false)}>
                   Keep editing
@@ -903,20 +971,29 @@ export function PipelineDialog({
               label="Pipeline name"
               placeholder="e.g. full-build"
               value={name}
-              onChange={(e) => { setIsDirty(true); setName(e.target.value); }}
+              onChange={(e) => {
+                setIsDirty(true);
+                setName(e.target.value);
+              }}
               disabled={mode === 'edit'}
             />
             <Input
               label="Description"
               placeholder="Short summary of what this pipeline does"
               value={description}
-              onChange={(e) => { setIsDirty(true); setDescription(e.target.value); }}
+              onChange={(e) => {
+                setIsDirty(true);
+                setDescription(e.target.value);
+              }}
             />
             <Tooltip content="Stop the pipeline execution immediately if a step fails." side="top">
               <button
                 type="button"
                 aria-pressed={failFast}
-                onClick={() => { setIsDirty(true); setFailFast((current) => !current); }}
+                onClick={() => {
+                  setIsDirty(true);
+                  setFailFast((current) => !current);
+                }}
                 className={cn('toggle-pill', failFast && 'is-active')}
               >
                 <span className="toggle-pill-indicator">
@@ -928,35 +1005,28 @@ export function PipelineDialog({
           </div>
 
           <div className="mt-5 min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] px-1 py-1 -mx-1 -my-1 pr-3">
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-4">
               {steps.map((step, index) => (
-                <div key={step.clientId} className="contents">
-                  {index > 0 && (
-                    <StepInsertControl
-                      afterStep={index}
-                      beforeStep={index + 1}
-                      onInsert={() => insertStep(index)}
-                    />
-                  )}
-                  <StepCard
-                    step={step}
-                    index={index}
-                    total={steps.length}
-                    collapsed={collapsedSteps.has(step.clientId)}
-                    onToggleCollapsed={() =>
-                      setCollapsedSteps((current) => {
-                        const next = new Set(current);
-                        if (next.has(step.clientId)) next.delete(step.clientId); else next.add(step.clientId);
-                        return next;
-                      })
-                    }
-                    onUpdate={(updater) => updateStep(step.clientId, updater)}
-                    onResolvePath={(path, project) => void resolveStepPath(step.clientId, path, project)}
-                    onRemove={() => removeStep(step.clientId)}
-                    onMoveUp={() => moveStep(index, -1)}
-                    onMoveDown={() => moveStep(index, 1)}
-                  />
-                </div>
+                <StepCard
+                  key={index}
+                  step={step}
+                  index={index}
+                  total={steps.length}
+                  collapsed={collapsedSteps.has(index)}
+                  onToggleCollapsed={() =>
+                    setCollapsedSteps((current) => {
+                      const next = new Set(current);
+                      if (next.has(index)) next.delete(index);
+                      else next.add(index);
+                      return next;
+                    })
+                  }
+                  onUpdate={(updater) => updateStep(index, updater)}
+                  onResolvePath={(path, project) => void resolveStepPath(index, path, project)}
+                  onRemove={() => removeStep(index)}
+                  onMoveUp={() => moveStep(index, -1)}
+                  onMoveDown={() => moveStep(index, 1)}
+                />
               ))}
             </div>
           </div>

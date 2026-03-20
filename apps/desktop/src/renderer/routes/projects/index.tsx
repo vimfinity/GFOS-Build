@@ -19,16 +19,33 @@ import {
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { MavenCommandFields, getSuggestedJavaOverride, type MavenCommandValue } from '@/components/MavenCommandFields';
+import {
+  MavenCommandFields,
+  getSuggestedJavaOverride,
+  type MavenCommandValue,
+} from '@/components/MavenCommandFields';
 import { ComboboxField } from '@/components/ui/combobox-field';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { SearchField } from '@/components/ui/search-field';
 import { Tooltip } from '@/components/ui/tooltip';
 import { getNodeScriptChoices, getNodeScriptComboboxOptions } from '@/lib/node-script-options';
 import { cn } from '@/lib/utils';
 import { useGitInfo, useGitInfoBatch } from '@/api/queries';
 import { BranchBadge } from '@/components/BranchBadge';
-import type { ExecutionMode, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType, Project } from '@gfos-build/contracts';
+import type {
+  ExecutionMode,
+  MavenOptionKey,
+  MavenProfileState,
+  MavenSubmoduleBuildStrategy,
+  NodeCommandType,
+  Project,
+} from '@gfos-build/contracts';
 
 export const Route = createFileRoute('/projects/')({
   component: ProjectsView,
@@ -57,9 +74,7 @@ function SystemBadge({ system }: { system: 'maven' | 'node' }) {
     <span
       className={cn(
         'pill-meta',
-        system === 'maven'
-          ? 'bg-primary/10 text-primary'
-          : 'bg-success/10 text-success',
+        system === 'maven' ? 'bg-primary/10 text-primary' : 'bg-success/10 text-success'
       )}
     >
       {system === 'maven' ? 'Maven' : 'Node'}
@@ -96,19 +111,19 @@ function QuickRunDialog({
 
   const defaultGoals = useMemo(
     () => configData?.config.maven.defaultGoals ?? ['clean', 'install'],
-    [configData],
+    [configData]
   );
   const defaultOptionKeys = useMemo(
     () => configData?.config.maven.defaultOptionKeys ?? [],
-    [configData],
+    [configData]
   );
   const defaultExtraOptions = useMemo(
     () => configData?.config.maven.defaultExtraOptions ?? [],
-    [configData],
+    [configData]
   );
   const jdkVersions = useMemo(
     () => Object.keys(configData?.config.jdkRegistry ?? {}),
-    [configData],
+    [configData]
   );
 
   const [mavenCommand, setMavenCommand] = useState<MavenCommandValue>({
@@ -125,10 +140,7 @@ function QuickRunDialog({
   const [script, setScript] = useState('');
   const [nodeArgs, setNodeArgs] = useState('');
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('internal');
-  const nodeScripts = useMemo(
-    () => getNodeScriptChoices(project?.node?.scripts),
-    [project],
-  );
+  const nodeScripts = useMemo(() => getNodeScriptChoices(project?.node?.scripts), [project]);
   const packageManager = project?.node?.packageManager ?? 'npm';
 
   useEffect(() => {
@@ -139,7 +151,7 @@ function QuickRunDialog({
         goals: defaultGoals,
         optionKeys: defaultOptionKeys,
         profileStates: Object.fromEntries(
-          (project.maven?.profiles ?? []).map((profile) => [profile.id, 'default']),
+          (project.maven?.profiles ?? []).map((profile) => [profile.id, 'default'])
         ),
         extraOptions: defaultExtraOptions,
         javaVersion: getSuggestedJavaOverride(project.maven, jdkVersions),
@@ -167,7 +179,9 @@ function QuickRunDialog({
     onRun({
       buildSystem: 'maven',
       modulePath: mavenCommand.modulePath || undefined,
-      submoduleBuildStrategy: mavenCommand.modulePath ? mavenCommand.submoduleBuildStrategy : undefined,
+      submoduleBuildStrategy: mavenCommand.modulePath
+        ? mavenCommand.submoduleBuildStrategy
+        : undefined,
       goals: mavenCommand.goals,
       optionKeys: mavenCommand.optionKeys,
       profileStates: mavenCommand.profileStates,
@@ -181,171 +195,194 @@ function QuickRunDialog({
     ? project.buildSystem === 'node'
       ? commandType === 'install'
         ? [packageManager, 'install', ...(nodeArgs.trim() ? [nodeArgs.trim()] : [])].join(' ')
-        : [packageManager, 'run', script || '<script>', ...(nodeArgs.trim() ? ['--', nodeArgs.trim()] : [])].join(' ')
+        : [
+            packageManager,
+            'run',
+            script || '<script>',
+            ...(nodeArgs.trim() ? ['--', nodeArgs.trim()] : []),
+          ].join(' ')
       : buildMavenPreview(mavenCommand)
     : '';
   const canRunNode =
     project?.buildSystem !== 'node' || commandType === 'install' || script.trim().length > 0;
 
   return (
-    <Dialog open={project !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-5xl">
+    <Dialog
+      open={project !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="max-w-5xl max-h-[min(78dvh,720px)] overflow-hidden">
         <DialogTitle className="pr-10">Run build</DialogTitle>
         <DialogDescription>
           {project?.name ?? ''} · {project?.buildSystem === 'maven' ? 'Maven' : 'Node'}
         </DialogDescription>
 
-        <div className="mt-5 grid gap-4 overflow-y-auto lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.95fr)] lg:items-start">
-          <div className="flex min-w-0 flex-col gap-4 lg:h-full">
-            {project?.buildSystem === 'maven' && (
-              <MavenCommandFields
-                metadata={project.maven}
-                value={mavenCommand}
-                onChange={setMavenCommand}
-                jdkVersions={jdkVersions}
-              />
-            )}
+        <div className="mt-5 min-h-0 flex flex-1 overflow-hidden">
+          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.95fr)] lg:items-start">
+            <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto pr-2 [scrollbar-gutter:stable]">
+              {project?.buildSystem === 'maven' && (
+                <MavenCommandFields
+                  metadata={project.maven}
+                  value={mavenCommand}
+                  onChange={setMavenCommand}
+                  jdkVersions={jdkVersions}
+                />
+              )}
 
-            {project?.buildSystem === 'node' && (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                    Command
-                  </label>
-                  <div className="segmented-control w-fit">
-                    {([
-                      { value: 'script', label: 'Run script' },
-                      { value: 'install', label: 'Install deps' },
-                    ] as const).map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        aria-pressed={commandType === option.value}
-                        onClick={() => setCommandType(option.value)}
-                        className={cn('segmented-control-button', commandType === option.value && 'is-active')}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                    Execution mode
-                  </label>
-                  <div className="segmented-control w-fit">
-                    {(['internal', 'external'] as const).map((mode) => {
-                      const button = (
+              {project?.buildSystem === 'node' && (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      Command
+                    </label>
+                    <div className="segmented-control w-fit">
+                      {(
+                        [
+                          { value: 'script', label: 'Run script' },
+                          { value: 'install', label: 'Install deps' },
+                        ] as const
+                      ).map((option) => (
                         <button
-                          key={mode}
+                          key={option.value}
                           type="button"
-                          aria-pressed={executionMode === mode}
-                          onClick={() => setExecutionMode(mode)}
-                          className={cn('segmented-control-button', executionMode === mode && 'is-active')}
+                          aria-pressed={commandType === option.value}
+                          onClick={() => setCommandType(option.value)}
+                          className={cn(
+                            'segmented-control-button',
+                            commandType === option.value && 'is-active'
+                          )}
                         >
-                          {mode === 'internal' ? 'In app' : 'External terminal'}
+                          {option.label}
                         </button>
-                      );
-
-                      return mode === 'external' ? (
-                        <Tooltip
-                          key={mode}
-                          content="Fire-and-forget. GFOS Build launches a new terminal window and continues immediately."
-                          side="top"
-                        >
-                          {button}
-                        </Tooltip>
-                      ) : button;
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {commandType === 'script' && nodeScripts.length > 0 ? (
-                  <>
-                    <div className="lg:col-span-2">
-                      <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                          Script
-                        </label>
-                        <ComboboxField
-                          value={script}
-                          options={getNodeScriptComboboxOptions(project.node?.scripts)}
-                          onValueChange={setScript}
-                          placeholder="Select a script"
-                          emptyText="No matching scripts"
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      Execution mode
+                    </label>
+                    <div className="segmented-control w-fit">
+                      {(['internal', 'external'] as const).map((mode) => {
+                        const button = (
+                          <button
+                            key={mode}
+                            type="button"
+                            aria-pressed={executionMode === mode}
+                            onClick={() => setExecutionMode(mode)}
+                            className={cn(
+                              'segmented-control-button',
+                              executionMode === mode && 'is-active'
+                            )}
+                          >
+                            {mode === 'internal' ? 'In app' : 'External terminal'}
+                          </button>
+                        );
+
+                        return mode === 'external' ? (
+                          <Tooltip
+                            key={mode}
+                            content="Fire-and-forget. GFOS Build launches a new terminal window and continues immediately."
+                            side="top"
+                          >
+                            {button}
+                          </Tooltip>
+                        ) : (
+                          button
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {commandType === 'script' && nodeScripts.length > 0 ? (
+                    <>
+                      <div className="lg:col-span-2">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                            Script
+                          </label>
+                          <ComboboxField
+                            value={script}
+                            options={getNodeScriptComboboxOptions(project.node?.scripts)}
+                            onValueChange={setScript}
+                            placeholder="Select a script"
+                            emptyText="No matching scripts"
+                          />
+                        </div>
+                      </div>
+                      <div className="lg:col-span-2">
+                        <Input
+                          label="Optional args"
+                          placeholder="e.g. --host 0.0.0.0"
+                          value={nodeArgs}
+                          onChange={(e) => setNodeArgs(e.target.value)}
                         />
                       </div>
+                    </>
+                  ) : commandType === 'script' ? (
+                    <div className="rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning lg:col-span-2">
+                      No scripts were found in this package.json. Add a script before running this
+                      project.
                     </div>
+                  ) : (
                     <div className="lg:col-span-2">
                       <Input
-                        label="Optional args"
-                        placeholder="e.g. --host 0.0.0.0"
+                        label="Install args"
+                        placeholder="e.g. --frozen-lockfile"
                         value={nodeArgs}
                         onChange={(e) => setNodeArgs(e.target.value)}
                       />
                     </div>
-                  </>
-                ) : commandType === 'script' ? (
-                  <div className="rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning lg:col-span-2">
-                    No scripts were found in this package.json. Add a script before running this project.
-                  </div>
-                ) : (
-                  <div className="lg:col-span-2">
-                    <Input
-                      label="Install args"
-                      placeholder="e.g. --frozen-lockfile"
-                      value={nodeArgs}
-                      onChange={(e) => setNodeArgs(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                  )}
+                </div>
+              )}
+            </div>
 
-          <div className="flex min-w-0 flex-col gap-4">
-            {project && (
-              <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto pl-1 pr-2 [scrollbar-gutter:stable]">
+              {project && (
+                <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/72">
+                      Project
+                    </span>
+                    <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
+                  </div>
+                  <div className="mt-2 font-mono text-[12px] leading-relaxed break-all text-foreground/92">
+                    {project.path}
+                  </div>
+                </div>
+              )}
+
+              {project?.buildSystem === 'node' && (
+                <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/72">
-                    Project
+                    Environment
                   </span>
-                  <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
-                </div>
-                <div className="mt-2 font-mono text-[12px] leading-relaxed break-all text-foreground/92">
-                  {project.path}
-                </div>
-              </div>
-            )}
-
-            {project?.buildSystem === 'node' && (
-              <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/72">
-                  Environment
-                </span>
-                <div className="mt-2">
-                  Detected package manager:{' '}
-                  <span className="font-mono text-foreground">{packageManager}</span>
-                </div>
-              </div>
-            )}
-
-            {project && (
-              <div className="flex min-h-0 flex-1 flex-col rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/72">
-                  Command preview
-                </span>
-                <div className="mt-2 font-mono text-[12px] leading-relaxed break-words text-foreground/92">
-                  {commandPreview}
-                </div>
-                {project.buildSystem === 'maven' && project.maven?.hasMvnConfig && (
-                  <div className="mt-2 text-[11px] text-muted-foreground/72">
-                    Inherits `.mvn/maven.config` from the project root.
+                  <div className="mt-2">
+                    Detected package manager:{' '}
+                    <span className="font-mono text-foreground">{packageManager}</span>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+
+              {project && (
+                <div className="flex min-h-0 flex-1 flex-col rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/72">
+                    Command preview
+                  </span>
+                  <div className="mt-2 font-mono text-[12px] leading-relaxed break-words text-foreground/92">
+                    {commandPreview}
+                  </div>
+                  {project.buildSystem === 'maven' && project.maven?.hasMvnConfig && (
+                    <div className="mt-2 text-[11px] text-muted-foreground/72">
+                      Inherits `.mvn/maven.config` from the project root.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -353,7 +390,14 @@ function QuickRunDialog({
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleRun} disabled={isRunning || (project?.buildSystem === 'maven' ? mavenCommand.goals.length === 0 : !canRunNode)}>
+          <Button
+            size="sm"
+            onClick={handleRun}
+            disabled={
+              isRunning ||
+              (project?.buildSystem === 'maven' ? mavenCommand.goals.length === 0 : !canRunNode)
+            }
+          >
             {isRunning ? (
               <>
                 <Loader2 size={12} className="animate-spin" />
@@ -422,7 +466,7 @@ function ProjectRow({
         <span
           className={cn(
             'h-2 w-2 rounded-full shrink-0',
-            isAggregator ? 'bg-muted-foreground/40' : 'bg-success',
+            isAggregator ? 'bg-muted-foreground/40' : 'bg-success'
           )}
         />
       </Tooltip>
@@ -439,7 +483,9 @@ function ProjectRow({
       <SystemBadge system={project.buildSystem} />
       <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
       {project.node?.packageManager && (
-        <span className="text-xs uppercase text-muted-foreground">{project.node.packageManager}</span>
+        <span className="text-xs uppercase text-muted-foreground">
+          {project.node.packageManager}
+        </span>
       )}
       {version && <span className="text-xs text-muted-foreground">v{version}</span>}
       {javaVersion && <span className="text-xs text-muted-foreground">Java {javaVersion}</span>}
@@ -480,7 +526,7 @@ function FlatProjectRow({
       <span
         className={cn(
           'h-2 w-2 rounded-full shrink-0',
-          isAggregator ? 'bg-muted-foreground/40' : 'bg-success',
+          isAggregator ? 'bg-muted-foreground/40' : 'bg-success'
         )}
       />
       <span className="max-w-[220px] shrink-0 truncate text-sm font-medium text-foreground">
@@ -492,7 +538,9 @@ function FlatProjectRow({
       <SystemBadge system={project.buildSystem} />
       <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
       {project.node?.packageManager && (
-        <span className="text-xs uppercase text-muted-foreground">{project.node.packageManager}</span>
+        <span className="text-xs uppercase text-muted-foreground">
+          {project.node.packageManager}
+        </span>
       )}
       {version && <span className="text-xs text-muted-foreground">v{version}</span>}
       {javaVersion && <span className="text-xs text-muted-foreground">Java {javaVersion}</span>}
@@ -559,9 +607,13 @@ function ProjectsView() {
       case 'name-desc':
         return list.sort((a, b) => b.name.localeCompare(a.name));
       case 'path-asc':
-        return list.sort((a, b) => getRelativePath(a, roots).localeCompare(getRelativePath(b, roots)));
+        return list.sort((a, b) =>
+          getRelativePath(a, roots).localeCompare(getRelativePath(b, roots))
+        );
       case 'sys':
-        return list.sort((a, b) => a.buildSystem.localeCompare(b.buildSystem) || a.name.localeCompare(b.name));
+        return list.sort(
+          (a, b) => a.buildSystem.localeCompare(b.buildSystem) || a.name.localeCompare(b.name)
+        );
       default:
         return list;
     }
@@ -589,7 +641,9 @@ function ProjectsView() {
     }
 
     for (const group of map.values()) {
-      group.projects.sort((a, b) => getRelativePath(a, roots).localeCompare(getRelativePath(b, roots)));
+      group.projects.sort((a, b) =>
+        getRelativePath(a, roots).localeCompare(getRelativePath(b, roots))
+      );
     }
 
     return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
@@ -736,10 +790,7 @@ function ProjectsView() {
                     key={system}
                     aria-pressed={sysFilter === system}
                     onClick={() => setSysFilter(system)}
-                    className={cn(
-                      'segmented-control-button',
-                      sysFilter === system && 'is-active',
-                    )}
+                    className={cn('segmented-control-button', sysFilter === system && 'is-active')}
                   >
                     {system === 'all' ? 'All' : system === 'maven' ? 'Maven' : 'Node'}
                   </button>
@@ -748,10 +799,7 @@ function ProjectsView() {
 
               <div className="field-shell field-shell-pill field-shell-soft">
                 <ArrowUpDown size={12} />
-                <Select
-                  value={sortBy}
-                  onValueChange={(value) => setSortBy(value as SortBy)}
-                >
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortBy)}>
                   <SelectTrigger className="h-auto min-h-0 border-0 bg-transparent px-0 py-0 shadow-none hover:bg-transparent focus-visible:border-0 focus-visible:shadow-none">
                     <SelectValue className="text-xs text-muted-foreground" />
                   </SelectTrigger>
@@ -765,39 +813,43 @@ function ProjectsView() {
               </div>
 
               <div className="ml-auto flex min-w-[190px] items-center justify-end gap-2">
-                  <Button variant="ghost" size="sm" onClick={collapseAll} disabled={!canToggleGroups}>
-                    <ChevronsUp size={12} />
-                    Collapse
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={expandAll} disabled={!canToggleGroups}>
-                    <ChevronsDown size={12} />
-                    Expand
-                  </Button>
+                <Button variant="ghost" size="sm" onClick={collapseAll} disabled={!canToggleGroups}>
+                  <ChevronsUp size={12} />
+                  Collapse
+                </Button>
+                <Button variant="ghost" size="sm" onClick={expandAll} disabled={!canToggleGroups}>
+                  <ChevronsDown size={12} />
+                  Expand
+                </Button>
               </div>
             </div>
           )}
 
-          {projects.length === 0 && configData && Object.keys(configData.config.roots).length === 0 && (
-            <EmptyState
-              icon={<FolderSearch size={28} className="text-primary" />}
-              title="No project roots configured"
-              description="Configure project roots in Settings before scanning for Maven or Node projects."
-            />
-          )}
+          {projects.length === 0 &&
+            configData &&
+            Object.keys(configData.config.roots).length === 0 && (
+              <EmptyState
+                icon={<FolderSearch size={28} className="text-primary" />}
+                title="No project roots configured"
+                description="Configure project roots in Settings before scanning for Maven or Node projects."
+              />
+            )}
 
-          {projects.length === 0 && configData && Object.keys(configData.config.roots).length > 0 && (
-            <EmptyState
-              icon={<AlertCircle size={28} className="text-primary" />}
-              title="No projects found"
-              description="No pom.xml or package.json files were found under the configured roots."
-              action={
-                <Button variant="outline" size="sm" onClick={() => void handleRefresh()}>
-                  <RefreshCw size={13} />
-                  Scan now
-                </Button>
-              }
-            />
-          )}
+          {projects.length === 0 &&
+            configData &&
+            Object.keys(configData.config.roots).length > 0 && (
+              <EmptyState
+                icon={<AlertCircle size={28} className="text-primary" />}
+                title="No projects found"
+                description="No pom.xml or package.json files were found under the configured roots."
+                action={
+                  <Button variant="outline" size="sm" onClick={() => void handleRefresh()}>
+                    <RefreshCw size={13} />
+                    Scan now
+                  </Button>
+                }
+              />
+            )}
 
           {projects.length === 0 && !configData && (
             <EmptyState
@@ -912,7 +964,9 @@ function EmptyState({
 }) {
   return (
     <div className="glass-card flex flex-col items-center gap-4 rounded-[24px] border border-border px-8 py-16 text-center">
-      <div className="icon-chip flex h-14 w-14 items-center justify-center rounded-full">{icon}</div>
+      <div className="icon-chip flex h-14 w-14 items-center justify-center rounded-full">
+        {icon}
+      </div>
       <div>
         <p className="text-base font-semibold text-foreground">{title}</p>
         <p className="mt-2 max-w-xl text-sm text-muted-foreground">{description}</p>
@@ -943,12 +997,15 @@ function buildMavenPreview(command: MavenCommandValue): string {
   const useSubmoduleDir = command.modulePath && command.submoduleBuildStrategy === 'submodule-dir';
   const prefix = useSubmoduleDir ? `cd ${command.modulePath} && ` : '';
 
-  return prefix + [
-    'mvn',
-    ...command.goals,
-    ...command.optionKeys.map((optionKey) => MAVEN_OPTION_FLAGS[optionKey]),
-    ...(explicitProfiles.length > 0 ? ['-P', explicitProfiles.join(',')] : []),
-    ...(!useSubmoduleDir && command.modulePath ? ['-pl', command.modulePath] : []),
-    ...command.extraOptions,
-  ].join(' ');
+  return (
+    prefix +
+    [
+      'mvn',
+      ...command.goals,
+      ...command.optionKeys.map((optionKey) => MAVEN_OPTION_FLAGS[optionKey]),
+      ...(explicitProfiles.length > 0 ? ['-P', explicitProfiles.join(',')] : []),
+      ...(!useSubmoduleDir && command.modulePath ? ['-pl', command.modulePath] : []),
+      ...command.extraOptions,
+    ].join(' ')
+  );
 }
