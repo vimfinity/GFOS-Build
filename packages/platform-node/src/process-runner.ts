@@ -96,10 +96,18 @@ export class NodeProcessRunner implements ProcessRunner {
 
     const resolvedExecutable = resolveInternalExecutable(executable);
     const sanitizedArgs = args.filter((arg) => arg !== '');
-    const proc = childProcess.spawn(resolvedExecutable, sanitizedArgs, {
+    // On Windows, .cmd/.bat files require cmd.exe to execute. Rather than shell:true
+    // (which triggers DEP0190 by concatenating args unsafely), we invoke cmd.exe directly
+    // so Node.js can quote each argument individually via CreateProcess.
+    const isWindows = process.platform === 'win32';
+    const spawnCmd = isWindows ? 'cmd.exe' : resolvedExecutable;
+    const spawnArgs = isWindows
+      ? ['/d', '/s', '/c', resolvedExecutable, ...sanitizedArgs]
+      : sanitizedArgs;
+    const proc = childProcess.spawn(spawnCmd, spawnArgs, {
       cwd: options.cwd,
       env: buildChildProcessEnv(options.env),
-      shell: process.platform === 'win32',
+      shell: false,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -109,9 +117,11 @@ export class NodeProcessRunner implements ProcessRunner {
       aborted = true;
       queue.push({ type: 'stderr', line: 'Build cancelled.' });
       if (process.platform === 'win32' && proc.pid) {
-        void childProcess.spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], {
+        childProcess.spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], {
           stdio: 'ignore',
           windowsHide: true,
+        }).on('error', () => {
+          // best-effort kill; process may have already exited
         });
       } else {
         proc.kill('SIGTERM');

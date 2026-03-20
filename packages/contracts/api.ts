@@ -82,6 +82,7 @@ export interface BuildRunRowApi {
   java_home: string | null;
   pipeline_name: string | null;
   step_index: number | null;
+  step_label: string | null;
   started_at: string;
   finished_at: string | null;
   duration_ms: number | null;
@@ -93,7 +94,7 @@ export interface BuildRunRowApi {
 /** One persisted log line. */
 export interface BuildLogEntry {
   seq: number;
-  stream: string;
+  stream: 'stdout' | 'stderr';
   line: string;
 }
 

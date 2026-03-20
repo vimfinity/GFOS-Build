@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -117,7 +117,7 @@ function ProjectPathPicker({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { data: scanData, isLoading: scanLoading } = useQuery(scanQuery);
   const { data: configData } = useQuery(configQuery);
-  const roots = configData?.config.roots ?? {};
+  const roots = useMemo(() => configData?.config.roots ?? {}, [configData]);
 
   const displayValue = useMemo(() => {
     if (!value) return '';
@@ -627,7 +627,7 @@ export function PipelineDialog({
   const [confirmClose, setConfirmClose] = useState(false);
   const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
 
-  async function resolveStepPath(index: number, path: string, project?: Project) {
+  const resolveStepPath = useCallback(async (index: number, path: string, project?: Project) => {
     const applyInspection = (current: StepFormData, resolvedProject: Project | null, error?: string): StepFormData => {
       if (!resolvedProject) {
         return {
@@ -721,7 +721,7 @@ export function PipelineDialog({
         ),
       );
     }
-  }
+  }, [defaultMavenGoals, registeredJdkVersions]);
 
   useEffect(() => {
     if (!open) return;
@@ -753,7 +753,7 @@ export function PipelineDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, initialData, defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions, registeredJdkVersions]);
+  }, [open, initialData, defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions, registeredJdkVersions, resolveStepPath]);
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen && isDirty) {

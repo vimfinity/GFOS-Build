@@ -123,7 +123,7 @@ export interface FinishStepRunParams {
 }
 
 export interface BuildLogPage {
-  entries: Array<{ seq: number; stream: string; line: string }>;
+  entries: Array<{ seq: number; stream: 'stdout' | 'stderr'; line: string }>;
   nextBeforeSeq: number | null;
 }
 
@@ -328,6 +328,7 @@ export class AppDatabase implements IDatabase {
         s.java_home,
         s.pipeline_name,
         s.step_index,
+        s.step_label,
         s.started_at,
         s.finished_at,
         s.duration_ms,
@@ -495,7 +496,7 @@ export class AppDatabase implements IDatabase {
              ORDER BY seq DESC
              LIMIT ?`,
           )
-          .all(stepRunId, beforeSeq, limit)) as Array<{ seq: number; stream: string; line: string }>;
+          .all(stepRunId, beforeSeq, limit)) as Array<{ seq: number; stream: 'stdout' | 'stderr'; line: string }>;
 
     const orderedEntries = [...entries].reverse();
     const nextBeforeSeq = entries.length === limit ? entries[entries.length - 1]?.seq ?? null : null;
