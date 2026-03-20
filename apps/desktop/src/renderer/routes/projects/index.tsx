@@ -492,8 +492,8 @@ function ProjectsView() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
-  const projects = scanData?.projects ?? [];
-  const roots = configData?.config.roots ?? {};
+  const projects = useMemo(() => scanData?.projects ?? [], [scanData]);
+  const roots = useMemo(() => configData?.config.roots ?? {}, [configData]);
 
   const uniqueProjectPaths = useMemo(() => [...new Set(projects.map((p) => p.path))], [projects]);
   const { data: rawGitInfoMap } = useGitInfoBatch(uniqueProjectPaths);
