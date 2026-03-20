@@ -55,6 +55,10 @@ export const BuildOutput = memo(function BuildOutput({
 }: BuildOutputProps) {
   const lines = useMemo(() => extractLines(events), [events]);
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  // Keep a ref to the latest line count so mount/trigger effects can read it
+  // without declaring it as a dependency (ref identity is stable).
+  const linesLengthRef = useRef(lines.length);
+  linesLengthRef.current = lines.length;
   const [atBottom, setAtBottom] = useState(true);
   const [copied, setCopied] = useState(false);
   const atBottomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,18 +80,16 @@ export const BuildOutput = memo(function BuildOutput({
 
   // Scroll to the end on mount so existing content starts at the bottom.
   useEffect(() => {
-    if (lines.length > 0) {
-      virtuosoRef.current?.scrollToIndex({ index: lines.length - 1, align: 'end', behavior: 'auto' });
+    if (linesLengthRef.current > 0) {
+      virtuosoRef.current?.scrollToIndex({ index: linesLengthRef.current - 1, align: 'end', behavior: 'auto' });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // mount-only: linesLengthRef is a stable ref — current value is always up-to-date
 
   // Imperative scroll-to-bottom triggered by the parent (e.g. clicking the running step pill).
   useEffect(() => {
     if (!scrollToBottomTrigger) return;
-    virtuosoRef.current?.scrollToIndex({ index: lines.length - 1, align: 'end', behavior: 'smooth' });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrollToBottomTrigger]);
+    virtuosoRef.current?.scrollToIndex({ index: linesLengthRef.current - 1, align: 'end', behavior: 'smooth' });
+  }, [scrollToBottomTrigger]); // linesLengthRef is stable; current value read at trigger time
 
   const scrollToBottom = useCallback(() => {
     if (lines.length === 0) return;

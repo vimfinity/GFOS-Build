@@ -156,6 +156,9 @@ function StoredLogViewer({ stepId }: { stepId: number }) {
   } = useBuildLogs(stepId);
   const logs = logsData?.pages.flatMap((p) => p.entries) ?? [];
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  // Stable ref so mount effect can read the latest count without declaring it as a dep.
+  const logsLengthRef = useRef(logs.length);
+  logsLengthRef.current = logs.length;
   const [atBottom, setAtBottom] = useState(true);
   const [copied, setCopied] = useState(false);
   const atBottomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -171,11 +174,10 @@ function StoredLogViewer({ stepId }: { stepId: number }) {
 
   // Start scrolled to the bottom
   useEffect(() => {
-    if (logs.length > 0) {
-      virtuosoRef.current?.scrollToIndex({ index: logs.length - 1, align: 'end', behavior: 'auto' });
+    if (logsLengthRef.current > 0) {
+      virtuosoRef.current?.scrollToIndex({ index: logsLengthRef.current - 1, align: 'end', behavior: 'auto' });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // mount-only: logsLengthRef is a stable ref — current value is always up-to-date
 
   const scrollToBottom = useCallback(() => {
     virtuosoRef.current?.scrollToIndex({ index: logs.length - 1, align: 'end', behavior: 'smooth' });
@@ -368,16 +370,16 @@ function BuildDetailPage() {
   // Selected step for completed view (defaults to first step)
   const [selectedDbStep, setSelectedDbStep] = useState(0);
 
-  // Filter build events from the live stream
-  const buildEvents = useMemo(
-    () =>
-      events.filter(
-        (e): e is BuildEvent =>
-          'type' in e && (e.type.startsWith('step:') || e.type === 'run:done'),
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [events, eventVersion],
-  );
+  // Filter build events from the live stream.
+  // `events` is mutated in-place by the LRU cache (same reference, new items pushed in).
+  // `eventVersion` is the real invalidation trigger; reading it here makes it a genuine dep.
+  const buildEvents = useMemo(() => {
+    void eventVersion;
+    return events.filter(
+      (e): e is BuildEvent =>
+        'type' in e && (e.type.startsWith('step:') || e.type === 'run:done'),
+    );
+  }, [events, eventVersion]);
 
   // Map step index → its output events (step:output has no index field, so we infer
   // from position: all step:output events between step:start(N) and the next step:start belong to N)
