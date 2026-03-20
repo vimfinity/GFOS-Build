@@ -293,6 +293,12 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
 
+  getRuntime().watchGitHeads(() => {
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send(IPC.GIT_HEAD_CHANGED);
+    }
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();

@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { healthQuery, configQuery, useSaveConfig } from '@/api/queries';
+import { getDesktopApi } from '@/api/client';
 import { OnboardingDialog } from '@/components/OnboardingDialog';
 import { TooltipProvider, Tooltip, ShortcutKey } from '@/components/ui/tooltip';
 import { ServerCrash, Settings } from 'lucide-react';
@@ -260,6 +261,13 @@ function RootLayout() {
     };
   }, [navigate, isMac]);
 
+  // Invalidate git-info cache whenever a .git/HEAD file changes (branch switch).
+  useEffect(() => {
+    return getDesktopApi().onGitHeadChanged(() => {
+      void queryClient.invalidateQueries({ queryKey: ['git-info'] });
+    });
+  }, [queryClient]);
+
   // Show onboarding whenever no project roots are configured
   const needsOnboarding =
     !runtimeOffline &&
@@ -281,6 +289,7 @@ function RootLayout() {
     void queryClient.invalidateQueries({ queryKey: ['config'] });
     void queryClient.invalidateQueries({ queryKey: ['pipelines'] });
     void queryClient.invalidateQueries({ queryKey: ['scan'] });
+    void queryClient.invalidateQueries({ queryKey: ['git-info'] });
     setOnboardingOpen(false);
   }
 

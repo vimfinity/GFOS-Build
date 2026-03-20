@@ -37,6 +37,11 @@ const bridge: ElectronBridge = {
       ipcRenderer.removeListener(IPC.RUN_EVENT, wrapped);
     };
   },
+  onGitHeadChanged: (listener) => {
+    const wrapped = () => listener();
+    ipcRenderer.on(IPC.GIT_HEAD_CHANGED, wrapped);
+    return () => ipcRenderer.removeListener(IPC.GIT_HEAD_CHANGED, wrapped);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', bridge);

@@ -339,7 +339,12 @@ export class AppRuntime {
     };
   }
 
+  watchGitHeads(onChange: () => void): () => void {
+    return this.gitInfoReader.watchHeads(onChange);
+  }
+
   close(): void {
+    this.gitInfoReader.close();
     this.db.close();
     this.jobs.clear();
   }
@@ -568,6 +573,7 @@ function toPipelineStep(step: BuildStep): PipelineStep {
     buildSystem: step.buildSystem,
     executionMode: step.executionMode,
     modulePath: step.modulePath,
+    submoduleBuildStrategy: step.submoduleBuildStrategy,
     goals: step.goals,
     optionKeys: step.optionKeys,
     profileStates: step.profileStates,

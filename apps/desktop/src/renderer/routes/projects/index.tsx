@@ -586,6 +586,7 @@ function ProjectsView() {
       const { jobId } = await refreshScan.mutateAsync();
       await waitForJobCompletion(jobId);
       await queryClient.invalidateQueries({ queryKey: ['scan'] });
+      await queryClient.invalidateQueries({ queryKey: ['git-info'] });
     } catch (error) {
       setRefreshError(error instanceof Error ? error.message : 'Refresh scan failed.');
     } finally {
