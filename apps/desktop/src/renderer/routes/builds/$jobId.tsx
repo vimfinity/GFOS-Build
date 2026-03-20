@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCancelJob, useRunPipeline, buildsQuery, useBuildLogs, pipelinesQuery } from '@/api/queries';
 import { useJobEvents } from '@/api/run-events';
-import { StepTimeline } from '@/components/StepTimeline';
+
 import {
   BuildOutput,
   MavenAwareLine,
@@ -145,7 +145,17 @@ function LogLine({ entry }: { entry: BuildLogEntry }) {
 // Stored log viewer — same look/feel as BuildOutput but driven by useBuildLogs
 // ---------------------------------------------------------------------------
 
-function StoredLogViewer({ stepId }: { stepId: number }) {
+function StoredLogViewer({
+  stepId,
+  onAtBottomChange,
+  startAtBottom = true,
+}: {
+  stepId: number;
+  /** Called (with 120 ms debounce) when the scroll position reaches or leaves the bottom. */
+  onAtBottomChange?: (atBottom: boolean) => void;
+  /** When false the log starts at the top instead of the bottom (e.g. past step selected). */
+  startAtBottom?: boolean;
+}) {
   const {
     data: logsData,
     isLoading,
@@ -159,7 +169,7 @@ function StoredLogViewer({ stepId }: { stepId: number }) {
   // Stable ref so mount effect can read the latest count without declaring it as a dep.
   const logsLengthRef = useRef(logs.length);
   logsLengthRef.current = logs.length;
-  const [atBottom, setAtBottom] = useState(true);
+  const [atBottom, setAtBottom] = useState(startAtBottom);
   const [copied, setCopied] = useState(false);
   const atBottomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -167,17 +177,25 @@ function StoredLogViewer({ stepId }: { stepId: number }) {
     if (atBottomTimer.current) clearTimeout(atBottomTimer.current);
     if (isAtBottom) {
       setAtBottom(true);
+      onAtBottomChange?.(true);
     } else {
-      atBottomTimer.current = setTimeout(() => setAtBottom(false), 120);
+      atBottomTimer.current = setTimeout(() => {
+        setAtBottom(false);
+        onAtBottomChange?.(false);
+      }, 120);
     }
-  }, []);
+  }, [onAtBottomChange]);
 
-  // Start scrolled to the bottom
+  // Scroll to the bottom on mount — skipped when the parent asks to start at the top.
   useEffect(() => {
-    if (logsLengthRef.current > 0) {
+    if (startAtBottom && logsLengthRef.current > 0) {
       virtuosoRef.current?.scrollToIndex({ index: logsLengthRef.current - 1, align: 'end', behavior: 'auto' });
     }
-  }, []); // mount-only: logsLengthRef is a stable ref — current value is always up-to-date
+  }, []); // mount-only: startAtBottom and logsLengthRef are both stable on the first render
+
+  // Cancel any pending debounce timer on unmount so it can't fire onAtBottomChange(false)
+  // after this component has been replaced (e.g. when the user clicks to a different step).
+  useEffect(() => () => { if (atBottomTimer.current) clearTimeout(atBottomTimer.current); }, []);
 
   const scrollToBottom = useCallback(() => {
     virtuosoRef.current?.scrollToIndex({ index: logs.length - 1, align: 'end', behavior: 'smooth' });
@@ -281,11 +299,43 @@ function StoredLogViewer({ stepId }: { stepId: number }) {
 }
 
 // ---------------------------------------------------------------------------
-// Completed step detail panel — fills remaining height, selected via pill click
+// Step detail panel — works for both running and completed steps.
+// Steps that were ever live during this component's lifetime keep using
+// BuildOutput (avoids Virtuoso swap/scroll-reset flicker). StoredLogViewer
+// is only used for steps first viewed in already-completed state.
 // ---------------------------------------------------------------------------
 
-function CompletedStepDetail({ step, index, total }: { step: BuildRunRowApi; index: number; total: number }) {
+function StepDetail({
+  step,
+  index,
+  total,
+  liveEvents = [],
+  isLiveRunning = false,
+  onAtBottomChange,
+  startAtBottom = true,
+  scrollToBottomTrigger,
+}: {
+  step: BuildRunRowApi;
+  index: number;
+  total: number;
+  liveEvents?: BuildEvent[];
+  isLiveRunning?: boolean;
+  /** Bubbled up to the parent so it can pause/resume auto-switch on scroll. */
+  onAtBottomChange?: (atBottom: boolean) => void;
+  /** When false the stored log starts at the top (past step explicitly selected). */
+  startAtBottom?: boolean;
+  scrollToBottomTrigger?: number;
+}) {
   const isPipeline = total > 1;
+  // Synthetic steps (id < 0) are pending pipeline steps not yet recorded in the DB.
+  const isSynthetic = step.id < 0;
+
+  // Track whether this step was ever live during this component's lifetime.
+  // Once live, we keep showing BuildOutput permanently to avoid the visible
+  // BuildOutput→StoredLogViewer swap (different Virtuoso instance, scroll reset = flicker).
+  // StoredLogViewer is only used when StepDetail mounts for an already-completed step.
+  const wasEverLive = useRef(isLiveRunning);
+  if (isLiveRunning) wasEverLive.current = true;
 
   return (
     <div className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-border">
@@ -300,9 +350,11 @@ function CompletedStepDetail({ step, index, total }: { step: BuildRunRowApi; ind
           <p className="font-semibold text-foreground">
             {step.step_label ?? step.project_name}
           </p>
-          <p className="truncate font-mono text-[11px] text-muted-foreground">
-            {step.project_path}
-          </p>
+          {step.project_path && (
+            <p className="truncate font-mono text-[11px] text-muted-foreground">
+              {step.project_path}
+            </p>
+          )}
         </div>
         <StatusBadge status={step.status} />
         {step.duration_ms != null && (
@@ -311,22 +363,45 @@ function CompletedStepDetail({ step, index, total }: { step: BuildRunRowApi; ind
             {formatDuration(step.duration_ms)}
           </div>
         )}
-        <BranchBadge branch={step.branch} />
+        {step.branch && <BranchBadge branch={step.branch} />}
       </div>
 
-      {/* Metadata strip */}
-      <div className="grid shrink-0 gap-2 border-t border-border/60 bg-secondary/25 px-5 py-3">
-        <DetailRow label="Command" value={step.command} mono />
-        {step.exit_code != null && <DetailRow label="Exit code" value={String(step.exit_code)} />}
-        {step.java_home && <DetailRow label="JAVA_HOME" value={step.java_home} mono />}
-        {step.finished_at && (
-          <DetailRow label="Finished" value={new Date(step.finished_at).toLocaleString()} />
-        )}
-      </div>
+      {/* Metadata strip — only once the DB record exists */}
+      {!isSynthetic && (
+        <div className="grid shrink-0 gap-2 border-t border-border/60 bg-secondary/25 px-5 py-3">
+          <DetailRow label="Command" value={step.command} mono />
+          {step.exit_code != null && <DetailRow label="Exit code" value={String(step.exit_code)} />}
+          {step.java_home && <DetailRow label="JAVA_HOME" value={step.java_home} mono />}
+          {step.finished_at && (
+            <DetailRow label="Finished" value={new Date(step.finished_at).toLocaleString()} />
+          )}
+        </div>
+      )}
 
       {/* Log output */}
       <div className="flex min-h-0 flex-1 flex-col border-t border-border/60">
-        <StoredLogViewer key={step.id} stepId={step.id} />
+        {isSynthetic && !isLiveRunning ? (
+          <div className="flex h-full flex-1 items-center justify-center">
+            <span className="font-mono text-sm text-muted-foreground">Waiting to start…</span>
+          </div>
+        ) : wasEverLive.current ? (
+          // Step was (or is) live — keep BuildOutput for the lifetime of this StepDetail
+          // instance to avoid the Virtuoso swap/scroll-reset flicker.
+          <BuildOutput
+            events={liveEvents}
+            isRunning={isLiveRunning}
+            embedded
+            onAtBottomChange={onAtBottomChange}
+            scrollToBottomTrigger={scrollToBottomTrigger}
+          />
+        ) : (
+          // Completed step viewed from the completed-builds page (never live in this session).
+          <StoredLogViewer
+            stepId={step.id}
+            onAtBottomChange={onAtBottomChange}
+            startAtBottom={startAtBottom}
+          />
+        )}
       </div>
     </div>
   );
@@ -355,20 +430,22 @@ function BuildDetailPage() {
   // Elapsed timer for live view
   const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, Date.now() - startMs));
 
-  // null = auto-follow the current running step; number = user pinned to a specific step
+  // Explicitly pinned step index, or null to auto-follow the current running step.
   const [pinnedStep, setPinnedStep] = useState<number | null>(null);
-  // Tracks the scroll position of the live log — gates both within-step scroll and step switching
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  // Remembers the last displayed step so we can freeze on it when scrolled up
-  const lastShownStepRef = useRef<number | null>(null);
-  // Tracks the previous effectiveStepIndex to detect transitions
-  const prevEffectiveStepRef = useRef<number | null>(null);
-  // Suppresses false readings from Virtuoso's data-update layout pass after a step switch
-  const suppressAtBottomFalseUntilRef = useRef(0);
-  // Increment to imperatively scroll BuildOutput to the bottom
+  // Real-time scroll position of the currently displayed step's log.
+  // When at the bottom, auto-switch is active; when scrolled up, it pauses.
+  const [atBottom, setAtBottom] = useState(true);
+  // Increment to imperatively scroll the displayed log to the bottom.
   const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0);
-  // Selected step for completed view (defaults to first step)
-  const [selectedDbStep, setSelectedDbStep] = useState(0);
+  // Stable ref for reading pinnedStep inside effects (avoids listing it as a dep).
+  const pinnedStepRef = useRef<number | null>(null);
+  pinnedStepRef.current = pinnedStep;
+  // Last step shown in auto-follow mode — frozen when scrolled up so we don't jump.
+  const lastAutoStepRef = useRef(0);
+  // When true, onAtBottomChange(false) from Virtuoso is ignored. Activated briefly after
+  // a programmatic scroll-to-bottom to prevent Virtuoso's asynchronous layout callbacks
+  // from racing with the setAtBottom(true) that initiated the scroll.
+  const suppressAtBottomFalseRef = useRef(false);
 
   // Filter build events from the live stream.
   // `events` is mutated in-place by the LRU cache (same reference, new items pushed in).
@@ -408,35 +485,18 @@ function BuildDetailPage() {
     return last;
   }, [buildEvents]);
 
-  // Determine which step to display:
-  //   pinned   → always that step
-  //   at bottom → live-track the current running step (auto-follow)
-  //   scrolled up → freeze on lastShownStep (don't jump to next step while reading)
-  const effectiveStepIndex = (() => {
-    let result: number | null;
-    if (pinnedStep !== null) {
-      result = pinnedStep;
-    } else if (isAtBottom) {
-      result = currentRunningStepIndex;
-    } else {
-      result = lastShownStepRef.current; // frozen
+  // Derive which step index to display:
+  //   pinned       → always that step
+  //   at bottom    → track currentRunningStepIndex (update ref so freeze has the latest)
+  //   scrolled up  → freeze on lastAutoStepRef (don't switch while user is reading)
+  const selectedStep = (() => {
+    if (pinnedStep !== null) return pinnedStep;
+    if (currentRunningStepIndex !== null && atBottom) {
+      lastAutoStepRef.current = currentRunningStepIndex;
+      return currentRunningStepIndex;
     }
-    // Keep the ref current so freeze always has the latest "last seen" value
-    lastShownStepRef.current = result;
-    return result;
+    return lastAutoStepRef.current;
   })();
-
-  // When auto-following and the effective step changes, Virtuoso fires atBottomStateChange(false)
-  // briefly during the data update. Suppress it so auto-follow isn't broken by layout jitter.
-  if (prevEffectiveStepRef.current !== effectiveStepIndex && isAtBottom) {
-    suppressAtBottomFalseUntilRef.current = Date.now() + 300;
-  }
-  prevEffectiveStepRef.current = effectiveStepIndex;
-
-  // Events passed to BuildOutput
-  const liveLogEvents = effectiveStepIndex !== null
-    ? (stepOutputsMap.get(effectiveStepIndex) ?? [])
-    : buildEvents;
 
   // DB steps for this job, sorted by step_index
   const dbSteps = useMemo(
@@ -453,8 +513,9 @@ function BuildDetailPage() {
   const isCompletedInDb = dbSteps.length > 0 && !isRunningInDb;
 
   const viewMode =
-    hasLiveEvents          ? 'live' :
-    isCompletedInDb        ? 'completed' :
+    hasLiveEvents && !done ? 'live' :       // actively streaming
+    isCompletedInDb        ? 'completed' :  // DB confirms done (covers recently-finished sessions too)
+    hasLiveEvents          ? 'live' :       // done=true but DB refetch not yet settled
     isRunningInDb          ? 'live' :
     allBuilds.isLoading    ? 'loading' : 'not_found';
 
@@ -506,7 +567,6 @@ function BuildDetailPage() {
     return first?.type === 'step:start' ? first.step.label : null;
   }, [livePipelineName, buildEvents]);
 
-  const liveShowStepTimeline = Boolean(livePipelineName) || stepLabels.length > 1;
   const finalDurationMs =
     runDoneEvent?.type === 'run:done' ? runDoneEvent.result.durationMs : elapsedMs;
   const liveStoppedAt =
@@ -518,7 +578,6 @@ function BuildDetailPage() {
   const dbStatus       = deriveDbStatus(dbSteps);
   const dbTotalMs      = dbSteps.reduce((sum, s) => sum + (s.duration_ms ?? 0), 0);
   const dbStartedAt    = dbSteps[0]?.started_at;
-  const dbShowStepTimeline = dbSteps.length > 1;
   const dbStoppedAtIndex   = dbSteps.findIndex((s) => s.status === 'failed');
 
   // ── Shared ────────────────────────────────────────────────────────────────
@@ -527,54 +586,77 @@ function BuildDetailPage() {
   const overallStatus  = viewMode === 'live' ? liveDisplayStatus : dbStatus;
   const isLiveRunning  = viewMode === 'live' && !done;
 
-  // Has the effective step fired step:start yet? (false = pending, show "waiting" state)
-  const isSelectedStepStarted =
-    effectiveStepIndex === null ||
-    buildEvents.some((e) => e.type === 'step:start' && e.index === effectiveStepIndex);
+  // ── Unified steps ─────────────────────────────────────────────────────────
+  // For live mode: fill in synthetic pending placeholders for pipeline steps not yet started.
+  // For completed mode: just use DB steps directly.
+  const unifiedSteps = useMemo<BuildRunRowApi[]>(() => {
+    if (viewMode !== 'live') return dbSteps;
+    const total = Math.max(stepLabels.length, dbSteps.length);
+    return Array.from({ length: total }, (_, i) => {
+      if (i < dbSteps.length) return dbSteps[i]!;
+      return {
+        id: -(i + 1),
+        job_id: jobId,
+        step_index: i,
+        step_label: stepLabels[i] ?? `Step ${i + 1}`,
+        project_name: '',
+        project_path: '',
+        build_system: '',
+        package_manager: null,
+        execution_mode: null,
+        status: 'pending',
+        command: '',
+        branch: null,
+        started_at: '',
+        finished_at: null,
+        duration_ms: null,
+        exit_code: null,
+        java_home: null,
+        pipeline_name: livePipelineName ?? null,
+      } as BuildRunRowApi;
+    });
+  }, [viewMode, dbSteps, stepLabels, jobId, livePipelineName]);
 
-  // Is the effective step actively running? (started but no step:done yet)
+  const showStepTimeline  = unifiedSteps.length > 1;
+  const selectedUnifiedStep = unifiedSteps[selectedStep] ?? unifiedSteps[0];
+  const selectedStepIdx   = selectedUnifiedStep?.step_index ?? selectedStep;
+  // Output events for the selected step from the live stream
+  const selectedStepLiveEvents = stepOutputsMap.get(selectedStepIdx) ?? [];
+  // Is the selected step actively streaming? (started but not yet done, and build is live)
+  // We do NOT gate on id > 0 here: during the brief window between step:start firing and
+  // the DB refetch completing, the step may still be synthetic — we still want to stream.
   const isSelectedStepRunning =
-    isLiveRunning &&
-    isSelectedStepStarted &&
-    (effectiveStepIndex === null ||
-      !buildEvents.some((e) => e.type === 'step:done' && e.index === effectiveStepIndex));
+    viewMode === 'live' && !done &&
+    buildEvents.some((e) => e.type === 'step:start' && e.index === selectedStepIdx) &&
+    !buildEvents.some((e) => e.type === 'step:done' && e.index === selectedStepIdx);
 
-  // Pill click: pin to a step or return to auto-follow.
-  // StepTimeline sends null when the currently-selected pill is clicked (deselect).
-  function handleStepPillClick(index: number | null) {
-    if (index === null) {
-      // Clicked the already-selected pill → unpin and scroll to bottom
-      lastShownStepRef.current = currentRunningStepIndex;
+  function handleUnifiedStepSelect(index: number) {
+    const runningIdx = currentRunningStepIndex;
+
+    // Clicking the currently running step → unpin, resume auto-follow + scroll to bottom.
+    if (runningIdx !== null && index === runningIdx) {
       setPinnedStep(null);
-      setIsAtBottom(true);
+      setAtBottom(true);
+      lastAutoStepRef.current = runningIdx;
       setScrollToBottomTrigger((v) => v + 1);
+      // Suppress Virtuoso's asynchronous atBottom=false callbacks during scroll.
+      suppressAtBottomFalseRef.current = true;
+      setTimeout(() => { suppressAtBottomFalseRef.current = false; }, 500);
       return;
     }
-    if (pinnedStep === null) {
-      if (index !== effectiveStepIndex) {
-        // Pin to a different step
-        setPinnedStep(index);
-      } else {
-        // Clicking the currently displayed step while auto-following → jump to bottom
-        setIsAtBottom(true);
-        setScrollToBottomTrigger((v) => v + 1);
-      }
-    } else {
-      if (index === currentRunningStepIndex || index === pinnedStep) {
-        // Back to auto-follow — snap ref to current step so we land there, not on a stale step
-        lastShownStepRef.current = currentRunningStepIndex;
-        setPinnedStep(null);
-        setIsAtBottom(true);
-        setScrollToBottomTrigger((v) => v + 1);
-      } else {
-        setPinnedStep(index);
-      }
-    }
+
+    // Any other step: pin to it.
+    // Past step in a live build → start at the top (user wants to read from the beginning).
+    // Future step or step in a completed build → start at the bottom (most recent output).
+    const isPast = runningIdx !== null && index < runningIdx;
+    setPinnedStep(index);
+    setAtBottom(!isPast); // false for past (start at top), true for future/completed
   }
 
-  const handleBuildAtBottomChange = useCallback((bottom: boolean) => {
-    if (!bottom && Date.now() < suppressAtBottomFalseUntilRef.current) return;
-    setIsAtBottom(bottom);
+  // Propagated from the displayed step's log — pauses/resumes auto-switch.
+  const handleAtBottomChange = useCallback((bottom: boolean) => {
+    if (!bottom && suppressAtBottomFalseRef.current) return;
+    setAtBottom(bottom);
   }, []);
 
   const headerBorderClass =
@@ -589,10 +671,34 @@ function BuildDetailPage() {
   // must be reset manually when jobId changes.
   useEffect(() => {
     setPinnedStep(null);
-    setIsAtBottom(true);
-    lastShownStepRef.current = null;
-    setSelectedDbStep(0);
-  }, [jobId]);
+    setAtBottom(true);
+    setScrollToBottomTrigger(0);
+    lastAutoStepRef.current = 0;
+    // Immediately fetch fresh DB rows for the new job.
+    void queryClient.invalidateQueries({ queryKey: ['builds'] });
+  }, [jobId, queryClient]);
+
+  // Re-fetch builds whenever a new step starts so the DB row for that step lands in
+  // dbSteps quickly. Without this, allBuilds stays on its stale cache and all steps
+  // appear as synthetic (pending) even while actively streaming.
+  // Also: if the user had pinned to a future step that just started, unpin and auto-follow.
+  useEffect(() => {
+    if (currentRunningStepIndex === null) return;
+    // Only invalidate the runs-list query, NOT the per-step log queries.
+    // Invalidating ['builds'] broadly would also bust ['builds', stepId, 'logs'] queries
+    // (which have staleTime:Infinity), forcing StoredLogViewer to refetch and causing a
+    // visible Virtuoso update while the user is reading a past step.
+    void queryClient.invalidateQueries({ queryKey: ['builds', { limit: 200 }] });
+    if (pinnedStepRef.current === currentRunningStepIndex) {
+      // Requirement 5: the awaited future step just started → unpin and auto-follow.
+      setPinnedStep(null);
+      setAtBottom(true);
+      lastAutoStepRef.current = currentRunningStepIndex;
+      setScrollToBottomTrigger((v) => v + 1);
+      suppressAtBottomFalseRef.current = true;
+      setTimeout(() => { suppressAtBottomFalseRef.current = false; }, 500);
+    }
+  }, [currentRunningStepIndex, queryClient]);
 
   useEffect(() => {
     if (done) return;
@@ -702,7 +808,6 @@ function BuildDetailPage() {
           </p>
         </div>
 
-
         {isLiveRunning ? (
           <Badge variant="default">
             <Loader2 size={11} className="animate-spin" />
@@ -802,59 +907,32 @@ function BuildDetailPage() {
       )}
 
       {/* ── Step timeline ─────────────────────────────────────────────────── */}
-      {viewMode === 'live' && liveShowStepTimeline && (
-        <div className="glass-card rounded-[24px] border border-border px-5 py-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Activity size={14} className="text-primary" />
-            <p className="text-sm font-semibold text-foreground">Pipeline steps</p>
-          </div>
-          <StepTimeline
-            events={buildEvents}
-            stepLabels={stepLabels}
-            selectedIndex={effectiveStepIndex}
-            onSelect={handleStepPillClick}
-          />
-        </div>
-      )}
-
-      {viewMode === 'completed' && dbShowStepTimeline && (
+      {showStepTimeline && (
         <div className="glass-card shrink-0 rounded-[24px] border border-border px-5 py-4">
           <div className="mb-4 flex items-center gap-2">
             <Activity size={14} className="text-primary" />
             <p className="text-sm font-semibold text-foreground">Pipeline steps</p>
           </div>
           <DbStepTimeline
-            steps={dbSteps}
-            selectedIndex={selectedDbStep}
-            onSelect={setSelectedDbStep}
+            steps={unifiedSteps}
+            selectedIndex={selectedStep}
+            onSelect={handleUnifiedStepSelect}
           />
         </div>
       )}
 
-      {/* ── Log / output area ─────────────────────────────────────────────── */}
-      {viewMode === 'live' && (
-        <div className="min-h-0 flex-1">
-          {effectiveStepIndex !== null && !isSelectedStepStarted ? (
-            <div className="glass-card flex h-full min-h-0 flex-1 items-center justify-center rounded-[24px] border border-border">
-              <span className="font-mono text-sm text-muted-foreground">Waiting to start…</span>
-            </div>
-          ) : (
-            <BuildOutput
-              events={liveLogEvents}
-              isRunning={isSelectedStepRunning}
-              onAtBottomChange={handleBuildAtBottomChange}
-              scrollToBottomTrigger={scrollToBottomTrigger}
-            />
-          )}
-        </div>
-      )}
-
-      {viewMode === 'completed' && dbSteps.length > 0 && (
-        <CompletedStepDetail
-          key={dbSteps[selectedDbStep]?.id ?? selectedDbStep}
-          step={dbSteps[selectedDbStep] ?? dbSteps[0]!}
-          index={selectedDbStep}
-          total={dbSteps.length}
+      {/* ── Step detail ───────────────────────────────────────────────────── */}
+      {selectedUnifiedStep != null && (
+        <StepDetail
+          key={selectedUnifiedStep.id}
+          step={selectedUnifiedStep}
+          index={selectedStep}
+          total={unifiedSteps.length}
+          liveEvents={selectedStepLiveEvents}
+          isLiveRunning={isSelectedStepRunning}
+          onAtBottomChange={handleAtBottomChange}
+          startAtBottom={atBottom}
+          scrollToBottomTrigger={scrollToBottomTrigger}
         />
       )}
     </div>

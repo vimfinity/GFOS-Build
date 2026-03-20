@@ -40,6 +40,11 @@ export interface BuildOutputProps {
   onAtBottomChange?: (isAtBottom: boolean) => void;
   /** Increment this value to imperatively scroll to the bottom. */
   scrollToBottomTrigger?: number;
+  /**
+   * When true, the outer card container (glass-card, border, rounded corners) is
+   * omitted so the component can be embedded inside a parent card without nesting.
+   */
+  embedded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,6 +57,7 @@ export const BuildOutput = memo(function BuildOutput({
   showLineNumbers = false,
   onAtBottomChange,
   scrollToBottomTrigger,
+  embedded = false,
 }: BuildOutputProps) {
   const lines = useMemo(() => extractLines(events), [events]);
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
@@ -85,10 +91,16 @@ export const BuildOutput = memo(function BuildOutput({
     }
   }, []); // mount-only: linesLengthRef is a stable ref — current value is always up-to-date
 
+  // Cancel any pending debounce timer on unmount so it can't fire onAtBottomChange(false)
+  // after this component has been replaced (e.g. when the user clicks to a different step).
+  useEffect(() => () => { if (atBottomTimer.current) clearTimeout(atBottomTimer.current); }, []);
+
   // Imperative scroll-to-bottom triggered by the parent (e.g. clicking the running step pill).
+  // Uses 'auto' (instant) instead of 'smooth' because during live streaming, new items arriving
+  // cause Virtuoso to recalculate layout and interrupt smooth scroll animations.
   useEffect(() => {
     if (!scrollToBottomTrigger) return;
-    virtuosoRef.current?.scrollToIndex({ index: linesLengthRef.current - 1, align: 'end', behavior: 'smooth' });
+    virtuosoRef.current?.scrollToIndex({ index: linesLengthRef.current - 1, align: 'end', behavior: 'auto' });
   }, [scrollToBottomTrigger]); // linesLengthRef is stable; current value read at trigger time
 
   const scrollToBottom = useCallback(() => {
@@ -110,7 +122,10 @@ export const BuildOutput = memo(function BuildOutput({
   // ── Empty state ──────────────────────────────────────────────────────────
   if (lines.length === 0) {
     return (
-      <div className="glass-card flex h-full min-h-0 flex-1 items-center justify-center rounded-[24px] border border-border">
+      <div className={cn(
+        'flex h-full min-h-0 flex-1 items-center justify-center',
+        !embedded && 'glass-card rounded-[24px] border border-border',
+      )}>
         <span className="font-mono text-sm text-muted-foreground">
           {isRunning ? 'Starting build...' : 'No output'}
         </span>
@@ -120,7 +135,10 @@ export const BuildOutput = memo(function BuildOutput({
 
   // ── Output view ──────────────────────────────────────────────────────────
   return (
-    <div className="glass-card relative h-full min-h-0 flex-1 overflow-hidden rounded-[24px] border border-border">
+    <div className={cn(
+      'relative h-full min-h-0 flex-1 overflow-hidden',
+      !embedded && 'glass-card rounded-[24px] border border-border',
+    )}>
       {/* ── Toolbar (top-right overlay) ─────────────────────────────────── */}
       <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
         <button
