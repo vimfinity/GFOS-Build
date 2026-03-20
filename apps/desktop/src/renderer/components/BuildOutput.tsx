@@ -1,9 +1,8 @@
-import { memo, useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { memo, useMemo, useRef, useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnsiLine } from '@/lib/ansi';
 import type { BuildEvent } from '@gfos-build/contracts';
 import { ChevronsDown, Copy, Check } from 'lucide-react';
-import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,6 +24,16 @@ function extractLines(events: BuildEvent[]): OutputLine[] {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const AT_BOTTOM_THRESHOLD = 32; // px from bottom to count as "at bottom"
+
+function isScrolledToBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_THRESHOLD;
+}
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -36,7 +45,7 @@ export interface BuildOutputProps {
    * line.  Defaults to false.
    */
   showLineNumbers?: boolean;
-  /** Called (after debounce) when the scroll position reaches or leaves the bottom. */
+  /** Called when the scroll position reaches or leaves the bottom. */
   onAtBottomChange?: (isAtBottom: boolean) => void;
   /** Increment this value to imperatively scroll to the bottom. */
   scrollToBottomTrigger?: number;
@@ -45,6 +54,10 @@ export interface BuildOutputProps {
    * omitted so the component can be embedded inside a parent card without nesting.
    */
   embedded?: boolean;
+  /** When false the log starts at the top instead of auto-scrolling to the bottom. */
+  startAtBottom?: boolean;
+  /** Current step index — lets the component detect step changes without remounting. */
+  activeStepIndex?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,59 +71,87 @@ export const BuildOutput = memo(function BuildOutput({
   onAtBottomChange,
   scrollToBottomTrigger,
   embedded = false,
+  startAtBottom = true,
+  activeStepIndex,
 }: BuildOutputProps) {
   const lines = useMemo(() => extractLines(events), [events]);
-  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
-  // Keep a ref to the latest line count so mount/trigger effects can read it
-  // without declaring it as a dependency (ref identity is stable).
-  const linesLengthRef = useRef(lines.length);
-  linesLengthRef.current = lines.length;
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [copied, setCopied] = useState(false);
-  const atBottomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track whether we should auto-scroll on new content.
+  const autoScrollRef = useRef(true);
+  // Timestamp of the last programmatic scroll — used to ignore spurious scroll
+  // events fired by the browser before layout has fully settled.
+  const lastProgrammaticScrollRef = useRef(0);
 
-  // Debounce atBottom=false to prevent the scroll button from flickering
-  // during Virtuoso's internal layout recalculations.
-  const handleAtBottomChange = useCallback((isAtBottom: boolean) => {
-    if (atBottomTimer.current) clearTimeout(atBottomTimer.current);
-    if (isAtBottom) {
+  // Scroll to the very bottom of the container.
+  const scrollToEnd = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const el = containerRef.current;
+    if (!el) return;
+    lastProgrammaticScrollRef.current = Date.now();
+    if (behavior === 'smooth') {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, []);
+
+  // On mount, jump to the bottom before the browser paints.
+  useLayoutEffect(() => {
+    autoScrollRef.current = true;
+    scrollToEnd('auto');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Detect step changes (without remounting) and scroll to the right position
+  // before the browser paints — eliminates the visible flash.
+  const prevStepRef = useRef(activeStepIndex);
+  useLayoutEffect(() => {
+    if (prevStepRef.current === activeStepIndex) return;
+    prevStepRef.current = activeStepIndex;
+    setCopied(false);
+    lastProgrammaticScrollRef.current = Date.now();
+    if (startAtBottom) {
+      autoScrollRef.current = true;
       setAtBottom(true);
       onAtBottomChange?.(true);
+      scrollToEnd('auto');
     } else {
-      atBottomTimer.current = setTimeout(() => {
-        setAtBottom(false);
-        onAtBottomChange?.(false);
-      }, 120);
+      autoScrollRef.current = false;
+      const el = containerRef.current;
+      if (el) el.scrollTop = 0;
+      setAtBottom(false);
+      onAtBottomChange?.(false);
     }
-  }, [onAtBottomChange]);
-
-  // Scroll to the end on mount so existing content starts at the bottom.
-  useEffect(() => {
-    if (linesLengthRef.current > 0) {
-      virtuosoRef.current?.scrollToIndex({ index: linesLengthRef.current - 1, align: 'end', behavior: 'auto' });
-    }
-  }, []); // mount-only: linesLengthRef is a stable ref — current value is always up-to-date
-
-  // Cancel any pending debounce timer on unmount so it can't fire onAtBottomChange(false)
-  // after this component has been replaced (e.g. when the user clicks to a different step).
-  useEffect(() => () => { if (atBottomTimer.current) clearTimeout(atBottomTimer.current); }, []);
+  }, [activeStepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Imperative scroll-to-bottom triggered by the parent (e.g. clicking the running step pill).
-  // Uses 'auto' (instant) instead of 'smooth' because during live streaming, new items arriving
-  // cause Virtuoso to recalculate layout and interrupt smooth scroll animations.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!scrollToBottomTrigger) return;
-    virtuosoRef.current?.scrollToIndex({ index: linesLengthRef.current - 1, align: 'end', behavior: 'auto' });
-  }, [scrollToBottomTrigger]); // linesLengthRef is stable; current value read at trigger time
+    autoScrollRef.current = true;
+    setAtBottom(true);
+    onAtBottomChange?.(true);
+    scrollToEnd('auto');
+  }, [scrollToBottomTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const scrollToBottom = useCallback(() => {
-    if (lines.length === 0) return;
-    virtuosoRef.current?.scrollToIndex({
-      index: lines.length - 1,
-      align: 'end',
-      behavior: 'smooth',
-    });
-  }, [lines.length]);
+  // Auto-scroll when new lines arrive and we're following.
+  useEffect(() => {
+    if (autoScrollRef.current && lines.length > 0) {
+      scrollToEnd('auto');
+    }
+  }, [lines.length, scrollToEnd]);
+
+  // Track scroll position to pause/resume auto-follow.
+  const handleScroll = useCallback(() => {
+    // Ignore scroll events shortly after a programmatic scroll — the browser
+    // may fire intermediate events before layout settles.
+    if (Date.now() - lastProgrammaticScrollRef.current < 80) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const bottom = isScrolledToBottom(el);
+    autoScrollRef.current = bottom;
+    setAtBottom(bottom);
+    onAtBottomChange?.(bottom);
+  }, [onAtBottomChange]);
 
   async function handleCopyAll() {
     const text = lines.map((l) => l.line).join('\n');
@@ -166,31 +207,28 @@ export const BuildOutput = memo(function BuildOutput({
         </button>
       </div>
 
-      {/* ── Virtualized line list ─────────────────────────────────────────── */}
-      <Virtuoso
-        ref={virtuosoRef}
-        className="h-full min-h-0"
-        data={lines}
-        atBottomStateChange={handleAtBottomChange}
-        followOutput={isRunning ? 'auto' : false}
-        increaseViewportBy={{ top: 400, bottom: 800 }}
-        components={{
-          Header: () => <div className="h-10" aria-hidden="true" />,
-          Footer: () => <div className="h-10" aria-hidden="true" />,
-        }}
-        itemContent={(index, item) => (
+      {/* ── Log lines ─────────────────────────────────────────────────────── */}
+      <div
+        ref={containerRef}
+        className="h-full min-h-0 overflow-y-auto"
+        onScroll={handleScroll}
+      >
+        <div className="h-2" aria-hidden="true" />
+        {lines.map((item, index) => (
           <OutputLineRow
+            key={index}
             index={index}
             item={item}
             showLineNumbers={showLineNumbers}
           />
-        )}
-      />
+        ))}
+        <div className="h-10" aria-hidden="true" />
+      </div>
 
       {/* ── Scroll-to-bottom button ───────────────────────────────────────── */}
       {!atBottom && (
         <button
-          onClick={scrollToBottom}
+          onClick={() => scrollToEnd('smooth')}
           className={cn(
             'absolute bottom-3 right-3 flex items-center gap-1.5',
             'px-3 py-1.5 rounded-full text-xs font-medium transition-all',

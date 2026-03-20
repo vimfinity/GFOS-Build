@@ -31,7 +31,6 @@ import {
   Check,
 } from 'lucide-react';
 import type { BuildEvent, BuildRunRowApi, BuildLogEntry } from '@gfos-build/contracts';
-import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 
 export const Route = createFileRoute('/builds/$jobId')({
   component: BuildDetailPage,
@@ -145,13 +144,19 @@ function LogLine({ entry }: { entry: BuildLogEntry }) {
 // Stored log viewer — same look/feel as BuildOutput but driven by useBuildLogs
 // ---------------------------------------------------------------------------
 
+const AT_BOTTOM_THRESHOLD = 32;
+
+function isScrolledToBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= AT_BOTTOM_THRESHOLD;
+}
+
 function StoredLogViewer({
   stepId,
   onAtBottomChange,
   startAtBottom = true,
 }: {
   stepId: number;
-  /** Called (with 120 ms debounce) when the scroll position reaches or leaves the bottom. */
+  /** Called when the scroll position reaches or leaves the bottom. */
   onAtBottomChange?: (atBottom: boolean) => void;
   /** When false the log starts at the top instead of the bottom (e.g. past step selected). */
   startAtBottom?: boolean;
@@ -165,41 +170,44 @@ function StoredLogViewer({
     fetchNextPage,
   } = useBuildLogs(stepId);
   const logs = logsData?.pages.flatMap((p) => p.entries) ?? [];
-  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
-  // Stable ref so mount effect can read the latest count without declaring it as a dep.
-  const logsLengthRef = useRef(logs.length);
-  logsLengthRef.current = logs.length;
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(startAtBottom);
   const [copied, setCopied] = useState(false);
-  const atBottomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleAtBottomChange = useCallback((isAtBottom: boolean) => {
-    if (atBottomTimer.current) clearTimeout(atBottomTimer.current);
-    if (isAtBottom) {
-      setAtBottom(true);
-      onAtBottomChange?.(true);
+  // Scroll to the right position once per step (mount or stepId change).
+  // Without remounting (key={jobId}), the container stays alive across step
+  // switches — we need to reset scroll explicitly when the step changes.
+  const startAtBottomRef = useRef(startAtBottom);
+  startAtBottomRef.current = startAtBottom;
+  const scrolledForStepRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (logs.length === 0) return;
+    if (scrolledForStepRef.current === stepId) return;
+    scrolledForStepRef.current = stepId;
+    setCopied(false);
+    const el = containerRef.current;
+    if (!el) return;
+    const shouldStartAtBottom = startAtBottomRef.current;
+    if (shouldStartAtBottom) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
     } else {
-      atBottomTimer.current = setTimeout(() => {
-        setAtBottom(false);
-        onAtBottomChange?.(false);
-      }, 120);
+      el.scrollTo({ top: 0, behavior: 'auto' });
     }
+    setAtBottom(shouldStartAtBottom);
+    onAtBottomChange?.(shouldStartAtBottom);
+  }, [stepId, logs.length, onAtBottomChange]);
+
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const bottom = isScrolledToBottom(el);
+    setAtBottom(bottom);
+    onAtBottomChange?.(bottom);
   }, [onAtBottomChange]);
 
-  // Scroll to the bottom on mount — skipped when the parent asks to start at the top.
-  useEffect(() => {
-    if (startAtBottom && logsLengthRef.current > 0) {
-      virtuosoRef.current?.scrollToIndex({ index: logsLengthRef.current - 1, align: 'end', behavior: 'auto' });
-    }
-  }, []); // mount-only: startAtBottom and logsLengthRef are both stable on the first render
-
-  // Cancel any pending debounce timer on unmount so it can't fire onAtBottomChange(false)
-  // after this component has been replaced (e.g. when the user clicks to a different step).
-  useEffect(() => () => { if (atBottomTimer.current) clearTimeout(atBottomTimer.current); }, []);
-
   const scrollToBottom = useCallback(() => {
-    virtuosoRef.current?.scrollToIndex({ index: logs.length - 1, align: 'end', behavior: 'smooth' });
-  }, [logs.length]);
+    containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: 'smooth' });
+  }, []);
 
   async function handleCopyAll() {
     const text = logs.map((l) => l.line).join('\n');
@@ -268,17 +276,15 @@ function StoredLogViewer({
         </div>
       )}
 
-      <Virtuoso
-        ref={virtuosoRef}
-        className="min-h-0 flex-1"
-        data={logs}
-        atBottomStateChange={handleAtBottomChange}
-        components={{
-          Header: () => <div className="h-10" aria-hidden="true" />,
-          Footer: () => <div className="h-10" aria-hidden="true" />,
-        }}
-        itemContent={(_index, entry) => <LogLine entry={entry} />}
-      />
+      <div
+        ref={containerRef}
+        className="min-h-0 flex-1 overflow-y-auto"
+        onScroll={handleScroll}
+      >
+        <div className="h-2" aria-hidden="true" />
+        {logs.map((entry, i) => <LogLine key={i} entry={entry} />)}
+        <div className="h-2" aria-hidden="true" />
+      </div>
 
       {!atBottom && (
         <button
@@ -300,9 +306,12 @@ function StoredLogViewer({
 
 // ---------------------------------------------------------------------------
 // Step detail panel — works for both running and completed steps.
-// Steps that were ever live during this component's lifetime keep using
-// BuildOutput (avoids Virtuoso swap/scroll-reset flicker). StoredLogViewer
-// is only used for steps first viewed in already-completed state.
+// NOT remounted on step changes (key={jobId}) so the DOM stays alive and
+// there is no visible flash between steps.  Internal state resets are
+// handled by tracking the activeStepIndex.  Steps that were ever live
+// during this component's lifetime keep using BuildOutput (avoids the
+// BuildOutput→StoredLogViewer swap).  StoredLogViewer is only used for
+// steps first viewed in already-completed state.
 // ---------------------------------------------------------------------------
 
 function StepDetail({
@@ -330,12 +339,13 @@ function StepDetail({
   // Synthetic steps (id < 0) are pending pipeline steps not yet recorded in the DB.
   const isSynthetic = step.id < 0;
 
-  // Track whether this step was ever live during this component's lifetime.
-  // Once live, we keep showing BuildOutput permanently to avoid the visible
-  // BuildOutput→StoredLogViewer swap (different Virtuoso instance, scroll reset = flicker).
-  // StoredLogViewer is only used when StepDetail mounts for an already-completed step.
-  const wasEverLive = useRef(isLiveRunning);
-  if (isLiveRunning) wasEverLive.current = true;
+  // Track which step indices were ever live during this component's lifetime.
+  // Once a step has been live we keep showing BuildOutput for it (even after
+  // it finishes) so that switching back to it reuses the same component type
+  // and React can update the DOM in-place (no unmount → mount flash).
+  const everLiveSteps = useRef(new Set<number>());
+  if (isLiveRunning) everLiveSteps.current.add(index);
+  const showBuildOutput = isLiveRunning || everLiveSteps.current.has(index);
 
   return (
     <div className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-border">
@@ -356,27 +366,32 @@ function StepDetail({
             </p>
           )}
         </div>
-        <StatusBadge status={step.status} />
+        {step.branch && <BranchBadge branch={step.branch} />}
         {step.duration_ms != null && (
           <div className="pill-control rounded-full bg-secondary font-mono text-muted-foreground">
             <Clock3 size={11} />
             {formatDuration(step.duration_ms)}
           </div>
         )}
-        {step.branch && <BranchBadge branch={step.branch} />}
+        <StatusBadge status={step.status} />
       </div>
 
-      {/* Metadata strip — only once the DB record exists */}
-      {!isSynthetic && (
-        <div className="grid shrink-0 gap-2 border-t border-border/60 bg-secondary/25 px-5 py-3">
-          <DetailRow label="Command" value={step.command} mono />
-          {step.exit_code != null && <DetailRow label="Exit code" value={String(step.exit_code)} />}
-          {step.java_home && <DetailRow label="JAVA_HOME" value={step.java_home} mono />}
-          {step.finished_at && (
-            <DetailRow label="Finished" value={new Date(step.finished_at).toLocaleString()} />
-          )}
+      {/* Metadata strip — always in DOM, collapses when synthetic and
+           expands smoothly once the DB record arrives.  Only stable fields
+           are shown (command + java_home) so the height never shifts
+           mid-build.  Exit code is conveyed by the status badge; finished
+           time = started + duration (both in the header). */}
+      <div className={cn(
+        'grid shrink-0 transition-[grid-template-rows] duration-200 ease-out',
+        !isSynthetic ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+      )}>
+        <div className="min-h-0 overflow-hidden">
+          <div className="grid gap-2 border-t border-border/60 bg-secondary/25 px-5 py-3">
+            <DetailRow label="Command" value={step.command} mono />
+            {step.java_home && <DetailRow label="JAVA_HOME" value={step.java_home} mono />}
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Log output */}
       <div className="flex min-h-0 flex-1 flex-col border-t border-border/60">
@@ -384,15 +399,17 @@ function StepDetail({
           <div className="flex h-full flex-1 items-center justify-center">
             <span className="font-mono text-sm text-muted-foreground">Waiting to start…</span>
           </div>
-        ) : wasEverLive.current ? (
-          // Step was (or is) live — keep BuildOutput for the lifetime of this StepDetail
-          // instance to avoid the Virtuoso swap/scroll-reset flicker.
+        ) : showBuildOutput ? (
+          // Step was (or is) live — keep BuildOutput so React can update the
+          // DOM in-place when switching steps (no unmount flash).
           <BuildOutput
             events={liveEvents}
             isRunning={isLiveRunning}
             embedded
             onAtBottomChange={onAtBottomChange}
             scrollToBottomTrigger={scrollToBottomTrigger}
+            startAtBottom={startAtBottom}
+            activeStepIndex={index}
           />
         ) : (
           // Completed step viewed from the completed-builds page (never live in this session).
@@ -442,10 +459,6 @@ function BuildDetailPage() {
   pinnedStepRef.current = pinnedStep;
   // Last step shown in auto-follow mode — frozen when scrolled up so we don't jump.
   const lastAutoStepRef = useRef(0);
-  // When true, onAtBottomChange(false) from Virtuoso is ignored. Activated briefly after
-  // a programmatic scroll-to-bottom to prevent Virtuoso's asynchronous layout callbacks
-  // from racing with the setAtBottom(true) that initiated the scroll.
-  const suppressAtBottomFalseRef = useRef(false);
 
   // Filter build events from the live stream.
   // `events` is mutated in-place by the LRU cache (same reference, new items pushed in).
@@ -579,6 +592,12 @@ function BuildDetailPage() {
   const dbTotalMs      = dbSteps.reduce((sum, s) => sum + (s.duration_ms ?? 0), 0);
   const dbStartedAt    = dbSteps[0]?.started_at;
   const dbStoppedAtIndex   = dbSteps.findIndex((s) => s.status === 'failed');
+  const dbFinishedAt       = (() => {
+    for (let i = dbSteps.length - 1; i >= 0; i--) {
+      if (dbSteps[i]?.finished_at) return dbSteps[i]!.finished_at!;
+    }
+    return null;
+  })();
 
   // ── Shared ────────────────────────────────────────────────────────────────
   const pipelineName   = viewMode === 'live' ? (livePipelineName ?? null) : dbPipelineName;
@@ -639,9 +658,6 @@ function BuildDetailPage() {
       setAtBottom(true);
       lastAutoStepRef.current = runningIdx;
       setScrollToBottomTrigger((v) => v + 1);
-      // Suppress Virtuoso's asynchronous atBottom=false callbacks during scroll.
-      suppressAtBottomFalseRef.current = true;
-      setTimeout(() => { suppressAtBottomFalseRef.current = false; }, 500);
       return;
     }
 
@@ -655,7 +671,6 @@ function BuildDetailPage() {
 
   // Propagated from the displayed step's log — pauses/resumes auto-switch.
   const handleAtBottomChange = useCallback((bottom: boolean) => {
-    if (!bottom && suppressAtBottomFalseRef.current) return;
     setAtBottom(bottom);
   }, []);
 
@@ -687,16 +702,14 @@ function BuildDetailPage() {
     // Only invalidate the runs-list query, NOT the per-step log queries.
     // Invalidating ['builds'] broadly would also bust ['builds', stepId, 'logs'] queries
     // (which have staleTime:Infinity), forcing StoredLogViewer to refetch and causing a
-    // visible Virtuoso update while the user is reading a past step.
+    // visible update while the user is reading a past step.
     void queryClient.invalidateQueries({ queryKey: ['builds', { limit: 200 }] });
     if (pinnedStepRef.current === currentRunningStepIndex) {
-      // Requirement 5: the awaited future step just started → unpin and auto-follow.
+      // The awaited future step just started → unpin and auto-follow.
       setPinnedStep(null);
       setAtBottom(true);
       lastAutoStepRef.current = currentRunningStepIndex;
       setScrollToBottomTrigger((v) => v + 1);
-      suppressAtBottomFalseRef.current = true;
-      setTimeout(() => { suppressAtBottomFalseRef.current = false; }, 500);
     }
   }, [currentRunningStepIndex, queryClient]);
 
@@ -777,113 +790,124 @@ function BuildDetailPage() {
     );
   }
 
+  // ── Header helpers ──────────────────────────────────────────────────────
+  const headerTimestamp = (() => {
+    if (viewMode === 'live') {
+      const started = new Date(startMs).toLocaleString();
+      if (!done) return `Started ${started}`;
+      return `${started} – ${new Date(startMs + finalDurationMs).toLocaleTimeString()}`;
+    }
+    if (dbStartedAt) {
+      const started = new Date(dbStartedAt).toLocaleString();
+      if (!dbFinishedAt) return `Started ${started}`;
+      return `${started} – ${new Date(dbFinishedAt).toLocaleTimeString()}`;
+    }
+    return `Job ${jobId}`;
+  })();
+
+  const headerDuration = viewMode === 'live'
+    ? formatDuration(done ? finalDurationMs : elapsedMs)
+    : formatDuration(dbTotalMs);
+
+  const showRestartButtons =
+    (viewMode === 'live' && done && pipelineName) ||
+    (viewMode === 'completed' && pipelineName);
+
+  const failedStepRestart = (() => {
+    if (viewMode === 'live' && runStatus === 'failed' && liveStoppedAt != null) {
+      return {
+        arg: String(liveStoppedAt + 1),
+        label: stepLabels[liveStoppedAt] ?? `Step ${liveStoppedAt + 1}`,
+      };
+    }
+    if (viewMode === 'completed' && dbStatus === 'failed' && dbStoppedAtIndex >= 0) {
+      return {
+        arg: String(dbStoppedAtIndex + 1),
+        label: dbSteps[dbStoppedAtIndex]?.step_label ?? `Step ${dbStoppedAtIndex + 1}`,
+      };
+    }
+    return null;
+  })();
+
   // ── Main render ───────────────────────────────────────────────────────────
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-5 overflow-hidden">
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className={cn(
-        'glass-card flex flex-wrap items-center gap-3 rounded-[24px] border px-5 py-4',
+        'glass-card rounded-[24px] border px-5 py-4',
         headerBorderClass,
       )}>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => void navigate({ to: '/builds', search: { runId: undefined } })}
-        >
-          <ArrowLeft size={14} />
-          Back
-        </Button>
-
-        <div className="min-w-0 flex-1">
-          <h1 className="page-title truncate text-[1.6rem] font-semibold leading-tight text-foreground">
-            {buildTitle}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {viewMode === 'live'
-              ? `Started ${new Date(startMs).toLocaleString()}`
-              : dbStartedAt
-                ? `Started ${new Date(dbStartedAt).toLocaleString()}`
-                : `Job ${jobId}`}
-          </p>
-        </div>
-
-        {isLiveRunning ? (
-          <Badge variant="default">
-            <Loader2 size={11} className="animate-spin" />
-            Running
-          </Badge>
-        ) : (
-          <StatusBadge status={overallStatus} />
-        )}
-
-        <div className="pill-control rounded-full bg-secondary font-mono text-muted-foreground">
-          <Clock3 size={11} />
-          {viewMode === 'live'
-            ? formatDuration(done ? finalDurationMs : elapsedMs)
-            : formatDuration(dbTotalMs)}
-        </div>
-
-        {isLiveRunning && (
-          <Button variant="destructive" size="sm" onClick={() => void handleCancel()}>
-            <Square size={12} />
-            Cancel
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0"
+            onClick={() => void navigate({ to: '/builds', search: { runId: undefined } })}
+          >
+            <ArrowLeft size={14} />
+            Back
           </Button>
-        )}
 
-        {/* Restart buttons — live (after completion) */}
-        {viewMode === 'live' && done && pipelineName && (
-          <div className="flex items-center gap-2">
-            {runStatus === 'failed' && liveStoppedAt != null && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void handleRestart(String(liveStoppedAt + 1))}
-                disabled={runPipeline.isPending}
-                title={`Restart from "${stepLabels[liveStoppedAt] ?? `Step ${liveStoppedAt + 1}`}"`}
-              >
-                <RotateCcw size={12} />
-                Restart from failed step
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-xl font-semibold leading-tight text-foreground">
+              {buildTitle}
+            </h1>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {headerTimestamp}
+            </p>
+          </div>
+
+          {/* Duration pill — tabular-nums keeps width stable while ticking */}
+          <div className="pill-control shrink-0 rounded-full bg-secondary font-mono tabular-nums text-muted-foreground">
+            <Clock3 size={11} />
+            {headerDuration}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {isLiveRunning ? (
+              <Badge variant="default">
+                <Loader2 size={11} className="animate-spin" />
+                Running
+              </Badge>
+            ) : (
+              <StatusBadge status={overallStatus} />
+            )}
+
+            {isLiveRunning && (
+              <Button variant="destructive" size="sm" onClick={() => void handleCancel()}>
+                <Square size={12} />
+                Cancel
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleRestart()}
-              disabled={runPipeline.isPending}
-            >
-              <Play size={12} />
-              Run again
-            </Button>
-          </div>
-        )}
 
-        {/* Restart buttons — completed view */}
-        {viewMode === 'completed' && pipelineName && (
-          <div className="flex items-center gap-2">
-            {dbStatus === 'failed' && dbStoppedAtIndex >= 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void handleRestart(String(dbStoppedAtIndex + 1))}
-                disabled={runPipeline.isPending}
-                title={`Restart from "${dbSteps[dbStoppedAtIndex]?.step_label ?? `Step ${dbStoppedAtIndex + 1}`}"`}
-              >
-                <RotateCcw size={12} />
-                Restart from failed step
-              </Button>
+            {showRestartButtons && (
+              <>
+                {failedStepRestart && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleRestart(failedStepRestart.arg)}
+                    disabled={runPipeline.isPending}
+                    title={`Restart from "${failedStepRestart.label}"`}
+                  >
+                    <RotateCcw size={12} />
+                    Restart from failed step
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleRestart()}
+                  disabled={runPipeline.isPending}
+                >
+                  <Play size={12} />
+                  Run again
+                </Button>
+              </>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleRestart()}
-              disabled={runPipeline.isPending}
-            >
-              <Play size={12} />
-              Run again
-            </Button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* ── Error messages ───────────────────────────────────────────────── */}
@@ -924,7 +948,7 @@ function BuildDetailPage() {
       {/* ── Step detail ───────────────────────────────────────────────────── */}
       {selectedUnifiedStep != null && (
         <StepDetail
-          key={selectedUnifiedStep.id}
+          key={jobId}
           step={selectedUnifiedStep}
           index={selectedStep}
           total={unifiedSteps.length}
