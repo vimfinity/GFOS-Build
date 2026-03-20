@@ -49,7 +49,7 @@ const NAV_TABS: Array<{ to: string; label: string; exact: boolean; shortcut: str
   { to: '/stats', label: 'Stats', exact: false, shortcut: 'Ctrl+5' },
 ];
 
-const SETTINGS_TAB = { to: '/settings', label: 'Settings', exact: false, shortcut: 'Ctrl+6' } as const;
+const SETTINGS_TAB = { to: '/settings', label: 'Settings', exact: false } as const;
 
 // ---------------------------------------------------------------------------
 // NavTab
@@ -103,32 +103,22 @@ function NavTab({
   );
 }
 
-function SettingsNavButton({
-  shortcut,
-}: {
-  shortcut: string;
-}) {
+function SettingsNavButton() {
   const base =
     'inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:text-foreground focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
   const active =
     'inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]';
 
   return (
-    <Tooltip
-      content="Settings"
-      shortcut={<ShortcutKey>{shortcut}</ShortcutKey>}
-      side="bottom"
+    <Link
+      to={SETTINGS_TAB.to as never}
+      className={base}
+      activeProps={{ className: active }}
+      activeOptions={{ exact: SETTINGS_TAB.exact }}
+      aria-label={SETTINGS_TAB.label}
     >
-      <Link
-        to={SETTINGS_TAB.to as never}
-        className={base}
-        activeProps={{ className: active }}
-        activeOptions={{ exact: SETTINGS_TAB.exact }}
-        aria-label="Settings"
-      >
-        <Settings size={15} />
-      </Link>
-    </Tooltip>
+      <Settings size={15} />
+    </Link>
   );
 }
 
@@ -227,9 +217,9 @@ function RootLayout() {
       }
 
       const index = Number(event.key);
-      if (!Number.isInteger(index) || index < 1 || index > 6) return;
+      if (!Number.isInteger(index) || index < 1 || index > NAV_TABS.length) return;
 
-      const target = index <= NAV_TABS.length ? NAV_TABS[index - 1] : SETTINGS_TAB;
+      const target = NAV_TABS[index - 1];
       if (!target) return;
 
       event.preventDefault();
@@ -298,17 +288,15 @@ function RootLayout() {
       <div className="flex h-screen overflow-hidden flex-col text-foreground">
       <header className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
         <div className="pointer-events-auto flex h-12 max-w-full items-center gap-1 rounded-full border px-2 text-foreground backdrop-blur-xl [background:var(--nav-bg)] [border-color:var(--nav-border)] [box-shadow:var(--nav-shadow)]">
-          <Tooltip content="Home" shortcut={<ShortcutKey>{`${primaryModifierLabel} 1`}</ShortcutKey>} side="bottom">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-foreground transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]"
-            >
-              <span className="text-primary">
-                <GfosLogo size={18} />
-              </span>
-              <span className="text-[13px] font-semibold tracking-[-0.01em]">GFOS Build</span>
-            </Link>
-          </Tooltip>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-foreground transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]"
+          >
+            <span className="text-primary">
+              <GfosLogo size={18} />
+            </span>
+            <span className="text-[13px] font-semibold tracking-[-0.01em]">GFOS Build</span>
+          </Link>
 
           <div className="mx-1 hidden h-5 w-px bg-border sm:block" />
 
@@ -326,9 +314,7 @@ function RootLayout() {
           <div className="mx-1 h-5 w-px bg-border" />
 
           <div className="flex items-center gap-1">
-            <SettingsNavButton
-              shortcut={`${primaryModifierLabel} 6`}
-            />
+            <SettingsNavButton />
             <div className="mx-1 h-2 w-2 rounded-full">
               <HealthDot />
             </div>
