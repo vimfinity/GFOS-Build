@@ -6,14 +6,14 @@ import { Button } from '@/components/ui/button';
 import { SearchField } from '@/components/ui/search-field';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { cn, formatDuration, timeAgo } from '@/lib/utils';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Loader2,
-  ExternalLink,
   AlertCircle,
   Trash2,
   FileX,
   Workflow,
+  ChevronDown,
 } from 'lucide-react';
 import type { BuildRunRowApi } from '@gfos-build/contracts';
 import { BranchBadge } from '@/components/BranchBadge';
@@ -24,6 +24,10 @@ export const Route = createFileRoute('/builds/')({
   }),
   component: BuildsView,
 });
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface PipelineGroup {
   type: 'pipeline';
@@ -41,6 +45,16 @@ interface StandaloneItem {
 
 type GroupedItem = PipelineGroup | StandaloneItem;
 
+type SortField = 'started' | 'name' | 'duration' | 'status';
+type SortDir = 'asc' | 'desc';
+
+const STATUS_PILLS = ['All', 'Success', 'Failed', 'Launched', 'Running'] as const;
+type StatusFilter = (typeof STATUS_PILLS)[number];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function getBuildJobParam(build: BuildRunRowApi): string {
   return build.job_id ?? String(build.id);
 }
@@ -53,6 +67,7 @@ function deriveGroupStatus(steps: BuildRunRowApi[]): string {
   return steps[steps.length - 1]?.status ?? 'running';
 }
 
+/** Group raw DB rows into pipeline groups and standalone items. */
 function groupBuilds(rows: BuildRunRowApi[]): GroupedItem[] {
   const groupsByJobId = new Map<string, PipelineGroup>();
   const standalone: StandaloneItem[] = [];
@@ -82,7 +97,7 @@ function groupBuilds(rows: BuildRunRowApi[]): GroupedItem[] {
     standalone.push({ type: 'standalone', row });
   }
 
-  const grouped: GroupedItem[] = [
+  return [
     ...Array.from(groupsByJobId.values()).map((group) => ({
       ...group,
       steps: [...group.steps].sort((left, right) => {
@@ -93,22 +108,92 @@ function groupBuilds(rows: BuildRunRowApi[]): GroupedItem[] {
     })),
     ...standalone,
   ];
-
-  return grouped.sort((left, right) => {
-    const leftStartedAt = left.type === 'pipeline' ? left.startedAt : left.row.started_at;
-    const rightStartedAt = right.type === 'pipeline' ? right.startedAt : right.row.started_at;
-    return rightStartedAt.localeCompare(leftStartedAt);
-  });
 }
 
-const STATUS_PILLS = ['All', 'Success', 'Failed', 'Launched', 'Running'] as const;
-type StatusFilter = (typeof STATUS_PILLS)[number];
+// ---------------------------------------------------------------------------
+// Sorting helpers
+// ---------------------------------------------------------------------------
+
+function getItemStart(item: GroupedItem): string {
+  return item.type === 'pipeline' ? item.startedAt : item.row.started_at;
+}
+
+function getItemName(item: GroupedItem): string {
+  return item.type === 'pipeline' ? item.pipelineName : item.row.project_name;
+}
+
+function getItemDurationMs(item: GroupedItem): number {
+  return item.type === 'pipeline'
+    ? item.steps.reduce((sum, s) => sum + (s.duration_ms ?? 0), 0)
+    : (item.row.duration_ms ?? 0);
+}
+
+function getItemStatus(item: GroupedItem): string {
+  return item.type === 'pipeline' ? deriveGroupStatus(item.steps) : item.row.status;
+}
+
+// ---------------------------------------------------------------------------
+// Sortable column header
+// ---------------------------------------------------------------------------
+
+// Extracted as a standalone component so React maintains a stable component
+// identity across renders (defining a component inside another component's
+// render body creates a new function reference each render, causing React to
+// unmount and remount the DOM nodes).
+//
+// The chevron is always rendered (invisible when inactive) so toggling sort
+// direction never changes the header width → no column shift.
+function SortTh({
+  field,
+  sortField,
+  sortDir,
+  onSort,
+  children,
+  className,
+}: {
+  field: SortField;
+  sortField: SortField;
+  sortDir: SortDir;
+  onSort: (field: SortField) => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const active = sortField === field;
+  return (
+    <th
+      className={cn(
+        'cursor-pointer select-none px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.12em] transition-colors hover:text-foreground',
+        active ? 'text-foreground' : 'text-muted-foreground',
+        className,
+      )}
+      onClick={() => onSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <ChevronDown
+          size={11}
+          className={cn(
+            'transition-transform',
+            active ? 'text-primary' : 'invisible',
+            active && sortDir === 'asc' && 'rotate-180',
+          )}
+        />
+      </span>
+    </th>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
 
 function BuildsView() {
   const { runId } = Route.useSearch();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [searchText, setSearchText] = useState('');
   const [confirmMode, setConfirmMode] = useState<'logs' | 'all' | null>(null);
+  const [sortField, setSortField] = useState<SortField>('started');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const queryClient = useQueryClient();
   const { data: builds, isLoading, isError } = useQuery(buildsQuery({ limit: 200 }));
   const clearLogs = useClearBuildLogs();
@@ -126,11 +211,9 @@ function BuildsView() {
   const hasFilters = statusFilter !== 'All' || searchText.trim() !== '';
 
   // Group first so filters apply at the logical-run level, not the step level.
-  // Filtering before grouping would corrupt pipeline group status and duration
-  // (e.g. a failed pipeline filtered by "Success" would drop its failed steps).
   const allGrouped = useMemo(() => groupBuilds(pastBuilds), [pastBuilds]);
 
-  const grouped = useMemo(() => {
+  const filtered = useMemo(() => {
     if (!hasFilters) return allGrouped;
     const query = searchText.trim().toLowerCase();
     return allGrouped.filter((item) => {
@@ -146,6 +229,33 @@ function BuildsView() {
     });
   }, [allGrouped, statusFilter, searchText, hasFilters]);
 
+  // Sort the filtered results.
+  const sorted = useMemo(() => {
+    const items = [...filtered];
+    items.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'started':  cmp = getItemStart(a).localeCompare(getItemStart(b)); break;
+        case 'name':     cmp = getItemName(a).localeCompare(getItemName(b)); break;
+        case 'duration': cmp = getItemDurationMs(a) - getItemDurationMs(b); break;
+        case 'status':   cmp = getItemStatus(a).localeCompare(getItemStatus(b)); break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return items;
+  }, [filtered, sortField, sortDir]);
+
+  const handleSort = useCallback((field: SortField) => {
+    setSortField((prev) => {
+      if (prev === field) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        return prev;
+      }
+      setSortDir(field === 'started' ? 'desc' : 'asc');
+      return field;
+    });
+  }, []);
+
   async function handleClearLogs() {
     await clearLogs.mutateAsync();
     await queryClient.invalidateQueries({ queryKey: ['builds'] });
@@ -158,11 +268,13 @@ function BuildsView() {
     setConfirmMode(null);
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      <div className="flex items-start justify-between gap-4">
+    <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-5 overflow-hidden">
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <div className="flex shrink-0 items-start justify-between gap-4">
         <div>
-          <h1 className="page-title text-[1.6rem] font-semibold leading-tight text-foreground">
+          <h1 className="page-title text-xl font-semibold leading-tight text-foreground">
             Builds
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -204,13 +316,12 @@ function BuildsView() {
         </div>
       ) : (
         <>
+          {/* ── Active builds ──────────────────────────────────────────── */}
           {activeBuilds.length > 0 && (
-            <section className="flex flex-col gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">
-                  {activeBuilds.length} build{activeBuilds.length !== 1 ? 's' : ''} running now
-                </h2>
-              </div>
+            <section className="flex shrink-0 flex-col gap-3">
+              <h2 className="text-base font-semibold text-foreground">
+                {activeBuilds.length} build{activeBuilds.length !== 1 ? 's' : ''} running now
+              </h2>
               <div className="grid gap-4 lg:grid-cols-2">
                 {activeBuilds.map((build) => (
                   <Link
@@ -226,85 +337,90 @@ function BuildsView() {
                       <span className="block truncate text-sm font-semibold text-foreground">
                         {build.pipeline_name ?? 'Quick Run'}
                       </span>
-                      <span className="block truncate text-xs font-mono text-muted-foreground">
+                      <span className="block truncate font-mono text-xs text-muted-foreground">
                         {build.project_name}
                       </span>
                     </div>
                     <span className="text-xs text-muted-foreground">{timeAgo(build.started_at)}</span>
-                    <ExternalLink size={12} className="shrink-0 text-muted-foreground" />
                   </Link>
                 ))}
               </div>
             </section>
           )}
 
-          <section className="flex flex-col gap-4">
-            <div>
-              <h2 className="text-base font-semibold text-foreground">Previous runs</h2>
-            </div>
+          {/* ── Previous runs — fills remaining vertical space ─────────── */}
+          <section className="flex min-h-0 flex-1 flex-col gap-3">
+            <h2 className="shrink-0 text-base font-semibold text-foreground">Previous runs</h2>
 
-            <div className="glass-card flex flex-wrap items-center gap-3 rounded-[24px] border border-border p-4">
-              <SearchField
-                value={searchText}
-                onChange={setSearchText}
-                placeholder="Search pipeline or project..."
-              />
-
-              <div className="flex flex-wrap items-center gap-2">
-                {STATUS_PILLS.map((pill) => (
-                  <button
-                    key={pill}
-                    onClick={() => setStatusFilter(pill)}
-                    className={cn(
-                      'pill-control border transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
-                      statusFilter === pill
-                        ? 'border-primary/20 bg-primary/10 text-primary'
-                        : 'border-border bg-card/70 text-muted-foreground hover:bg-accent/60 hover:text-foreground active:bg-accent/80',
-                    )}
-                  >
-                    {pill}
-                  </button>
-                ))}
+            <div className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-border">
+              {/* Filter bar */}
+              <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border/60 px-5 py-3">
+                <SearchField
+                  value={searchText}
+                  onChange={setSearchText}
+                  placeholder="Search pipeline or project..."
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  {STATUS_PILLS.map((pill) => (
+                    <button
+                      key={pill}
+                      onClick={() => setStatusFilter(pill)}
+                      className={cn(
+                        'pill-control border transition-colors focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+                        statusFilter === pill
+                          ? 'border-primary/20 bg-primary/10 text-primary'
+                          : 'border-border bg-card/70 text-muted-foreground hover:bg-accent/60 hover:text-foreground active:bg-accent/80',
+                      )}
+                    >
+                      {pill}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div className="glass-card overflow-hidden rounded-[24px] border border-border">
-              <table className="w-full text-sm">
-                <thead className="bg-secondary/55 text-muted-foreground">
-                  <tr>
-                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.12em]">Started</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.12em]">Pipeline / Project</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.12em]">Duration</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-[0.12em]">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/70">
-                  {grouped.length === 0 ? (
+              {/* Scrollable table */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <table className="w-full table-fixed text-sm">
+                  <thead className="sticky top-0 z-10 bg-secondary/95 backdrop-blur-sm">
                     <tr>
-                      <td colSpan={4} className="px-5 py-14 text-center text-sm text-muted-foreground">
-                        {hasFilters ? 'No builds match the current filters.' : 'No builds recorded yet.'}
-                      </td>
+                      <SortTh field="started" sortField={sortField} sortDir={sortDir} onSort={handleSort} className="w-[130px]">Started</SortTh>
+                      <SortTh field="name" sortField={sortField} sortDir={sortDir} onSort={handleSort}>Pipeline / Project</SortTh>
+                      <SortTh field="duration" sortField={sortField} sortDir={sortDir} onSort={handleSort} className="w-[100px]">Duration</SortTh>
+                      <SortTh field="status" sortField={sortField} sortDir={sortDir} onSort={handleSort} className="w-[120px]">Status</SortTh>
                     </tr>
-                  ) : (
-                    grouped.map((item) =>
-                      item.type === 'pipeline'
-                        ? <PipelineGroupRow key={item.jobId} group={item} targetRunId={runId} />
-                        : <BuildRow key={item.row.id} build={item.row} isTarget={runId === String(item.row.id)} />,
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border/70">
+                    {sorted.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-5 py-14 text-center text-sm text-muted-foreground">
+                          {hasFilters ? 'No builds match the current filters.' : 'No builds recorded yet.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      sorted.map((item) =>
+                        item.type === 'pipeline'
+                          ? <PipelineGroupRow key={item.jobId} group={item} targetRunId={runId} />
+                          : <BuildRow key={item.row.id} build={item.row} isTarget={runId === String(item.row.id)} />,
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-            {grouped.length > 0 && hasFilters && (
-              <p className="text-xs text-muted-foreground">
-                Showing {grouped.length} {grouped.length === 1 ? 'entry' : 'entries'} of {allGrouped.length} total
-              </p>
-            )}
+              {/* Footer — filtered count */}
+              {hasFilters && filtered.length > 0 && (
+                <div className="shrink-0 border-t border-border/60 px-5 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    Showing {filtered.length} of {allGrouped.length} {allGrouped.length === 1 ? 'entry' : 'entries'}
+                  </p>
+                </div>
+              )}
+            </div>
           </section>
         </>
       )}
 
+      {/* ── Confirmation dialogs ─────────────────────────────────────────── */}
       <ConfirmationDialog
         open={confirmMode === 'logs'}
         onOpenChange={(open) => !open && setConfirmMode(null)}
@@ -329,6 +445,10 @@ function BuildsView() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Table row components
+// ---------------------------------------------------------------------------
 
 function PipelineGroupRow({ group, targetRunId }: { group: PipelineGroup; targetRunId?: string }) {
   const navigate = useNavigate();
@@ -364,14 +484,11 @@ function PipelineGroupRow({ group, targetRunId }: { group: PipelineGroup; target
           </span>
         </div>
       </td>
-      <td className="whitespace-nowrap px-5 py-3 text-sm font-mono text-muted-foreground">
+      <td className="whitespace-nowrap px-5 py-3 font-mono tabular-nums text-sm text-muted-foreground">
         {totalMs > 0 ? formatDuration(totalMs) : '—'}
       </td>
       <td className="px-5 py-3">
-        <div className="flex items-center gap-2">
-          <StatusBadge status={status} />
-          <ExternalLink size={12} className="text-muted-foreground" />
-        </div>
+        <StatusBadge status={status} />
       </td>
     </tr>
   );
@@ -410,14 +527,11 @@ function BuildRow({ build, isTarget = false }: { build: BuildRunRowApi; isTarget
           <BranchBadge branch={build.branch} />
         </div>
       </td>
-      <td className="whitespace-nowrap px-5 py-3 text-sm font-mono text-muted-foreground">
+      <td className="whitespace-nowrap px-5 py-3 font-mono tabular-nums text-sm text-muted-foreground">
         {formatDuration(build.duration_ms)}
       </td>
       <td className="px-5 py-3">
-        <div className="flex items-center gap-2">
-          <StatusBadge status={build.status} />
-          <ExternalLink size={12} className="text-muted-foreground" />
-        </div>
+        <StatusBadge status={build.status} />
       </td>
     </tr>
   );
