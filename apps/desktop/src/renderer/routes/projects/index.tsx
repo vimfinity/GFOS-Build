@@ -189,148 +189,152 @@ function QuickRunDialog({
 
   return (
     <Dialog open={project !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl max-h-[min(80vh,42rem)] overflow-hidden">
         <DialogTitle>Run build</DialogTitle>
         <DialogDescription>
           {project?.name ?? ''} · {project?.buildSystem === 'maven' ? 'Maven' : 'Node'}
         </DialogDescription>
 
-        <div className="mt-5 flex flex-col gap-4 overflow-y-auto">
-          {project && (
-            <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs font-mono text-muted-foreground break-all">
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 break-all">{project.path}</span>
-                <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
-              </div>
-            </div>
-          )}
-
-          {project?.buildSystem === 'maven' && (
-            <MavenCommandFields
-              metadata={project.maven}
-              value={mavenCommand}
-              onChange={setMavenCommand}
-              jdkVersions={jdkVersions}
-            />
-          )}
-
-          {project?.buildSystem === 'node' && (
+        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] pr-3">
             <div className="flex flex-col gap-4">
-              <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
-                Detected package manager: <span className="font-mono text-foreground">{packageManager}</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Command
-                </label>
-                <div className="segmented-control w-fit">
-                  {([
-                    { value: 'script', label: 'Run script' },
-                    { value: 'install', label: 'Install deps' },
-                  ] as const).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-pressed={commandType === option.value}
-                      onClick={() => setCommandType(option.value)}
-                      className={cn('segmented-control-button', commandType === option.value && 'is-active')}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+              {project && (
+                <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs font-mono text-muted-foreground break-all">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 break-all">{project.path}</span>
+                    <BranchBadge branch={gitInfo?.branch ?? null} isDirty={gitInfo?.isDirty} />
+                  </div>
                 </div>
-              </div>
-              {commandType === 'script' && nodeScripts.length > 0 ? (
-                <>
+              )}
+
+              {project?.buildSystem === 'maven' && (
+                <MavenCommandFields
+                  metadata={project.maven}
+                  value={mavenCommand}
+                  onChange={setMavenCommand}
+                  jdkVersions={jdkVersions}
+                />
+              )}
+
+              {project?.buildSystem === 'node' && (
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-[18px] border border-border bg-secondary/60 px-4 py-3 text-xs text-muted-foreground">
+                    Detected package manager: <span className="font-mono text-foreground">{packageManager}</span>
+                  </div>
                   <div className="flex flex-col gap-2">
                     <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                      Script
+                      Command
                     </label>
-                    <ComboboxField
-                      value={script}
-                      options={getNodeScriptComboboxOptions(project.node?.scripts)}
-                      onValueChange={setScript}
-                      placeholder="Select a script"
-                      emptyText="No matching scripts"
-                    />
+                    <div className="segmented-control w-fit">
+                      {([
+                        { value: 'script', label: 'Run script' },
+                        { value: 'install', label: 'Install deps' },
+                      ] as const).map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={commandType === option.value}
+                          onClick={() => setCommandType(option.value)}
+                          className={cn('segmented-control-button', commandType === option.value && 'is-active')}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <Input
-                    label="Optional args"
-                    placeholder="e.g. --host 0.0.0.0"
-                    value={nodeArgs}
-                    onChange={(e) => setNodeArgs(e.target.value)}
-                  />
-                </>
-              ) : commandType === 'script' ? (
-                <div className="rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
-                  No scripts were found in this package.json. Add a script before running this project.
+                  {commandType === 'script' && nodeScripts.length > 0 ? (
+                    <>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                          Script
+                        </label>
+                        <ComboboxField
+                          value={script}
+                          options={getNodeScriptComboboxOptions(project.node?.scripts)}
+                          onValueChange={setScript}
+                          placeholder="Select a script"
+                          emptyText="No matching scripts"
+                        />
+                      </div>
+                      <Input
+                        label="Optional args"
+                        placeholder="e.g. --host 0.0.0.0"
+                        value={nodeArgs}
+                        onChange={(e) => setNodeArgs(e.target.value)}
+                      />
+                    </>
+                  ) : commandType === 'script' ? (
+                    <div className="rounded-[18px] border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
+                      No scripts were found in this package.json. Add a script before running this project.
+                    </div>
+                  ) : (
+                    <>
+                      <Input
+                        label="Install args"
+                        placeholder="e.g. --frozen-lockfile"
+                        value={nodeArgs}
+                        onChange={(e) => setNodeArgs(e.target.value)}
+                      />
+                    </>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                      Execution mode
+                    </label>
+                    <div className="segmented-control w-fit">
+                      {(['internal', 'external'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          aria-pressed={executionMode === mode}
+                          onClick={() => setExecutionMode(mode)}
+                          className={cn('segmented-control-button', executionMode === mode && 'is-active')}
+                        >
+                          {mode === 'internal' ? 'In app' : 'External terminal'}
+                        </button>
+                      ))}
+                    </div>
+                    {executionMode === 'external' && (
+                      <p className="text-xs leading-relaxed text-warning">
+                        External runs are fire-and-forget. GFOS Build launches a new terminal window
+                        and continues immediately.
+                      </p>
+                    )}
+                  </div>
                 </div>
+              )}
+
+              {project && (
+                <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
+                  Command preview: <span className="font-mono text-foreground">{commandPreview}</span>
+                  {project.buildSystem === 'maven' && project.maven?.hasMvnConfig && (
+                    <div className="mt-1 text-[11px] text-muted-foreground/72">
+                      Inherits `.mvn/maven.config` from the project root.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleRun} disabled={isRunning || (project?.buildSystem === 'maven' ? mavenCommand.goals.length === 0 : !canRunNode)}>
+              {isRunning ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  Starting
+                </>
               ) : (
                 <>
-                  <Input
-                    label="Install args"
-                    placeholder="e.g. --frozen-lockfile"
-                    value={nodeArgs}
-                    onChange={(e) => setNodeArgs(e.target.value)}
-                  />
+                  <Play size={12} />
+                  Run build
                 </>
               )}
-              <div className="flex flex-col gap-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Execution mode
-                </label>
-                <div className="segmented-control w-fit">
-                  {(['internal', 'external'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={executionMode === mode}
-                      onClick={() => setExecutionMode(mode)}
-                      className={cn('segmented-control-button', executionMode === mode && 'is-active')}
-                    >
-                      {mode === 'internal' ? 'In app' : 'External terminal'}
-                    </button>
-                  ))}
-                </div>
-                {executionMode === 'external' && (
-                  <p className="text-xs leading-relaxed text-warning">
-                    External runs are fire-and-forget. GFOS Build launches a new terminal window
-                    and continues immediately.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {project && (
-            <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
-              Command preview: <span className="font-mono text-foreground">{commandPreview}</span>
-              {project.buildSystem === 'maven' && project.maven?.hasMvnConfig && (
-                <div className="mt-1 text-[11px] text-muted-foreground/72">
-                  Inherits `.mvn/maven.config` from the project root.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handleRun} disabled={isRunning || (project?.buildSystem === 'maven' ? mavenCommand.goals.length === 0 : !canRunNode)}>
-            {isRunning ? (
-              <>
-                <Loader2 size={12} className="animate-spin" />
-                Starting
-              </>
-            ) : (
-              <>
-                <Play size={12} />
-                Run build
-              </>
-            )}
-          </Button>
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

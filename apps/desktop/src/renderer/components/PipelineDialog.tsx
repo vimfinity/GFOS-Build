@@ -832,7 +832,7 @@ export function PipelineDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-5xl h-[min(90vh,860px)]">
+      <DialogContent className="max-w-5xl max-h-[min(82vh,48rem)] overflow-hidden">
         <DialogTitle>{mode === 'create' ? 'Create pipeline' : `Edit "${name}"`}</DialogTitle>
         <DialogDescription>
           Build a multi-step pipeline with detected Maven and Node step behavior.
@@ -855,7 +855,7 @@ export function PipelineDialog({
           </div>
         )}
 
-        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-visible">
+        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="grid gap-4 border-b border-border pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
             <Input
               label="Pipeline name"
