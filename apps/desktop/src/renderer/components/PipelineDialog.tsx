@@ -17,6 +17,7 @@ import { inspectProject, scanQuery, configQuery, useGitInfo } from '@/api/querie
 import { BranchBadge } from '@/components/BranchBadge';
 
 interface StepFormData {
+  clientId: string;
   label: string;
   path: string;
   buildSystem: 'maven' | 'node' | null;
@@ -37,11 +38,13 @@ interface StepFormData {
   inspectionError?: string;
 }
 
+type PipelineStepFormData = Omit<StepFormData, 'clientId'>;
+
 export interface PipelineFormData {
   name: string;
   description: string;
   failFast: boolean;
-  steps: StepFormData[];
+  steps: PipelineStepFormData[];
 }
 
 interface PipelineDialogProps {
@@ -52,8 +55,16 @@ interface PipelineDialogProps {
   mode: 'create' | 'edit';
 }
 
+let stepClientIdCounter = 0;
+
+function createStepClientId(): string {
+  stepClientIdCounter += 1;
+  return `pipeline-step-${stepClientIdCounter}`;
+}
+
 function createEmptyStep(mavenGoals: string, mavenOptionKeys: MavenOptionKey[] = [], mavenExtraOptions: string[] = []): StepFormData {
   return {
+    clientId: createStepClientId(),
     label: '',
     path: '',
     buildSystem: null,
@@ -74,6 +85,7 @@ function createEmptyStep(mavenGoals: string, mavenOptionKeys: MavenOptionKey[] =
 
 function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
   return {
+    clientId: createStepClientId(),
     label: step.label,
     path: step.path,
     buildSystem: step.buildSystem ?? null,
@@ -91,6 +103,12 @@ function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
     packageManager: step.packageManager,
     availableScripts: [],
   };
+}
+
+function toPipelineStepFormData(step: StepFormData): PipelineStepFormData {
+  const { clientId, ...pipelineStep } = step;
+  void clientId;
+  return pipelineStep;
 }
 
 function getRelativePath(project: Project, roots: Record<string, string>): string {
@@ -325,6 +343,33 @@ function ProjectPathPicker({
         </div>,
         document.body,
       )}
+    </div>
+  );
+}
+
+function StepInsertControl({
+  onInsert,
+  afterStep,
+  beforeStep,
+}: {
+  onInsert: () => void;
+  afterStep: number;
+  beforeStep: number;
+}) {
+  return (
+    <div className="relative flex h-5 items-center px-3">
+      <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/45" aria-hidden="true" />
+      <div className="relative flex w-full justify-center">
+        <button
+          type="button"
+          onClick={onInsert}
+          className="group inline-flex cursor-pointer items-center gap-1 bg-[var(--color-dialog,transparent)] px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:[box-shadow:0_0_0_1px_var(--color-ring)]"
+          aria-label={`Insert a new step between step ${afterStep} and step ${beforeStep}`}
+        >
+          <Plus size={10} className="opacity-60 transition-opacity group-hover:opacity-100" />
+          Insert step
+        </button>
+      </div>
     </div>
   );
 }
@@ -625,9 +670,9 @@ export function PipelineDialog({
   const [steps, setSteps] = useState<StepFormData[]>([createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)]);
   const [isDirty, setIsDirty] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
-  const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
+  const [collapsedSteps, setCollapsedSteps] = useState<Set<string>>(new Set());
 
-  const resolveStepPath = useCallback(async (index: number, path: string, project?: Project) => {
+  const resolveStepPath = useCallback(async (stepId: string, path: string, project?: Project) => {
     const applyInspection = (current: StepFormData, resolvedProject: Project | null, error?: string): StepFormData => {
       if (!resolvedProject) {
         return {
@@ -689,8 +734,8 @@ export function PipelineDialog({
 
     if (project) {
       setSteps((current) =>
-        current.map((step, stepIndex) =>
-          stepIndex === index ? applyInspection(step, project) : step,
+        current.map((step) =>
+          step.clientId === stepId ? applyInspection(step, project) : step,
         ),
       );
       return;
@@ -699,14 +744,14 @@ export function PipelineDialog({
     try {
       const result = await inspectProject(path);
       setSteps((current) =>
-        current.map((step, stepIndex) =>
-          stepIndex === index ? applyInspection(step, result.project) : step,
+        current.map((step) =>
+          step.clientId === stepId ? applyInspection(step, result.project) : step,
         ),
       );
     } catch (error) {
       setSteps((current) =>
-        current.map((step, stepIndex) =>
-          stepIndex === index
+        current.map((step) =>
+          step.clientId === stepId
             ? {
                 ...step,
                 buildSystem: null,
@@ -739,14 +784,13 @@ export function PipelineDialog({
     setFailFast(initialData?.failFast ?? true);
     setSteps(nextSteps);
     // Collapse all steps when opening an existing pipeline; new pipelines start expanded
-    setCollapsedSteps(initialData?.steps.length ? new Set(initialData.steps.map((_, i) => i)) : new Set());
+    setCollapsedSteps(initialData?.steps.length ? new Set(nextSteps.map((step) => step.clientId)) : new Set());
 
     void (async () => {
-      for (let index = 0; index < nextSteps.length; index++) {
+      for (const step of nextSteps) {
         if (cancelled) return;
-        const step = nextSteps[index];
-        if (!step?.path) continue;
-        await resolveStepPath(index, step.path);
+        if (!step.path) continue;
+        await resolveStepPath(step.clientId, step.path);
       }
     })();
 
@@ -770,43 +814,41 @@ export function PipelineDialog({
     onOpenChange(false);
   }
 
-  function addStep() {
+  function insertStep(index: number) {
+    const nextStep = createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions);
     setIsDirty(true);
-    // Collapse all existing steps so the new one is immediately visible
-    setCollapsedSteps(new Set(steps.map((_, i) => i)));
-    setSteps((current) => [...current, createEmptyStep(defaultMavenGoals, defaultMavenOptionKeys, defaultMavenExtraOptions)]);
+    // Collapse all existing steps so the new one is immediately visible.
+    setCollapsedSteps(new Set(steps.map((step) => step.clientId)));
+    setSteps((current) => [
+      ...current.slice(0, index),
+      nextStep,
+      ...current.slice(index),
+    ]);
   }
 
-  function removeStep(index: number) {
+  function addStep() {
+    insertStep(steps.length);
+  }
+
+  function removeStep(stepId: string) {
     setIsDirty(true);
     setCollapsedSteps((current) => {
-      const next = new Set<number>();
-      for (const idx of current) {
-        if (idx < index) next.add(idx);
-        else if (idx > index) next.add(idx - 1);
-      }
+      const next = new Set(current);
+      next.delete(stepId);
       return next;
     });
-    setSteps((current) => current.filter((_, i) => i !== index));
+    setSteps((current) => current.filter((step) => step.clientId !== stepId));
   }
 
-  function updateStep(index: number, updater: (current: StepFormData) => StepFormData) {
+  function updateStep(stepId: string, updater: (current: StepFormData) => StepFormData) {
     setIsDirty(true);
-    setSteps((current) => current.map((step, i) => (i === index ? updater(step) : step)));
+    setSteps((current) => current.map((step) => (step.clientId === stepId ? updater(step) : step)));
   }
 
   function moveStep(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= steps.length) return;
     setIsDirty(true);
-    setCollapsedSteps((current) => {
-      const next = new Set(current);
-      const indexCollapsed = current.has(index);
-      const targetCollapsed = current.has(target);
-      if (indexCollapsed) next.add(target); else next.delete(target);
-      if (targetCollapsed) next.add(index); else next.delete(index);
-      return next;
-    });
     setSteps((current) => {
       const copy = [...current];
       [copy[index], copy[target]] = [copy[target]!, copy[index]!];
@@ -815,7 +857,7 @@ export function PipelineDialog({
   }
 
   function handleSubmit() {
-    onSave({ name, description, failFast, steps });
+    onSave({ name, description, failFast, steps: steps.map(toPipelineStepFormData) });
     onOpenChange(false);
   }
 
@@ -886,27 +928,35 @@ export function PipelineDialog({
           </div>
 
           <div className="mt-5 min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] px-1 py-1 -mx-1 -my-1 pr-3">
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
               {steps.map((step, index) => (
-                <StepCard
-                  key={index}
-                  step={step}
-                  index={index}
-                  total={steps.length}
-                  collapsed={collapsedSteps.has(index)}
-                  onToggleCollapsed={() =>
-                    setCollapsedSteps((current) => {
-                      const next = new Set(current);
-                      if (next.has(index)) next.delete(index); else next.add(index);
-                      return next;
-                    })
-                  }
-                  onUpdate={(updater) => updateStep(index, updater)}
-                  onResolvePath={(path, project) => void resolveStepPath(index, path, project)}
-                  onRemove={() => removeStep(index)}
-                  onMoveUp={() => moveStep(index, -1)}
-                  onMoveDown={() => moveStep(index, 1)}
-                />
+                <div key={step.clientId} className="contents">
+                  {index > 0 && (
+                    <StepInsertControl
+                      afterStep={index}
+                      beforeStep={index + 1}
+                      onInsert={() => insertStep(index)}
+                    />
+                  )}
+                  <StepCard
+                    step={step}
+                    index={index}
+                    total={steps.length}
+                    collapsed={collapsedSteps.has(step.clientId)}
+                    onToggleCollapsed={() =>
+                      setCollapsedSteps((current) => {
+                        const next = new Set(current);
+                        if (next.has(step.clientId)) next.delete(step.clientId); else next.add(step.clientId);
+                        return next;
+                      })
+                    }
+                    onUpdate={(updater) => updateStep(step.clientId, updater)}
+                    onResolvePath={(path, project) => void resolveStepPath(step.clientId, path, project)}
+                    onRemove={() => removeStep(step.clientId)}
+                    onMoveUp={() => moveStep(index, -1)}
+                    onMoveDown={() => moveStep(index, 1)}
+                  />
+                </div>
               ))}
             </div>
           </div>
