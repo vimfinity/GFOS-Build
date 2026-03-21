@@ -35,4 +35,4 @@ coverage/
 *.bak
 
 # Local agent state
-.claude/worktrees/
+.claude/
