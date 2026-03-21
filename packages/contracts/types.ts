@@ -128,7 +128,7 @@ export type ProcessEvent =
 
 export type ScanEvent =
   | { type: 'repo:found'; project: Project }
-  | { type: 'scan:done'; projects: Project[]; durationMs: number; fromCache: boolean };
+  | { type: 'scan:done'; projects: Project[]; durationMs: number; fromCache: boolean; scannedAt: string };
 
 export interface ScanOptions {
   roots: Record<string, string>;

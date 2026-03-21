@@ -58,7 +58,7 @@ import {
   type PipelineConfig,
 } from './schema.js';
 
-const DEFAULT_SCAN_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_SCAN_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SCAN_JOB_TTL_MS = 5 * 60 * 1000;
 const MAX_JOB_HISTORY = 20_000;
 
@@ -238,13 +238,14 @@ export class AppRuntime {
 
   async getScan(noCache = false): Promise<ScanResponse> {
     const config = this.getSettings();
-    let result: ScanResponse = { projects: [], durationMs: 0, fromCache: false };
+    let result: ScanResponse = { projects: [], durationMs: 0, fromCache: false, scannedAt: new Date(0).toISOString() };
     for await (const event of this.scanner.scan(toScanOptions(config), DEFAULT_SCAN_CACHE_TTL_MS, noCache)) {
       if (event.type === 'scan:done') {
         result = {
           projects: event.projects,
           durationMs: event.durationMs,
           fromCache: event.fromCache,
+          scannedAt: event.scannedAt,
         };
       }
     }

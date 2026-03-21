@@ -126,6 +126,7 @@ export interface ScanResponse {
   projects: Project[];
   durationMs: number;
   fromCache: boolean;
+  scannedAt: string;
 }
 
 export interface ProjectInspectionResponse {

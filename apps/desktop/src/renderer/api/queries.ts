@@ -61,6 +61,7 @@ export const scanQuery = queryOptions({
   queryFn: (): Promise<ScanResponse> => getDesktopApi().getScan(),
   staleTime: 60_000,
   gcTime: 300_000,
+  placeholderData: (previous) => previous,
 });
 
 export function useRunPipeline() {

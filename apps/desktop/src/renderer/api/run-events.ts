@@ -118,3 +118,29 @@ export async function waitForJobCompletion(jobId: string): Promise<void> {
     });
   });
 }
+
+export async function waitForScanCompletion(jobId: string): Promise<Extract<ScanEvent, { type: 'scan:done' }>> {
+  const entry = getCacheEntry(jobId);
+  const cachedDoneEvent = [...entry.events]
+    .reverse()
+    .find((event): event is Extract<ScanEvent, { type: 'scan:done' }> => event.type === 'scan:done');
+
+  if (cachedDoneEvent) {
+    return cachedDoneEvent;
+  }
+
+  return await new Promise<Extract<ScanEvent, { type: 'scan:done' }>>((resolve, reject) => {
+    const unsubscribe = getDesktopApi().onRunEvent(jobId, (envelope: RunEventEnvelope) => {
+      if (envelope.type === 'event' && envelope.event?.type === 'scan:done') {
+        unsubscribe();
+        resolve(envelope.event);
+        return;
+      }
+
+      if (envelope.type === 'error') {
+        unsubscribe();
+        reject(new Error(envelope.message ?? 'Job failed.'));
+      }
+    });
+  });
+}
