@@ -5,7 +5,8 @@ node_modules/
 dist/
 shared/dist/
 release/
-gui/out/
+apps/desktop/out/
+.turbo/
 
 # IDE
 .idea/
@@ -20,6 +21,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+gfos-build.config.json
 
 # Logs
 *.log
@@ -31,3 +33,6 @@ coverage/
 # Temp
 *.tmp
 *.bak
+
+# Local agent state
+.claude/worktrees/
