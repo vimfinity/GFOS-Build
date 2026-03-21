@@ -3,8 +3,8 @@ import type { ScanEvent } from '@gfos-build/domain';
 import type { RepositoryScanner, ScanOptions } from './repository-scanner.js';
 
 export interface ScanCacheStore {
-  get(key: string, ttlMs: number): import('@gfos-build/domain').Project[] | null;
-  set(key: string, projects: import('@gfos-build/domain').Project[]): void;
+  get(key: string, ttlMs: number): { projects: import('@gfos-build/domain').Project[]; scannedAt: string } | null;
+  set(key: string, projects: import('@gfos-build/domain').Project[], validationPaths: string[], scannedAt: string): void;
 }
 
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -21,22 +21,27 @@ export class CachedScanner {
     noCache = false,
   ): AsyncGenerator<ScanEvent> {
     const cacheKey = buildCacheKey(options);
+    const validationPaths = new Set<string>();
 
     if (!noCache) {
       const cached = this.cache.get(cacheKey, ttlMs);
       if (cached) {
-        for (const project of cached) {
+        for (const project of cached.projects) {
           yield { type: 'repo:found', project };
         }
-        yield { type: 'scan:done', projects: cached, durationMs: 0, fromCache: true };
+        yield { type: 'scan:done', projects: cached.projects, durationMs: 0, fromCache: true, scannedAt: cached.scannedAt };
         return;
       }
     }
 
-    for await (const event of this.scanner.scan(options)) {
+    for await (const event of this.scanner.scan(options, {
+      trackPath: (trackedPath) => {
+        validationPaths.add(trackedPath);
+      },
+    })) {
       yield event;
       if (event.type === 'scan:done') {
-        this.cache.set(cacheKey, event.projects);
+        this.cache.set(cacheKey, event.projects, [...validationPaths].sort(), event.scannedAt);
       }
     }
   }

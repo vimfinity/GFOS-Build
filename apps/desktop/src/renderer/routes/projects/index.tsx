@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { scanQuery, configQuery, useRefreshScan, useQuickRun } from '@/api/queries';
-import { waitForJobCompletion } from '@/api/run-events';
-import { useState, useMemo, useEffect, useDeferredValue } from 'react';
+import { waitForJobCompletion, waitForScanCompletion } from '@/api/run-events';
+import { useState, useMemo, useEffect, useDeferredValue, useRef, startTransition } from 'react';
 import {
   FolderSearch,
   RefreshCw,
@@ -45,6 +45,7 @@ import type {
   MavenSubmoduleBuildStrategy,
   NodeCommandType,
   Project,
+  ScanResponse,
 } from '@gfos-build/contracts';
 
 export const Route = createFileRoute('/projects/')({
@@ -53,6 +54,7 @@ export const Route = createFileRoute('/projects/')({
 
 type SysFilter = 'all' | 'maven' | 'node';
 type SortBy = 'name-asc' | 'name-desc' | 'path-asc' | 'sys';
+const AUTO_REFRESH_SCAN_MAX_AGE_MS = 3 * 60 * 1000;
 
 interface GroupData {
   key: string;
@@ -574,6 +576,8 @@ function ProjectsView() {
   const [buildTarget, setBuildTarget] = useState<Project | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const lastAutoRefreshScanAtRef = useRef<string | null>(null);
+  const isRefreshInFlightRef = useRef(false);
 
   const projects = useMemo(() => scanData?.projects ?? [], [scanData]);
   const roots = useMemo(() => configData?.config.roots ?? {}, [configData]);
@@ -668,20 +672,65 @@ function ProjectsView() {
     setExpanded(new Set());
   }
 
-  async function handleRefresh() {
-    setIsRefreshing(true);
-    setRefreshError(null);
+  async function handleRefresh(options?: { showError?: boolean; background?: boolean }) {
+    if (isRefreshInFlightRef.current) {
+      return;
+    }
+    isRefreshInFlightRef.current = true;
+    if (!(options?.background ?? false)) {
+      setIsRefreshing(true);
+    }
+    if (options?.showError ?? true) {
+      setRefreshError(null);
+    }
     try {
       const { jobId } = await refreshScan.mutateAsync();
+      const scanResult = await waitForScanCompletion(jobId);
       await waitForJobCompletion(jobId);
-      await queryClient.invalidateQueries({ queryKey: ['scan'] });
+      startTransition(() => {
+        queryClient.setQueryData<ScanResponse>(['scan'], (previous) =>
+          mergeScanResponse(previous, {
+            projects: scanResult.projects,
+            durationMs: scanResult.durationMs,
+            fromCache: false,
+            scannedAt: scanResult.scannedAt,
+          }),
+        );
+      });
       await queryClient.invalidateQueries({ queryKey: ['git-info'] });
     } catch (error) {
-      setRefreshError(error instanceof Error ? error.message : 'Refresh scan failed.');
+      if (options?.showError ?? true) {
+        setRefreshError(error instanceof Error ? error.message : 'Refresh scan failed.');
+      }
     } finally {
-      setIsRefreshing(false);
+      isRefreshInFlightRef.current = false;
+      if (!(options?.background ?? false)) {
+        setIsRefreshing(false);
+      }
     }
   }
+
+  useEffect(() => {
+    if (!scanData?.fromCache || isRefreshInFlightRef.current) {
+      return;
+    }
+
+    const scannedAtMs = Date.parse(scanData.scannedAt);
+    if (Number.isNaN(scannedAtMs)) {
+      return;
+    }
+
+    if (Date.now() - scannedAtMs < AUTO_REFRESH_SCAN_MAX_AGE_MS) {
+      return;
+    }
+
+    if (lastAutoRefreshScanAtRef.current === scanData.scannedAt) {
+      return;
+    }
+
+    lastAutoRefreshScanAtRef.current = scanData.scannedAt;
+    void handleRefresh({ showError: false, background: true });
+  }, [scanData?.fromCache, scanData?.scannedAt]);
 
   async function handleBuildRun(payload: {
     buildSystem: 'maven' | 'node';
@@ -948,6 +997,132 @@ function ProjectsView() {
         isRunning={quickRun.isPending}
       />
     </div>
+  );
+}
+
+function mergeScanResponse(previous: ScanResponse | undefined, next: ScanResponse): ScanResponse {
+  if (!previous) {
+    return next;
+  }
+
+  const previousProjectsByPath = new Map(previous.projects.map((project) => [project.path, project]));
+  let didChange = previous.projects.length !== next.projects.length;
+
+  const mergedProjects = next.projects.map((project, index) => {
+    const previousProject = previousProjectsByPath.get(project.path);
+    if (previousProject && areProjectsEquivalent(previousProject, project)) {
+      const previousProjectAtIndex = previous.projects[index];
+      if (previousProjectAtIndex !== previousProject) {
+        didChange = true;
+      }
+      return previousProject;
+    }
+    didChange = true;
+    return project;
+  });
+
+  const projects =
+    !didChange && mergedProjects.every((project, index) => project === previous.projects[index])
+      ? previous.projects
+      : mergedProjects;
+
+  if (
+    projects === previous.projects &&
+    previous.durationMs === next.durationMs &&
+    previous.fromCache === next.fromCache &&
+    previous.scannedAt === next.scannedAt
+  ) {
+    return previous;
+  }
+
+  return {
+    ...next,
+    projects,
+  };
+}
+
+function areProjectsEquivalent(previous: Project, next: Project): boolean {
+  return (
+    previous.name === next.name &&
+    previous.path === next.path &&
+    previous.depth === next.depth &&
+    previous.rootName === next.rootName &&
+    previous.buildSystem === next.buildSystem &&
+    areMavenMetadataEquivalent(previous.maven, next.maven) &&
+    areNodeMetadataEquivalent(previous.node, next.node)
+  );
+}
+
+function areMavenMetadataEquivalent(previous: Project['maven'], next: Project['maven']): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return previous === next;
+
+  return (
+    previous.pomPath === next.pomPath &&
+    previous.artifactId === next.artifactId &&
+    previous.packaging === next.packaging &&
+    previous.isAggregator === next.isAggregator &&
+    previous.javaVersion === next.javaVersion &&
+    previous.hasMvnConfig === next.hasMvnConfig &&
+    previous.mvnConfigContent === next.mvnConfigContent &&
+    areMavenModulesEquivalent(previous.modules, next.modules) &&
+    areMavenProfilesEquivalent(previous.profiles, next.profiles)
+  );
+}
+
+function areMavenModulesEquivalent(previous: NonNullable<Project['maven']>['modules'], next: NonNullable<Project['maven']>['modules']): boolean {
+  return (
+    previous.length === next.length &&
+    previous.every((moduleEntry, index) => {
+      const nextEntry = next[index];
+      return (
+        nextEntry !== undefined &&
+        moduleEntry.id === nextEntry.id &&
+        moduleEntry.name === nextEntry.name &&
+        moduleEntry.relativePath === nextEntry.relativePath &&
+        moduleEntry.fullPath === nextEntry.fullPath &&
+        moduleEntry.packaging === nextEntry.packaging &&
+        moduleEntry.javaVersion === nextEntry.javaVersion
+      );
+    })
+  );
+}
+
+function areMavenProfilesEquivalent(previous: NonNullable<Project['maven']>['profiles'], next: NonNullable<Project['maven']>['profiles']): boolean {
+  return (
+    previous.length === next.length &&
+    previous.every((profile, index) => {
+      const nextProfile = next[index];
+      return (
+        nextProfile !== undefined &&
+        profile.id === nextProfile.id &&
+        profile.activeByDefault === nextProfile.activeByDefault &&
+        profile.sourcePomPath === nextProfile.sourcePomPath &&
+        profile.sourceModulePath === nextProfile.sourceModulePath
+      );
+    })
+  );
+}
+
+function areNodeMetadataEquivalent(previous: Project['node'], next: Project['node']): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return previous === next;
+
+  const previousScripts = Object.entries(previous.scripts).sort(([left], [right]) => left.localeCompare(right));
+  const nextScripts = Object.entries(next.scripts).sort(([left], [right]) => left.localeCompare(right));
+
+  return (
+    previous.packageJsonPath === next.packageJsonPath &&
+    previous.name === next.name &&
+    previous.version === next.version &&
+    previous.packageManager === next.packageManager &&
+    previous.isAngular === next.isAngular &&
+    previous.angularVersion === next.angularVersion &&
+    previousScripts.length === nextScripts.length &&
+    previousScripts.every(([key, value], index) => {
+      const nextEntry = nextScripts[index];
+      return nextEntry !== undefined && key === nextEntry[0] && value === nextEntry[1];
+    })
   );
 }
 

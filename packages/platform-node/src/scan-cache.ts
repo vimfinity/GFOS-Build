@@ -2,24 +2,30 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync }
 import path from 'node:path';
 import type { Project } from '@gfos-build/domain';
 
-const SCAN_CACHE_VERSION = 1;
+const SCAN_CACHE_VERSION = 2;
+
+interface ValidationEntry {
+  path: string;
+  mtimeMs: number | null;
+}
 
 interface ScanCacheRecord {
   version: number;
   createdAt: string;
   projects: Project[];
+  validationEntries: ValidationEntry[];
 }
 
 export interface ScanCacheStore {
-  get(key: string, ttlMs: number): Project[] | null;
-  set(key: string, projects: Project[]): void;
+  get(key: string, ttlMs: number): { projects: Project[]; scannedAt: string } | null;
+  set(key: string, projects: Project[], validationPaths: string[], scannedAt: string): void;
   clear(): void;
 }
 
 export class FileScanCacheStore implements ScanCacheStore {
   constructor(private readonly cacheDir: string) {}
 
-  get(key: string, ttlMs: number): Project[] | null {
+  get(key: string, ttlMs: number): { projects: Project[]; scannedAt: string } | null {
     const filePath = this.getEntryPath(key);
     try {
       const stats = statSync(filePath);
@@ -30,22 +36,28 @@ export class FileScanCacheStore implements ScanCacheStore {
 
       const raw = readFileSync(filePath, 'utf8');
       const parsed = JSON.parse(raw) as ScanCacheRecord;
-      if (parsed.version !== SCAN_CACHE_VERSION || !Array.isArray(parsed.projects)) {
+      if (
+        parsed.version !== SCAN_CACHE_VERSION ||
+        !Array.isArray(parsed.projects) ||
+        !Array.isArray(parsed.validationEntries) ||
+        !this.isValidationSnapshotCurrent(parsed.validationEntries)
+      ) {
         rmSync(filePath, { force: true });
         return null;
       }
-      return parsed.projects;
+      return { projects: parsed.projects, scannedAt: parsed.createdAt };
     } catch {
       return null;
     }
   }
 
-  set(key: string, projects: Project[]): void {
+  set(key: string, projects: Project[], validationPaths: string[], scannedAt: string): void {
     mkdirSync(this.cacheDir, { recursive: true });
     const record: ScanCacheRecord = {
       version: SCAN_CACHE_VERSION,
-      createdAt: new Date().toISOString(),
+      createdAt: scannedAt,
       projects,
+      validationEntries: this.captureValidationEntries(validationPaths),
     };
     writeFileSync(this.getEntryPath(key), `${JSON.stringify(record)}\n`, 'utf8');
   }
@@ -76,5 +88,33 @@ export class FileScanCacheStore implements ScanCacheStore {
 
   private getEntryPath(key: string): string {
     return path.join(this.cacheDir, `${key}.json`);
+  }
+
+  private captureValidationEntries(validationPaths: string[]): ValidationEntry[] {
+    const entries: ValidationEntry[] = [];
+    for (const trackedPath of [...new Set(validationPaths)]) {
+      entries.push({
+        path: trackedPath,
+        mtimeMs: this.tryGetMtimeMs(trackedPath),
+      });
+    }
+    return entries;
+  }
+
+  private isValidationSnapshotCurrent(validationEntries: ValidationEntry[]): boolean {
+    for (const entry of validationEntries) {
+      if (this.tryGetMtimeMs(entry.path) !== entry.mtimeMs) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private tryGetMtimeMs(targetPath: string): number | null {
+    try {
+      return statSync(targetPath).mtimeMs;
+    } catch {
+      return null;
+    }
   }
 }
