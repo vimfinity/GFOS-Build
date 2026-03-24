@@ -23,9 +23,9 @@ interface ProjectPathPickerProps {
   onResolvedPath?: (path: string, project?: Project) => void;
   label?: string;
   description?: string;
+  error?: string;
   placeholder?: string;
   allowedBuildSystems?: Project['buildSystem'][];
-  required?: boolean;
 }
 
 export function ProjectPathPicker({
@@ -34,9 +34,9 @@ export function ProjectPathPicker({
   onResolvedPath,
   label = 'Project path',
   description,
+  error,
   placeholder = 'Select a project...',
   allowedBuildSystems,
-  required,
 }: ProjectPathPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -174,7 +174,6 @@ export function ProjectPathPicker({
     <div ref={containerRef} className="flex flex-col gap-1.5">
       <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
         {label}
-        {required ? <span className="ml-1 text-destructive">*</span> : null}
       </label>
       <div className="flex gap-2">
         <div className="relative min-w-0 flex-1">
@@ -189,7 +188,11 @@ export function ProjectPathPicker({
             onClick={() => setOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder={open ? 'Search projects or type an absolute path...' : placeholder}
-            className="field-input h-11 w-full rounded-2xl border pl-4 pr-10 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
+            className={cn(
+              'field-input h-11 w-full rounded-2xl border pl-4 pr-10 [background:var(--field-bg)] [border-color:var(--field-border)]',
+              'focus:outline-none focus:border-ring focus:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
+              error && 'border-destructive focus:border-destructive focus:[box-shadow:inset_0_0_0_1px_var(--color-destructive)]',
+            )}
           />
           <ChevronDown
             size={15}
@@ -213,7 +216,8 @@ export function ProjectPathPicker({
           </Button>
         </Tooltip>
       </div>
-      {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
+      {description && !error ? <span className="text-xs text-muted-foreground">{description}</span> : null}
+      {error ? <span className="text-xs text-destructive">{error}</span> : null}
 
       {open &&
         createPortal(

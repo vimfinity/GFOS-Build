@@ -157,7 +157,6 @@ export interface DeploymentArtifactSelector {
 export interface DeploymentWorkflowDefinition {
   description?: string;
   projectPath: string;
-  build: Omit<MavenBuildStep, 'buildSystem' | 'path' | 'label' | 'executionMode' | 'mavenExecutable'> & { label?: string };
   artifactSelector: DeploymentArtifactSelector;
   environmentName: string;
   standaloneProfileName: string;

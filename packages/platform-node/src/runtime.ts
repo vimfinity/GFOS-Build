@@ -114,7 +114,7 @@ export class AppRuntime {
     );
     this.db = new AppDatabase(getDbPath(this.stateRootDir));
     this.pipelineRunner = new PipelineRunner(this.buildRunner, this.db, this.gitInfoReader);
-    this.deploymentWorkflowService = new DeploymentWorkflowService(this.fs, this.buildRunner, this.processRunner);
+    this.deploymentWorkflowService = new DeploymentWorkflowService(this.fs, this.processRunner);
   }
 
   getHealth(): HealthResponse {
@@ -278,7 +278,6 @@ export class AppRuntime {
     return this.deploymentWorkflowService.preview({
       workflowName: 'preview',
       workflow: toDeploymentDefinition(workflow),
-      mavenStep: this.resolveDeploymentBuildStep(workflow, config),
       environment,
     });
   }
@@ -302,8 +301,7 @@ export class AppRuntime {
     });
     const job = this.createJob(jobId, new AbortController());
     const workflow = toDeploymentDefinition(saved.definition);
-    const mavenStep = this.resolveDeploymentBuildStep(saved.definition, config);
-    void this.runDeploymentWorkflowJob(job, input.name, workflow, mavenStep, environment, runId);
+    void this.runDeploymentWorkflowJob(job, input.name, workflow, environment, runId);
     return { jobId, runId };
   }
 
@@ -617,7 +615,6 @@ export class AppRuntime {
     }
 
     const workflow = toDeploymentDefinition(saved.definition);
-    const mavenStep = this.resolveDeploymentBuildStep(saved.definition, config);
     const results: BuildStepResult[] = [];
     let persistedStepRunId: number | undefined;
     let logSeq = 0;
@@ -626,7 +623,6 @@ export class AppRuntime {
       {
         workflowName: `${pipeline.name}:${workflowName}`,
         workflow,
-        mavenStep,
         environment,
       },
       job.controller?.signal,
@@ -810,7 +806,6 @@ export class AppRuntime {
     job: RuntimeJob,
     workflowName: string,
     workflow: DeploymentWorkflowDefinition,
-    mavenStep: Extract<BuildStep, { buildSystem: 'maven' }>,
     environment: AppConfig['wildfly']['environments'][string],
     runId: number,
   ): Promise<void> {
@@ -820,7 +815,6 @@ export class AppRuntime {
       for await (const event of this.deploymentWorkflowService.run({
         workflowName,
         workflow,
-        mavenStep,
         environment,
       }, job.controller?.signal)) {
         if (event.type === 'step:start') {
@@ -940,29 +934,6 @@ export class AppRuntime {
     );
   }
 
-  private resolveDeploymentBuildStep(workflow: DeploymentWorkflowConfig, config: AppConfig): Extract<BuildStep, { buildSystem: 'maven' }> {
-    const step = resolveStep(
-      buildStepConfigSchema.parse({
-        path: workflow.projectPath,
-        label: path.basename(workflow.projectPath),
-        buildSystem: 'maven',
-        mode: 'build',
-        modulePath: workflow.build.modulePath,
-        submoduleBuildStrategy: workflow.build.submoduleBuildStrategy,
-        goals: workflow.build.goals,
-        optionKeys: workflow.build.optionKeys,
-        profileStates: workflow.build.profileStates,
-        extraOptions: workflow.build.extraOptions,
-        javaVersion: workflow.build.javaVersion,
-        executionMode: 'internal',
-      }) as BuildStepConfig,
-      config,
-    );
-    if (step.buildSystem !== 'maven') {
-      throw new Error('Deployment workflows require a Maven build step.');
-    }
-    return step;
-  }
 }
 
 function resolveFromArg(pipeline: Pipeline, fromArg: string): number {
@@ -1051,15 +1022,6 @@ function toDeploymentDefinition(config: DeploymentWorkflowConfig): DeploymentWor
   return {
     description: config.description,
     projectPath: config.projectPath,
-    build: {
-      goals: config.build.goals,
-      optionKeys: config.build.optionKeys,
-      profileStates: config.build.profileStates,
-      extraOptions: config.build.extraOptions,
-      modulePath: config.build.modulePath,
-      submoduleBuildStrategy: config.build.submoduleBuildStrategy,
-      javaVersion: config.build.javaVersion,
-    },
     artifactSelector: config.artifactSelector,
     environmentName: config.environmentName,
     standaloneProfileName: config.standaloneProfileName,

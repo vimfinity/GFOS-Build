@@ -347,73 +347,78 @@ function StepCard({
                 </div>
               </div>
 
-              <MavenCommandFields
-                metadata={step.mavenMetadata}
-                value={toMavenCommandValue(step)}
-                onChange={(nextValue) =>
-                  onUpdate((current) => ({
-                    ...current,
-                    mavenModulePath: nextValue.modulePath,
-                    mavenSubmoduleBuildStrategy: nextValue.submoduleBuildStrategy,
-                    mavenGoals: nextValue.goals,
-                    mavenOptionKeys: nextValue.optionKeys,
-                    mavenProfileStates: nextValue.profileStates,
-                    mavenExtraOptions: nextValue.extraOptions,
-                    javaVersion: nextValue.javaVersion,
-                    executionMode: nextValue.executionMode,
-                  }))
-                }
-                jdkVersions={jdkVersions}
-              />
-
-              {step.mavenMode === 'deploy' ? (
-                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+              {step.mavenMode === 'build' ? (
+                <MavenCommandFields
+                  metadata={step.mavenMetadata}
+                  value={toMavenCommandValue(step)}
+                  onChange={(nextValue) =>
+                    onUpdate((current) => ({
+                      ...current,
+                      mavenModulePath: nextValue.modulePath,
+                      mavenSubmoduleBuildStrategy: nextValue.submoduleBuildStrategy,
+                      mavenGoals: nextValue.goals,
+                      mavenOptionKeys: nextValue.optionKeys,
+                      mavenProfileStates: nextValue.profileStates,
+                      mavenExtraOptions: nextValue.extraOptions,
+                      javaVersion: nextValue.javaVersion,
+                      executionMode: nextValue.executionMode,
+                    }))
+                  }
+                  jdkVersions={jdkVersions}
+                />
+              ) : (
+                <div className="mt-4 flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                       Deployment workflow
                     </label>
-                    <Select
-                      value={step.deploymentWorkflowName}
-                      onValueChange={(value) =>
-                        onUpdate((current) => ({
-                          ...current,
-                          deploymentWorkflowName: String(value ?? ''),
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a saved deployment workflow" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {matchingDeploymentWorkflows.map((workflow) => (
-                          <SelectItem key={workflow.name} value={workflow.name}>
-                            {workflow.name}
-                          </SelectItem>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                      <Select
+                        value={step.deploymentWorkflowName}
+                        onValueChange={(value) =>
+                          onUpdate((current) => ({
+                            ...current,
+                            deploymentWorkflowName: String(value ?? ''),
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a saved deployment workflow" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {matchingDeploymentWorkflows.map((workflow) => (
+                            <SelectItem key={workflow.name} value={workflow.name}>
+                              {workflow.name}
+                            </SelectItem>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Pipeline deploy steps reference a saved deployment workflow and expand into
-                      Maven and WildFly sub-steps at runtime.
-                    </p>
+                        </SelectContent>
+                      </Select>
+                      <Tooltip content="Create deployment workflow" side="bottom">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-11 w-11 shrink-0"
+                          onClick={onCreateDeploymentWorkflow}
+                          aria-label="Create deployment workflow"
+                        >
+                          <Plus size={14} />
+                        </Button>
+                      </Tooltip>
+                    </div>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <p className="text-xs text-muted-foreground">
+                        Select the saved WildFly deployment workflow for this Maven project. The pipeline step will use that workflow directly instead of configuring Maven build details here.
+                      </p>
+                    </div>
                     {matchingDeploymentWorkflows.length === 0 ? (
                       <p className="text-xs text-warning">
                         No saved deployment workflows match this project path yet.
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex flex-col gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={onCreateDeploymentWorkflow}>
-                      <Plus size={12} />
-                      New deployment workflow
-                    </Button>
-                    <div className="rounded-[18px] border border-border bg-card/60 px-4 py-3 text-xs text-muted-foreground">
-                      The Maven build settings above are kept for project inspection consistency.
-                      The selected deployment workflow is the runtime source of truth.
-                    </div>
-                  </div>
                 </div>
-              ) : null}
+              )}
             </div>
           ) : step.buildSystem === 'node' ? (
             <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end">

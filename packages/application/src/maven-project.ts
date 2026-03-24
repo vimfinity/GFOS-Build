@@ -40,21 +40,25 @@ export async function inspectMavenProject(fs: FileSystem, projectPath: string): 
     }
 
     let parsed;
+    let pomContent = '';
     try {
-      parsed = parsePom(await fs.readFile(currentPomPath));
+      pomContent = await fs.readFile(currentPomPath);
+      parsed = parsePom(pomContent);
     } catch {
       return;
     }
+    const effectiveVersion = parsed.version ?? extractParentVersionFromPom(pomContent);
+    const effectiveFinalName = resolvePomPlaceholders(parsed.finalName, parsed.artifactId, effectiveVersion);
 
     const relativePath = toPortablePath(path.relative(projectPath, modulePath));
 
       if (relativePath === '') {
         rootArtifactId = parsed.artifactId;
-        rootVersion = parsed.version;
+        rootVersion = effectiveVersion;
         rootPackaging = parsed.packaging;
         rootJavaVersion = parsed.javaVersion;
         rootBuildDirectory = parsed.buildDirectory;
-        rootFinalName = parsed.finalName;
+        rootFinalName = effectiveFinalName;
         isAggregator = parsed.isAggregator;
       } else {
         modules.push({
@@ -67,7 +71,7 @@ export async function inspectMavenProject(fs: FileSystem, projectPath: string): 
         });
       }
 
-      const deployableCandidate = toDeployableCandidate(parsed, relativePath);
+      const deployableCandidate = toDeployableCandidate(parsed, relativePath, effectiveVersion, effectiveFinalName);
       if (deployableCandidate) {
         deployableCandidates.push(deployableCandidate);
       }
@@ -154,6 +158,8 @@ function toPortablePath(value: string): string {
 function toDeployableCandidate(
   parsed: ReturnType<typeof parsePom>,
   relativePath: string,
+  effectiveVersion: string | undefined,
+  effectiveFinalName: string | undefined,
 ): DeployableArtifactCandidate | null {
   const packaging = parsed.packaging.toLowerCase();
   if (packaging === 'pom') {
@@ -167,9 +173,9 @@ function toDeployableCandidate(
     modulePath: relativePath,
     artifactId: parsed.artifactId,
     packaging: packaging as DeployableArtifactCandidate['packaging'],
-    declaredFinalName: parsed.finalName,
+    declaredFinalName: effectiveFinalName,
     declaredBuildDirectory: parsed.buildDirectory,
-    expectedDefaultFileName: `${parsed.finalName ?? defaultFinalName(parsed.artifactId, parsed.version)}.${packaging}`,
+    expectedDefaultFileName: `${effectiveFinalName ?? defaultFinalName(parsed.artifactId, effectiveVersion)}.${packaging}`,
     selectionConfidence: packaging === 'jar' ? 'manual' : 'high',
   };
 }
@@ -186,4 +192,32 @@ function dedupeDeployableCandidates(candidates: DeployableArtifactCandidate[]): 
 
 function defaultFinalName(artifactId: string, version?: string): string {
   return version ? `${artifactId}-${version}` : artifactId;
+}
+
+function resolvePomPlaceholders(
+  value: string | undefined,
+  artifactId: string,
+  version: string | undefined,
+): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return value
+    .replaceAll('${project.artifactId}', artifactId)
+    .replaceAll('${artifactId}', artifactId)
+    .replaceAll('${project.version}', version ?? '')
+    .replaceAll('${version}', version ?? '');
+}
+
+function extractParentVersionFromPom(content: string): string | undefined {
+  const parentMatch = content.match(
+    /<(?:(?:[\w-]+):)?parent(?:\s[^>]*)?>([\s\S]*?)<\/(?:(?:[\w-]+):)?parent>/,
+  );
+  if (!parentMatch?.[1]) {
+    return undefined;
+  }
+  const versionMatch = parentMatch[1].match(
+    /<(?:(?:[\w-]+):)?version(?:\s[^>]*)?>([\s\S]*?)<\/(?:(?:[\w-]+):)?version>/,
+  );
+  return versionMatch?.[1]?.trim() || undefined;
 }

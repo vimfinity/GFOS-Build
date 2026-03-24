@@ -46,7 +46,11 @@ export class SettingsStore {
   }
 
   save(config: AppConfig): void {
-    const validated = configSchema.parse(config);
+    const result = configSchema.safeParse(config);
+    if (!result.success) {
+      throw new Error(formatSaveValidationError(result.error.issues));
+    }
+    const validated = result.data;
     mkdirSync(path.dirname(this.settingsPath), { recursive: true });
     const tempPath = `${this.settingsPath}.tmp`;
     writeFileSync(tempPath, `${JSON.stringify(validated, null, 2)}\n`, 'utf8');
@@ -56,7 +60,11 @@ export class SettingsStore {
   savePatch(patch: Record<string, unknown>): AppConfig {
     const current = this.load().config;
     const merged = mergePlainObjects(current as Record<string, unknown>, patch);
-    const validated = configSchema.parse(merged);
+    const result = configSchema.safeParse(merged);
+    if (!result.success) {
+      throw new Error(formatSaveValidationError(result.error.issues));
+    }
+    const validated = result.data;
     this.save(validated);
     return validated;
   }
@@ -93,6 +101,15 @@ function formatValidationError(
     .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
     .join('; ');
   return `Local settings file "${settingsPath}" is invalid. ${detail}`;
+}
+
+function formatSaveValidationError(
+  issues: Array<{ path: PropertyKey[]; message: string }>,
+): string {
+  const detail = issues
+    .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+    .join('; ');
+  return `Settings update is invalid. ${detail}`;
 }
 
 function isEnoent(error: unknown): boolean {

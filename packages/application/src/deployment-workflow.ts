@@ -3,7 +3,6 @@ import type {
   BuildEvent,
   DeployableArtifactCandidate,
   DeploymentWorkflowDefinition,
-  MavenBuildStep,
   WildFlyCleanupPreset,
   WildFlyDeployMode,
   WildFlyEnvironmentConfig,
@@ -13,21 +12,18 @@ import type {
 } from '@gfos-build/domain';
 import type { DeploymentPlanPreview } from '@gfos-build/contracts';
 import type { FileSystem } from './file-system.js';
-import type { BuildRunner } from './build-runner.js';
 import type { ProcessRunner } from './process-runner.js';
 import { inspectMavenProject } from './maven-project.js';
 
 export interface DeploymentWorkflowContext {
   workflowName: string;
   workflow: DeploymentWorkflowDefinition;
-  mavenStep: MavenBuildStep;
   environment: WildFlyEnvironmentConfig;
 }
 
 export class DeploymentWorkflowService {
   constructor(
     private readonly fs: FileSystem,
-    private readonly buildRunner: BuildRunner,
     private readonly processRunner: ProcessRunner,
   ) {}
 
@@ -61,25 +57,8 @@ export class DeploymentWorkflowService {
   }
 
   async *run(context: DeploymentWorkflowContext, signal?: AbortSignal): AsyncGenerator<BuildEvent> {
-    const total = 4;
+    const total = context.workflow.startServer ? 3 : 2;
     yield { type: 'run:start', startedAt: Date.now() };
-
-    for await (const event of this.buildRunner.run(context.mavenStep, 0, total, context.workflowName, signal)) {
-      yield event;
-      if (event.type === 'step:done' && event.status === 'failed') {
-        yield {
-          type: 'run:done',
-          result: {
-            results: [{ step: event.step, exitCode: event.exitCode, durationMs: event.durationMs, status: event.status, success: event.success }],
-            status: 'failed',
-            success: false,
-            durationMs: event.durationMs,
-            stoppedAt: 0,
-          },
-        };
-        return;
-      }
-    }
 
     const candidate = await this.resolveSelectedCandidate(context.workflow.projectPath, context.workflow.artifactSelector);
     const artifactPath = await this.resolveBuiltArtifactPath(context.workflow.projectPath, candidate);
@@ -87,22 +66,22 @@ export class DeploymentWorkflowService {
     const deployMode = context.workflow.deployMode ?? recommendDeployMode(context.workflow);
 
     const cleanupStep = this.makeWildFlyStep('wildfly-cleanup', 'Clean WildFly', context, `cleanup ${environment.baseDir}`);
-    yield { type: 'step:start', step: cleanupStep, index: 1, total, pipelineName: context.workflowName };
+    yield { type: 'step:start', step: cleanupStep, index: 0, total, pipelineName: context.workflowName };
     const cleanupWarnings = await this.executeCleanup(environment, context.environment.cleanupPresets[context.workflow.cleanupPresetName ?? ''], artifactPath);
     for (const line of cleanupWarnings) {
       yield { type: 'step:output', stream: 'stdout', line };
     }
-    yield { type: 'step:done', step: cleanupStep, index: 1, total, exitCode: 0, durationMs: 0, status: 'success', success: true };
+    yield { type: 'step:done', step: cleanupStep, index: 0, total, exitCode: 0, durationMs: 0, status: 'success', success: true };
 
     const deployStep = this.makeWildFlyStep('wildfly-deploy', 'Deploy artifact', context, this.describeDeployCommand(deployMode, artifactPath, environment));
-    yield { type: 'step:start', step: deployStep, index: 2, total, pipelineName: context.workflowName };
+    yield { type: 'step:start', step: deployStep, index: 1, total, pipelineName: context.workflowName };
     for await (const event of this.executeDeploy(deployMode, artifactPath, candidate, environment, signal)) {
       if (event.type === 'stdout' || event.type === 'stderr') {
         yield { type: 'step:output', stream: event.type, line: event.line! };
       } else {
-        yield { type: 'step:done', step: deployStep, index: 2, total, exitCode: event.exitCode!, durationMs: event.durationMs!, status: event.exitCode === 0 ? 'success' : 'failed', success: event.exitCode === 0 };
+        yield { type: 'step:done', step: deployStep, index: 1, total, exitCode: event.exitCode!, durationMs: event.durationMs!, status: event.exitCode === 0 ? 'success' : 'failed', success: event.exitCode === 0 };
         if (event.exitCode !== 0) {
-          yield { type: 'run:done', result: { results: [], status: 'failed', success: false, durationMs: event.durationMs!, stoppedAt: 2 } };
+          yield { type: 'run:done', result: { results: [], status: 'failed', success: false, durationMs: event.durationMs!, stoppedAt: 1 } };
           return;
         }
       }
@@ -113,13 +92,13 @@ export class DeploymentWorkflowService {
       const standaloneProfile = context.environment.standaloneProfiles[context.workflow.standaloneProfileName];
       const startupCommand = buildStartupCommand(environment, standaloneProfile, startupPreset);
       const startupStep = this.makeWildFlyStep('wildfly-startup', 'Start WildFly', context, startupCommand);
-      yield { type: 'step:start', step: startupStep, index: 3, total, pipelineName: context.workflowName };
+      yield { type: 'step:start', step: startupStep, index: 2, total, pipelineName: context.workflowName };
       for await (const event of this.executeStartup(environment, standaloneProfile, startupPreset, signal)) {
         if (event.type === 'stdout' || event.type === 'stderr') {
           yield { type: 'step:output', stream: event.type, line: event.line! };
         } else {
           const status = event.exitCode === 0 ? 'launched' : 'failed';
-          yield { type: 'step:done', step: startupStep, index: 3, total, exitCode: event.exitCode!, durationMs: event.durationMs!, status, success: status !== 'failed' };
+          yield { type: 'step:done', step: startupStep, index: 2, total, exitCode: event.exitCode!, durationMs: event.durationMs!, status, success: status !== 'failed' };
           yield { type: 'run:done', result: { results: [], status, success: status !== 'failed', durationMs: event.durationMs! } };
           return;
         }

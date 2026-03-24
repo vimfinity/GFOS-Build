@@ -47,18 +47,6 @@ function DeploymentsView() {
       name,
       description: String(definition['description'] ?? ''),
       projectPath: String(definition['projectPath'] ?? ''),
-      goals: Array.isArray((definition['build'] as Record<string, unknown> | undefined)?.['goals'])
-        ? ((definition['build'] as Record<string, unknown>)['goals'] as string[])
-        : ['clean', 'install'],
-      optionKeys: Array.isArray((definition['build'] as Record<string, unknown> | undefined)?.['optionKeys'])
-        ? ((definition['build'] as Record<string, unknown>)['optionKeys'] as DeploymentWorkflowFormValue['optionKeys'])
-        : [],
-      profileStates: ((definition['build'] as Record<string, unknown> | undefined)?.['profileStates'] as Record<string, 'default' | 'enabled' | 'disabled'>) ?? {},
-      extraOptions: Array.isArray((definition['build'] as Record<string, unknown> | undefined)?.['extraOptions'])
-        ? ((definition['build'] as Record<string, unknown>)['extraOptions'] as string[])
-        : [],
-      javaVersion: String((definition['build'] as Record<string, unknown> | undefined)?.['javaVersion'] ?? ''),
-      modulePath: String((definition['build'] as Record<string, unknown> | undefined)?.['modulePath'] ?? ''),
       environmentName: String(definition['environmentName'] ?? ''),
       standaloneProfileName: String(definition['standaloneProfileName'] ?? ''),
       cleanupPresetName: String(definition['cleanupPresetName'] ?? ''),

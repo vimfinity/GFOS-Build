@@ -45,7 +45,7 @@ const NAV_TABS: Array<{ to: string; label: string; exact: boolean; shortcut: str
   { to: '/', label: 'Home', exact: true, shortcut: 'Ctrl+1' },
   { to: '/pipelines', label: 'Pipelines', exact: false, shortcut: 'Ctrl+2' },
   { to: '/deployments', label: 'Deployments', exact: false, shortcut: 'Ctrl+3' },
-  { to: '/projects', label: 'Projects', exact: false, shortcut: 'Ctrl+4' },
+  { to: '/projects', label: 'Quick Run', exact: false, shortcut: 'Ctrl+4' },
   { to: '/builds', label: 'Builds', exact: false, shortcut: 'Ctrl+5' },
   { to: '/stats', label: 'Stats', exact: false, shortcut: 'Ctrl+6' },
 ];

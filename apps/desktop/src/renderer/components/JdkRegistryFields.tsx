@@ -182,7 +182,7 @@ export function JdkRegistryFields({
                   onChange={(event) => updateEntry(index, 'version', event.target.value)}
                 />
                 <Input
-                  placeholder="J:\\dev\\java\\jdk17"
+                  placeholder="J:\dev\java\jdk17"
                   value={entry.path}
                   onChange={(event) => updateEntry(index, 'path', event.target.value)}
                 />

@@ -36,9 +36,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           className={cn(
             'field-input h-11 rounded-2xl border px-4 [background:var(--field-bg)] [border-color:var(--field-border)]',
-            'focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]',
+            'focus:outline-none focus:border-ring focus:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
             'disabled:opacity-50 disabled:cursor-not-allowed',
-            error && 'border-destructive focus:border-destructive focus:[box-shadow:0_0_0_1px_var(--color-destructive)]',
+            error && 'border-destructive focus:border-destructive focus:[box-shadow:inset_0_0_0_1px_var(--color-destructive)]',
             className,
           )}
           {...props}
@@ -67,9 +67,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           className={cn(
             'field-input min-h-[104px] resize-y rounded-[18px] border px-4 py-3 [background:var(--field-bg)] [border-color:var(--field-border)]',
-            'focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]',
+            'focus:outline-none focus:border-ring focus:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
             'disabled:opacity-50 disabled:cursor-not-allowed',
-            error && 'border-destructive focus:border-destructive focus:[box-shadow:0_0_0_1px_var(--color-destructive)]',
+            error && 'border-destructive focus:border-destructive focus:[box-shadow:inset_0_0_0_1px_var(--color-destructive)]',
             className,
           )}
           {...props}

@@ -813,10 +813,10 @@ function ProjectsView() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="page-title text-[1.6rem] font-semibold leading-tight text-foreground">
-            Projects
+            Quick Run
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Browse scanned Maven and Node codebases and launch Quick Runs.
+            Browse scanned Maven and Node codebases and launch ad hoc runs.
           </p>
         </div>
         <Button
@@ -833,7 +833,7 @@ function ProjectsView() {
       {isLoading && (
         <div className="glass-card flex flex-col items-center gap-4 rounded-[24px] border border-border px-8 py-16 text-center">
           <Loader2 size={26} className="animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Scanning projects...</p>
+          <p className="text-sm text-muted-foreground">Scanning codebases...</p>
         </div>
       )}
 
@@ -843,7 +843,7 @@ function ProjectsView() {
             <AlertCircle size={28} className="text-destructive" />
           </div>
           <div>
-            <p className="text-base font-semibold text-foreground">Failed to scan projects</p>
+            <p className="text-base font-semibold text-foreground">Failed to scan codebases</p>
             <p className="mt-2 text-sm text-muted-foreground">
               The desktop runtime could not return a project inventory.
             </p>
@@ -866,7 +866,7 @@ function ProjectsView() {
         <>
           {projects.length > 0 && (
             <div className="glass-card flex flex-wrap items-center gap-3 rounded-[24px] border border-border p-4">
-              <SearchField value={search} onChange={setSearch} placeholder="Filter projects..." />
+              <SearchField value={search} onChange={setSearch} placeholder="Filter codebases..." />
 
               <div className="segmented-control">
                 {(['all', 'maven', 'node'] as const).map((system) => (

@@ -30,6 +30,7 @@ const bridge: ElectronBridge = {
   clearRunLogs: () => ipcRenderer.invoke(IPC.CLEAR_RUN_LOGS),
   clearRuns: () => ipcRenderer.invoke(IPC.CLEAR_RUNS),
   openDirectory: () => ipcRenderer.invoke(IPC.OPEN_DIRECTORY),
+  openFile: (opts) => ipcRenderer.invoke(IPC.OPEN_FILE, opts),
   getGitInfo: (projectPath) => ipcRenderer.invoke(IPC.GET_GIT_INFO, projectPath),
   getGitInfoBatch: (paths) => ipcRenderer.invoke(IPC.GET_GIT_INFO_BATCH, paths),
   onRunEvent: (jobId, listener) => {

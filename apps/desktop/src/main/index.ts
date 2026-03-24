@@ -239,6 +239,17 @@ function registerIpcHandlers(): void {
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
 
+  ipcMain.handle(IPC.OPEN_FILE, async (_event, input?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => {
+    const ownerWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined;
+    const options: OpenDialogOptions = {
+      properties: ['openFile'],
+      title: input?.title ?? 'Select file',
+      filters: input?.filters,
+    };
+    const result = ownerWindow ? await dialog.showOpenDialog(ownerWindow, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+
   ipcMain.on(IPC.RUN_SUBSCRIBE, (event: IpcMainEvent, jobId: string) => {
     clearSubscription(event.sender.id, jobId);
     const unsubscribe = getRuntime().subscribeRun(jobId, (payload) => {

@@ -51,16 +51,17 @@ const deploymentWorkflowConfigSchema = z
     build: z
       .object({
         modulePath: z.string().min(1).optional(),
-        submoduleBuildStrategy: z.enum(['root-pl', 'submodule-dir']).default('root-pl'),
-        goals: z.array(z.string().min(1)).default(['clean', 'install']),
+        submoduleBuildStrategy: z.enum(['root-pl', 'submodule-dir']).optional(),
+        goals: z.array(z.string().min(1)).optional(),
         optionKeys: z
           .array(z.enum(['skipTests', 'skipTestCompile', 'updateSnapshots', 'offline', 'quiet', 'debug', 'errors', 'failAtEnd', 'failNever']))
-          .default([]),
-        profileStates: z.record(z.enum(['default', 'enabled', 'disabled'])).default({}),
-        extraOptions: z.array(z.string()).default([]),
+          .optional(),
+        profileStates: z.record(z.enum(['default', 'enabled', 'disabled'])).optional(),
+        extraOptions: z.array(z.string()).optional(),
         javaVersion: z.string().optional(),
       })
-      .strict(),
+      .strict()
+      .optional(),
     artifactSelector: z
       .object({
         kind: z.enum(['auto', 'module', 'explicit-file']),
