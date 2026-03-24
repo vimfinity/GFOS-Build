@@ -207,12 +207,6 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.UPDATE_PIPELINE, (_event, input: { name: string; pipeline: unknown }) => getRuntime().updatePipeline(input));
   ipcMain.handle(IPC.DELETE_PIPELINE, (_event, name: string) => getRuntime().deletePipeline(name));
   ipcMain.handle(IPC.RUN_PIPELINE, (_event, input: { name: string; from?: string }) => getRuntime().runPipeline(input));
-  ipcMain.handle(IPC.LIST_DEPLOYMENT_WORKFLOWS, () => getRuntime().listDeploymentWorkflows());
-  ipcMain.handle(IPC.CREATE_DEPLOYMENT_WORKFLOW, (_event, input: { name: string; workflow: unknown }) => getRuntime().createDeploymentWorkflow(input));
-  ipcMain.handle(IPC.UPDATE_DEPLOYMENT_WORKFLOW, (_event, input: { name: string; workflow: unknown }) => getRuntime().updateDeploymentWorkflow(input));
-  ipcMain.handle(IPC.DELETE_DEPLOYMENT_WORKFLOW, (_event, name: string) => getRuntime().deleteDeploymentWorkflow(name));
-  ipcMain.handle(IPC.GET_DEPLOYMENT_WORKFLOW, (_event, name: string) => getRuntime().getDeploymentWorkflowDefinition(name));
-  ipcMain.handle(IPC.RUN_DEPLOYMENT_WORKFLOW, (_event, input: { name: string }) => getRuntime().runDeploymentWorkflow(input));
   ipcMain.handle(IPC.RUN_QUICK, (_event, input: Record<string, unknown>) => getRuntime().runQuick(input));
   ipcMain.handle(IPC.CANCEL_JOB, (_event, jobId: string) => getRuntime().cancelJob(jobId));
   ipcMain.handle(IPC.LIST_RUNS, (_event, opts?: { pipeline?: string; limit?: number }) => getRuntime().listRuns(opts));

@@ -1,171 +1,229 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useBlocker } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { configQuery, useSaveConfig } from '@/api/queries';
 import {
-  deploymentWorkflowsQuery,
-  getDeploymentWorkflow,
-  useCreateDeploymentWorkflow,
-  useDeleteDeploymentWorkflow,
-  useRunDeploymentWorkflow,
-  useUpdateDeploymentWorkflow,
-  configQuery,
-} from '@/api/queries';
-import { DeploymentEditor, serializeDeploymentWorkflow, type DeploymentWorkflowFormValue } from '@/components/DeploymentEditor';
+  WildFlyEnvironmentManager,
+  normalizeWildFlyEnvironments,
+  validateWildFlyEnvironments,
+} from '@/components/WildFlyEnvironmentManager';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { SearchField } from '@/components/ui/search-field';
-import { useMemo, useState } from 'react';
-import { Loader2, Play, Plus, Trash2, Pencil } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { AlertCircle, CheckCircle2, Loader2, Save } from 'lucide-react';
+import type { WildFlyEnvironmentConfig } from '@gfos-build/contracts';
 
 export const Route = createFileRoute('/deployments/')({
   component: DeploymentsView,
 });
 
 function DeploymentsView() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: workflows, isLoading } = useQuery(deploymentWorkflowsQuery);
-  const { data: configData } = useQuery(configQuery);
-  const createWorkflow = useCreateDeploymentWorkflow();
-  const updateWorkflow = useUpdateDeploymentWorkflow();
-  const deleteWorkflow = useDeleteDeploymentWorkflow();
-  const runWorkflow = useRunDeploymentWorkflow();
-  const [search, setSearch] = useState('');
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorValue, setEditorValue] = useState<Partial<DeploymentWorkflowFormValue> | undefined>(undefined);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const { data: configData, isLoading } = useQuery(configQuery);
+  const saveConfig = useSaveConfig();
 
-  const filtered = useMemo(
-    () => (workflows ?? []).filter((workflow) => workflow.name.toLowerCase().includes(search.trim().toLowerCase())),
-    [workflows, search],
+  const [wildflyEnvironments, setWildflyEnvironments] = useState<Record<string, WildFlyEnvironmentConfig>>({});
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [baselineSnapshot, setBaselineSnapshot] = useState('');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+  const [showSavingIndicator, setShowSavingIndicator] = useState(false);
+  const savingIndicatorTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!configData) return;
+    const nextEnvironments = configData.config.wildfly.environments;
+    setWildflyEnvironments(nextEnvironments);
+    setSelectedName((current) => (current && nextEnvironments[current] ? current : Object.keys(nextEnvironments)[0] ?? null));
+    setBaselineSnapshot(JSON.stringify(normalizeWildFlyEnvironments(nextEnvironments)));
+  }, [configData]);
+
+  const normalizedEnvironments = useMemo(
+    () => normalizeWildFlyEnvironments(wildflyEnvironments),
+    [wildflyEnvironments],
   );
+  const currentSnapshot = useMemo(() => JSON.stringify(normalizedEnvironments), [normalizedEnvironments]);
+  const isDirty = baselineSnapshot !== '' && currentSnapshot !== baselineSnapshot;
+  const validationErrors = useMemo(() => validateWildFlyEnvironments(wildflyEnvironments), [wildflyEnvironments]);
+  const leaveBlocker = useBlocker({
+    shouldBlockFn: () => isDirty && saveState !== 'saving',
+    enableBeforeUnload: () => isDirty,
+    withResolver: true,
+  });
 
-  async function handleEdit(name: string) {
-    const workflow = await getDeploymentWorkflow(name);
-    if (!workflow || typeof workflow !== 'object') return;
-    const definition = workflow as Record<string, unknown>;
-    setEditorValue({
-      name,
-      description: String(definition['description'] ?? ''),
-      projectPath: String(definition['projectPath'] ?? ''),
-      environmentName: String(definition['environmentName'] ?? ''),
-      standaloneProfileName: String(definition['standaloneProfileName'] ?? ''),
-      cleanupPresetName: String(definition['cleanupPresetName'] ?? ''),
-      startupPresetName: String(definition['startupPresetName'] ?? ''),
-      deployMode: (definition['deployMode'] as DeploymentWorkflowFormValue['deployMode']) ?? 'filesystem-scanner',
-      artifactSelection: definition['artifactSelector'] && typeof definition['artifactSelector'] === 'object'
-        ? ((((definition['artifactSelector'] as Record<string, unknown>)['kind'] as string) === 'module')
-            ? `${String((definition['artifactSelector'] as Record<string, unknown>)['modulePath'] ?? '')}|${String((definition['artifactSelector'] as Record<string, unknown>)['packaging'] ?? '')}`
-            : String((definition['artifactSelector'] as Record<string, unknown>)['kind'] ?? 'auto'))
-        : 'auto',
-      explicitArtifactFile: definition['artifactSelector'] && typeof definition['artifactSelector'] === 'object'
-        ? String((definition['artifactSelector'] as Record<string, unknown>)['fileName'] ?? '')
-        : '',
-      startServer: Boolean(definition['startServer'] ?? true),
-    });
-    setEditorOpen(true);
-  }
-
-  async function handleSave(value: DeploymentWorkflowFormValue) {
-    const payload = serializeDeploymentWorkflow(value, configData?.config.wildfly.environments ?? {});
-    if (editorValue?.name && editorValue.name === value.name) {
-      await updateWorkflow.mutateAsync({ name: value.name, workflow: payload });
-    } else {
-      await createWorkflow.mutateAsync({ name: value.name, workflow: payload });
+  useEffect(() => {
+    if (savingIndicatorTimeoutRef.current !== null) {
+      window.clearTimeout(savingIndicatorTimeoutRef.current);
+      savingIndicatorTimeoutRef.current = null;
     }
-    await queryClient.invalidateQueries({ queryKey: ['deployment-workflows'] });
+
+    if (saveState === 'saving') {
+      setShowSavingIndicator(false);
+      savingIndicatorTimeoutRef.current = window.setTimeout(() => {
+        setShowSavingIndicator(true);
+      }, 180);
+      return () => {
+        if (savingIndicatorTimeoutRef.current !== null) {
+          window.clearTimeout(savingIndicatorTimeoutRef.current);
+          savingIndicatorTimeoutRef.current = null;
+        }
+      };
+    }
+
+    setShowSavingIndicator(false);
+    return undefined;
+  }, [saveState]);
+
+  async function handleSave() {
+    if (!isDirty || !configData) return true;
+    if (Object.keys(validationErrors).length > 0) {
+      setShowValidationErrors(true);
+      setSaveState('error');
+      setSaveError('Fix the highlighted deployment settings before saving.');
+      return false;
+    }
+
+    setSaveState('saving');
+    setSaveError(null);
+
+    try {
+      await saveConfig.mutateAsync({
+        ...configData.config,
+        wildfly: {
+          environments: normalizedEnvironments,
+        },
+      });
+      await queryClient.invalidateQueries({ queryKey: ['config'] });
+      setBaselineSnapshot(currentSnapshot);
+      setShowValidationErrors(false);
+      setSaveState('saved');
+      return true;
+    } catch (error) {
+      setSaveState('error');
+      setSaveError(error instanceof Error ? error.message.replace(/^POST \/api\/config failed:\s*/, 'Save failed: ') : 'Save failed. Try again.');
+      return false;
+    }
   }
 
-  async function handleRun(name: string) {
-    const { jobId } = await runWorkflow.mutateAsync({ name });
-    void navigate({ to: '/builds/$jobId', params: { jobId } });
+  const saveStatus =
+    saveState === 'saving' && showSavingIndicator
+      ? {
+          tone: 'text-primary',
+          icon: <Loader2 size={12} className="animate-spin" />,
+          text: 'Applying changes...',
+        }
+      : saveState === 'error'
+        ? {
+            tone: 'text-destructive',
+            icon: <AlertCircle size={12} />,
+            text: saveError ?? 'Save failed. Try again.',
+          }
+        : saveState === 'saved' && !isDirty
+          ? {
+              tone: 'text-success',
+              icon: <CheckCircle2 size={12} />,
+              text: 'Changes applied',
+            }
+          : isDirty
+            ? {
+                tone: 'text-warning',
+                icon: <div className="h-1.5 w-1.5 rounded-full bg-warning" />,
+                text: 'Unsaved changes',
+              }
+            : null;
+
+  if (isLoading) {
+    return (
+      <div className="glass-card mx-auto flex w-full max-w-5xl items-center gap-3 rounded-[24px] border border-border px-5 py-4 text-sm text-muted-foreground">
+        <Loader2 size={14} className="animate-spin" />
+        Loading deployment environments...
+      </div>
+    );
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      <div className="flex items-start justify-between gap-4">
+    <div className="mx-auto flex w-full max-w-[76rem] flex-col gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="page-title text-[1.6rem] font-semibold leading-tight text-foreground">Deployments</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Manage reusable WildFly deployment workflows.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Manage WildFly environments, standalone profiles, cleanup presets, and startup presets.</p>
         </div>
-        <Button size="sm" onClick={() => { setEditorValue(undefined); setEditorOpen(true); }}>
-          <Plus size={14} />
-          New deployment
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader className="border-b border-border">
-          <CardTitle className="text-sm">Saved deployment workflows</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 p-5">
-          <SearchField value={search} onChange={setSearch} placeholder="Search deployments..." />
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 size={14} className="animate-spin" />
-              Loading deployment workflows...
-            </div>
-          ) : filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No deployment workflows found.</p>
-          ) : (
-            filtered.map((workflow) => (
-              <div key={workflow.name} className="flex items-center gap-3 rounded-[18px] border border-border bg-secondary/30 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-foreground">{workflow.name}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {workflow.environmentName} · {workflow.deployMode} · {workflow.startServer ? 'starts server' : 'deploy only'}
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => void handleRun(workflow.name)}>
-                  <Play size={12} />
-                  Run
-                </Button>
-                <Button size="icon" variant="outline" onClick={() => void handleEdit(workflow.name)} aria-label={`Edit ${workflow.name}`}>
-                  <Pencil size={12} />
-                </Button>
-                <Button size="icon" variant="destructive" onClick={() => setDeleteTarget(workflow.name)} aria-label={`Delete ${workflow.name}`}>
-                  <Trash2 size={12} />
-                </Button>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      <DeploymentEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        initialValue={editorValue}
-        onSave={(value) => void handleSave(value)}
-        title={editorValue?.name ? `Edit "${editorValue.name}"` : 'Create deployment workflow'}
-        description="Configure a reusable local WildFly deployment workflow."
-        confirmLabel={editorValue?.name ? 'Save workflow' : 'Create workflow'}
-      />
-
-      {deleteTarget ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/75 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[24px] border border-border bg-card p-6 shadow-lg">
-            <p className="text-base font-semibold text-foreground">Delete deployment workflow?</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              "{deleteTarget}" will be removed from GFOS Build.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  void deleteWorkflow.mutateAsync(deleteTarget).then(async () => {
-                    setDeleteTarget(null);
-                    await queryClient.invalidateQueries({ queryKey: ['deployment-workflows'] });
-                  });
-                }}
-              >
-                Delete
-              </Button>
-            </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <Button variant="default" onClick={() => void handleSave()} disabled={saveState === 'saving' || !isDirty} className={cn('min-w-[10.75rem] justify-center disabled:opacity-100', !isDirty && saveState !== 'saving' ? 'bg-primary/16 text-primary shadow-none hover:bg-primary/16 active:bg-primary/16' : undefined)}>
+            <Save size={14} />
+            Save deployments
+          </Button>
+          <div className={cn('flex min-h-4 items-center gap-1.5 text-[11px] leading-none transition-all duration-200', saveStatus ? `${saveStatus.tone} opacity-100` : 'opacity-0')}>
+            {saveStatus ? (
+              <>
+                {saveStatus.icon}
+                <span>{saveStatus.text}</span>
+              </>
+            ) : null}
           </div>
         </div>
-      ) : null}
+      </div>
+      <Dialog
+        open={leaveBlocker.status === 'blocked'}
+        onOpenChange={(open) => {
+          if (!open && leaveBlocker.status === 'blocked') {
+            leaveBlocker.reset();
+          }
+        }}
+      >
+        <DialogContent className="max-w-md" showCloseButton={false}>
+          <DialogTitle>Save changes before leaving?</DialogTitle>
+          <DialogDescription>
+            You have unsaved deployment changes. Save them before navigating away, or discard them and continue.
+          </DialogDescription>
+
+          <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (leaveBlocker.status === 'blocked') leaveBlocker.reset();
+              }}
+              disabled={saveState === 'saving'}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (leaveBlocker.status === 'blocked') leaveBlocker.proceed();
+              }}
+              disabled={saveState === 'saving'}
+            >
+              Leave without saving
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                void (async () => {
+                  const saved = await handleSave();
+                  if (saved && leaveBlocker.status === 'blocked') {
+                    leaveBlocker.proceed();
+                  }
+                })();
+              }}
+              disabled={saveState === 'saving'}
+            >
+              Save and leave
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <WildFlyEnvironmentManager
+        value={wildflyEnvironments}
+        errors={showValidationErrors ? validationErrors : {}}
+        selectedName={selectedName}
+        onSelectedNameChange={setSelectedName}
+        onChange={setWildflyEnvironments}
+      />
     </div>
   );
 }

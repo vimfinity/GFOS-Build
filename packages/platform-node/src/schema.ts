@@ -18,6 +18,25 @@ const mavenStepConfigSchema = z
     javaVersion: z.string().optional(),
     executionMode: z.enum(['internal', 'external']).default('internal'),
     deploymentWorkflowName: z.string().min(1).optional(),
+    deploy: z
+      .object({
+        artifactSelector: z
+          .object({
+            kind: z.enum(['auto', 'module', 'explicit-file']),
+            modulePath: z.string().min(1).optional(),
+            packaging: z.enum(['ear', 'war', 'rar', 'jar']).optional(),
+            fileName: z.string().min(1).optional(),
+          })
+          .strict(),
+        environmentName: z.string().min(1),
+        standaloneProfileName: z.string().min(1),
+        cleanupPresetName: z.string().min(1).optional(),
+        startupPresetName: z.string().min(1).optional(),
+        deployMode: z.enum(['filesystem-scanner', 'management-cli']).optional(),
+        startServer: z.boolean().default(true),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -188,6 +207,10 @@ export const configSchema = z
 
     wildfly: z
       .object({
+        tooling: z
+          .object({})
+          .strict()
+          .default({}),
         environments: z.record(wildflyEnvironmentConfigSchema).default({}),
       })
       .strict()

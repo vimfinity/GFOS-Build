@@ -1,16 +1,18 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   MavenCommandFields,
   getSuggestedJavaOverride,
   type MavenCommandValue,
 } from '@/components/MavenCommandFields';
-import { DeploymentEditor, serializeDeploymentWorkflow, type DeploymentWorkflowFormValue } from '@/components/DeploymentEditor';
+import {
+  DEFAULT_WILDFLY_DEPLOY_FORM,
+  WildFlyDeployFields,
+  type WildFlyDeployFormValue,
+} from '@/components/WildFlyDeployFields';
 import { ComboboxField } from '@/components/ui/combobox-field';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ProjectPathPicker } from '@/components/ProjectPathPicker';
@@ -28,7 +30,7 @@ import {
   Check,
   ChevronDown,
 } from 'lucide-react';
-import type { PipelineStep } from '@gfos-build/contracts';
+import type { PipelineStep, WildFlyDeployTarget } from '@gfos-build/contracts';
 import type {
   ExecutionMode,
   MavenMetadata,
@@ -42,9 +44,7 @@ import type {
 } from '@gfos-build/contracts';
 import {
   configQuery,
-  deploymentWorkflowsQuery,
   inspectProject,
-  useCreateDeploymentWorkflow,
   useGitInfo,
 } from '@/api/queries';
 import { BranchBadge } from '@/components/BranchBadge';
@@ -54,7 +54,7 @@ interface StepFormData {
   path: string;
   buildSystem: 'maven' | 'node' | null;
   mavenMode: MavenStepMode;
-  deploymentWorkflowName: string;
+  deployConfig: WildFlyDeployFormValue;
   mavenModulePath: string;
   mavenSubmoduleBuildStrategy: MavenSubmoduleBuildStrategy;
   mavenGoals: string[];
@@ -97,7 +97,7 @@ function createEmptyStep(
     path: '',
     buildSystem: null,
     mavenMode: 'build',
-    deploymentWorkflowName: '',
+    deployConfig: DEFAULT_WILDFLY_DEPLOY_FORM,
     mavenModulePath: '',
     mavenSubmoduleBuildStrategy: 'root-pl',
     mavenGoals: mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install'],
@@ -119,7 +119,7 @@ function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
     path: step.path,
     buildSystem: step.buildSystem === 'wildfly' ? null : (step.buildSystem ?? null),
     mavenMode: step.mode ?? 'build',
-    deploymentWorkflowName: step.deploymentWorkflowName ?? '',
+    deployConfig: fromApiDeploy(step.deploy),
     mavenModulePath: step.modulePath ?? '',
     mavenSubmoduleBuildStrategy: step.submoduleBuildStrategy ?? 'root-pl',
     mavenGoals:
@@ -148,7 +148,6 @@ function StepCard({
   onRemove,
   onMoveUp,
   onMoveDown,
-  onCreateDeploymentWorkflow,
 }: {
   step: StepFormData;
   index: number;
@@ -160,22 +159,13 @@ function StepCard({
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-  onCreateDeploymentWorkflow: () => void;
 }) {
   const { data: configData } = useQuery(configQuery);
-  const { data: deploymentWorkflows } = useQuery(deploymentWorkflowsQuery);
   const jdkVersions = useMemo(
     () => Object.keys(configData?.config.jdkRegistry ?? {}),
     [configData]
   );
   const { data: gitInfo } = useGitInfo(step.path);
-  const matchingDeploymentWorkflows = useMemo(
-    () =>
-      (deploymentWorkflows ?? []).filter(
-        (workflow) => !step.path || workflow.projectPath === step.path
-      ),
-    [deploymentWorkflows, step.path]
-  );
 
   function handleResolvedPath(path: string, project?: Project) {
     onUpdate((current) => ({
@@ -328,10 +318,6 @@ function StepCard({
                         onUpdate((current) => ({
                           ...current,
                           mavenMode: option.value,
-                          deploymentWorkflowName:
-                            option.value === 'deploy'
-                              ? current.deploymentWorkflowName
-                              : '',
                           executionMode:
                             option.value === 'deploy' ? 'internal' : current.executionMode,
                         }))
@@ -367,57 +353,16 @@ function StepCard({
                   jdkVersions={jdkVersions}
                 />
               ) : (
-                <div className="mt-4 flex flex-col gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                      Deployment workflow
-                    </label>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                      <Select
-                        value={step.deploymentWorkflowName}
-                        onValueChange={(value) =>
-                          onUpdate((current) => ({
-                            ...current,
-                            deploymentWorkflowName: String(value ?? ''),
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a saved deployment workflow" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {matchingDeploymentWorkflows.map((workflow) => (
-                            <SelectItem key={workflow.name} value={workflow.name}>
-                              {workflow.name}
-                            </SelectItem>
-                        ))}
-                        </SelectContent>
-                      </Select>
-                      <Tooltip content="Create deployment workflow" side="bottom">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-11 w-11 shrink-0"
-                          onClick={onCreateDeploymentWorkflow}
-                          aria-label="Create deployment workflow"
-                        >
-                          <Plus size={14} />
-                        </Button>
-                      </Tooltip>
-                    </div>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <p className="text-xs text-muted-foreground">
-                        Select the saved WildFly deployment workflow for this Maven project. The pipeline step will use that workflow directly instead of configuring Maven build details here.
-                      </p>
-                    </div>
-                    {matchingDeploymentWorkflows.length === 0 ? (
-                      <p className="text-xs text-warning">
-                        No saved deployment workflows match this project path yet.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
+                <WildFlyDeployFields
+                  projectPath={step.path}
+                  value={step.deployConfig}
+                  onChange={(next) =>
+                    onUpdate((current) => ({
+                      ...current,
+                      deployConfig: next,
+                    }))
+                  }
+                />
               )}
             </div>
           ) : step.buildSystem === 'node' ? (
@@ -553,9 +498,7 @@ export function PipelineDialog({
   onSave,
   mode,
 }: PipelineDialogProps) {
-  const queryClient = useQueryClient();
   const { data: configData } = useQuery(configQuery);
-  const createDeploymentWorkflow = useCreateDeploymentWorkflow();
   const defaultMavenGoals = configData?.config.maven.defaultGoals.join(' ') ?? 'clean install';
   const defaultMavenOptionKeys = useMemo(
     () => (configData?.config.maven.defaultOptionKeys ?? []) as MavenOptionKey[],
@@ -579,7 +522,6 @@ export function PipelineDialog({
   const [isDirty, setIsDirty] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
-  const [deploymentEditorStepIndex, setDeploymentEditorStepIndex] = useState<number | null>(null);
 
   const resolveStepPath = useCallback(
     async (index: number, path: string, project?: Project) => {
@@ -801,22 +743,6 @@ export function PipelineDialog({
     onOpenChange(false);
   }
 
-  async function handleCreateDeploymentWorkflow(value: DeploymentWorkflowFormValue) {
-    const payload = serializeDeploymentWorkflow(
-      value,
-      configData?.config.wildfly.environments ?? {}
-    );
-    await createDeploymentWorkflow.mutateAsync({ name: value.name, workflow: payload });
-    await queryClient.invalidateQueries({ queryKey: ['deployment-workflows'] });
-    if (deploymentEditorStepIndex !== null) {
-      updateStep(deploymentEditorStepIndex, (current) => ({
-        ...current,
-        deploymentWorkflowName: value.name,
-      }));
-    }
-    setDeploymentEditorStepIndex(null);
-  }
-
   const canSave =
     name.trim().length > 0 &&
     steps.length > 0 &&
@@ -825,7 +751,11 @@ export function PipelineDialog({
       if (step.inspectionError) return false;
       if (step.buildSystem === 'maven') {
         if (step.mavenMode === 'deploy') {
-          return step.deploymentWorkflowName.trim().length > 0;
+          return (
+            step.mavenGoals.length > 0 &&
+            step.deployConfig.environmentName.trim().length > 0 &&
+            step.deployConfig.standaloneProfileName.trim().length > 0
+          );
         }
         return step.mavenGoals.length > 0;
       }
@@ -922,7 +852,6 @@ export function PipelineDialog({
                   onRemove={() => removeStep(index)}
                   onMoveUp={() => moveStep(index, -1)}
                   onMoveDown={() => moveStep(index, 1)}
-                  onCreateDeploymentWorkflow={() => setDeploymentEditorStepIndex(index)}
                 />
               ))}
             </div>
@@ -944,30 +873,6 @@ export function PipelineDialog({
           </div>
         </div>
       </DialogContent>
-
-      <DeploymentEditor
-        open={deploymentEditorStepIndex !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setDeploymentEditorStepIndex(null);
-        }}
-        initialValue={
-          deploymentEditorStepIndex !== null
-            ? {
-                projectPath: steps[deploymentEditorStepIndex]?.path ?? '',
-                name: steps[deploymentEditorStepIndex]?.label
-                  ? `${steps[deploymentEditorStepIndex]?.label}-deploy`
-                  : '',
-              }
-            : undefined
-        }
-        defaultProjectPath={
-          deploymentEditorStepIndex !== null ? steps[deploymentEditorStepIndex]?.path ?? '' : ''
-        }
-        onSave={(value) => void handleCreateDeploymentWorkflow(value)}
-        title="Create deployment workflow"
-        description="Create a saved deployment workflow for this Maven project and reference it from the pipeline step."
-        confirmLabel={createDeploymentWorkflow.isPending ? 'Creating...' : 'Create workflow'}
-      />
     </Dialog>
   );
 }
@@ -982,5 +887,25 @@ function toMavenCommandValue(step: StepFormData): MavenCommandValue {
     extraOptions: step.mavenExtraOptions,
     javaVersion: step.javaVersion,
     executionMode: step.executionMode,
+  };
+}
+
+function fromApiDeploy(deploy?: WildFlyDeployTarget): WildFlyDeployFormValue {
+  if (!deploy) {
+    return DEFAULT_WILDFLY_DEPLOY_FORM;
+  }
+
+  return {
+    environmentName: deploy.environmentName,
+    standaloneProfileName: deploy.standaloneProfileName,
+    cleanupPresetName: deploy.cleanupPresetName ?? '',
+    startupPresetName: deploy.startupPresetName ?? '',
+    deployMode: deploy.deployMode ?? 'filesystem-scanner',
+    artifactSelection:
+      deploy.artifactSelector.kind === 'module'
+        ? `${deploy.artifactSelector.modulePath ?? ''}|${deploy.artifactSelector.packaging ?? ''}`
+        : deploy.artifactSelector.kind,
+    explicitArtifactFile: deploy.artifactSelector.fileName ?? '',
+    startServer: deploy.startServer,
   };
 }

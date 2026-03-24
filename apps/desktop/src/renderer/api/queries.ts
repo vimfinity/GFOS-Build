@@ -6,7 +6,6 @@ import type {
   ConfigResponse,
   DeploymentPlanPreview,
   DeploymentProjectInspectionResponse,
-  DeploymentWorkflowListItem,
   GitInfoResponse,
   HealthResponse,
   JdkDetectionResponse,
@@ -15,7 +14,7 @@ import type {
   ScanResponse,
   StartJobResponse,
 } from '@gfos-build/contracts';
-import type { ExecutionMode, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType } from '@gfos-build/contracts';
+import type { ExecutionMode, MavenOptionKey, MavenProfileState, MavenStepMode, MavenSubmoduleBuildStrategy, NodeCommandType, WildFlyDeployTarget } from '@gfos-build/contracts';
 import { getDesktopApi } from './client';
 
 export const healthQuery = queryOptions({
@@ -73,38 +72,6 @@ export function useRunPipeline() {
   });
 }
 
-export const deploymentWorkflowsQuery = queryOptions({
-  queryKey: ['deployment-workflows'],
-  queryFn: (): Promise<DeploymentWorkflowListItem[]> => getDesktopApi().listDeploymentWorkflows(),
-  refetchInterval: 30_000,
-  staleTime: 20_000,
-  gcTime: 120_000,
-});
-
-export function useRunDeploymentWorkflow() {
-  return useMutation({
-    mutationFn: (input: { name: string }) => getDesktopApi().runDeploymentWorkflow(input),
-  });
-}
-
-export function useCreateDeploymentWorkflow() {
-  return useMutation({
-    mutationFn: (data: { name: string; workflow: unknown }) => getDesktopApi().createDeploymentWorkflow(data),
-  });
-}
-
-export function useUpdateDeploymentWorkflow() {
-  return useMutation({
-    mutationFn: (data: { name: string; workflow: unknown }) => getDesktopApi().updateDeploymentWorkflow(data),
-  });
-}
-
-export function useDeleteDeploymentWorkflow() {
-  return useMutation({
-    mutationFn: (name: string) => getDesktopApi().deleteDeploymentWorkflow(name),
-  });
-}
-
 export function useCancelJob() {
   return useMutation({
     mutationFn: (jobId: string) => getDesktopApi().cancelJob(jobId),
@@ -159,6 +126,8 @@ export function useQuickRun() {
     mutationFn: (body: {
       path: string;
       buildSystem: 'maven' | 'node';
+      mode?: MavenStepMode;
+      deploy?: WildFlyDeployTarget;
       modulePath?: string;
       submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
       goals?: string[];
@@ -184,10 +153,6 @@ export function inspectDeploymentProject(projectPath: string): Promise<Deploymen
 
 export function previewDeploymentPlan(input: Record<string, unknown>): Promise<DeploymentPlanPreview> {
   return getDesktopApi().previewDeploymentPlan(input);
-}
-
-export function getDeploymentWorkflow(name: string): Promise<unknown | null> {
-  return getDesktopApi().getDeploymentWorkflow(name);
 }
 
 export function useDetectJdks() {

@@ -219,7 +219,6 @@ function SettingsView() {
   const [includeHidden, setIncludeHidden] = useState(false);
   const [excludePatterns, setExcludePatterns] = useState<string[]>([]);
   const [wildflyEnvironments, setWildflyEnvironments] = useState<Record<string, WildFlyEnvironmentConfig>>({});
-  const [selectedWildflyEnvironmentName, setSelectedWildflyEnvironmentName] = useState<string | null>(null);
   const [themePreference, setThemePreference] = useState<ThemePreference>('system');
   const [baselineSnapshot, setBaselineSnapshot] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -257,9 +256,6 @@ function SettingsView() {
     setIncludeHidden(nextIncludeHidden);
     setExcludePatterns(nextExcludePatterns);
     setWildflyEnvironments(nextWildflyEnvironments);
-    setSelectedWildflyEnvironmentName((current) =>
-      current && nextWildflyEnvironments[current] ? current : Object.keys(nextWildflyEnvironments)[0] ?? null,
-    );
     setBaselineSnapshot(
       JSON.stringify(
         createConfigPayload({
@@ -895,25 +891,6 @@ function SettingsView() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-3 rounded-[24px] border border-border/70 bg-secondary/10 p-4">
-          <div className="border-b border-border/60 pb-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Deployment</p>
-            <p className="mt-1 text-sm text-muted-foreground">Reusable local WildFly environments for deployment workflows, cleanup presets, and startup profiles.</p>
-          </div>
-          <ConfigCard
-            title="WildFly"
-            description="Configure named environments once, then reuse them across deployment workflows."
-            icon={<Server size={14} className="text-primary" />}
-          >
-            <WildFlySettingsEditor
-              value={wildflyEnvironments}
-              errors={showValidationErrors ? validationErrors : {}}
-              selectedName={selectedWildflyEnvironmentName}
-              onSelectedNameChange={setSelectedWildflyEnvironmentName}
-              onChange={setWildflyEnvironments}
-            />
-          </ConfigCard>
-        </section>
       </div>
     </div>
   );
@@ -1393,6 +1370,8 @@ function WildFlySettingsEditor({
     </div>
   );
 }
+
+void WildFlySettingsEditor;
 
 function WildFlyStandaloneProfilesEditor({
   value,

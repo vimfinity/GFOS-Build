@@ -94,7 +94,6 @@ export interface MavenBuildStep {
   path: string;
   buildSystem: 'maven';
   mode?: MavenStepMode;
-  deploymentWorkflowName?: string;
   modulePath?: string;
   submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
   goals: string[];
@@ -106,6 +105,7 @@ export interface MavenBuildStep {
   mavenExecutable: string;
   javaVersion?: string;
   javaHome?: string;
+  deploy?: WildFlyDeployTarget;
 }
 
 export interface WildFlyCleanupPreset {
@@ -154,9 +154,7 @@ export interface DeploymentArtifactSelector {
   fileName?: string;
 }
 
-export interface DeploymentWorkflowDefinition {
-  description?: string;
-  projectPath: string;
+export interface WildFlyDeployTarget {
   artifactSelector: DeploymentArtifactSelector;
   environmentName: string;
   standaloneProfileName: string;
@@ -164,6 +162,11 @@ export interface DeploymentWorkflowDefinition {
   startupPresetName?: string;
   deployMode?: WildFlyDeployMode;
   startServer: boolean;
+}
+
+export interface DeploymentWorkflowDefinition extends WildFlyDeployTarget {
+  description?: string;
+  projectPath: string;
 }
 
 export interface WildFlyOperationStep {

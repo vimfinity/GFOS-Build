@@ -12,6 +12,7 @@ import type {
   ScanEvent,
   WildFlyDeployMode,
   WildFlyEnvironmentConfig,
+  WildFlyDeployTarget,
   WorkflowKind,
 } from './types.js';
 
@@ -35,6 +36,7 @@ export interface ConfigResponse {
     jdkRegistry: Record<string, string>;
     scan: { includeHidden: boolean; exclude: string[] };
     wildfly: {
+      tooling?: Record<string, never>;
       environments: Record<string, WildFlyEnvironmentConfig>;
     };
   };
@@ -49,7 +51,6 @@ export interface PipelineStep {
   packageManager?: PackageManager;
   executionMode?: ExecutionMode;
   mode?: 'build' | 'deploy';
-  deploymentWorkflowName?: string;
   commandType?: NodeCommandType;
   modulePath?: string;
   submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
@@ -65,9 +66,9 @@ export interface PipelineStep {
   environmentName?: string;
   deployMode?: WildFlyDeployMode;
   command?: string;
+  deploy?: WildFlyDeployTarget;
 }
 
-/** One saved pipeline entry. */
 export interface PipelineListItem {
   name: string;
   description?: string;
@@ -164,20 +165,6 @@ export interface JdkDetectionResponse {
 export interface GitInfoResponse {
   branch: string | null;
   isDirty: boolean;
-}
-
-export interface DeploymentWorkflowListItem {
-  name: string;
-  description?: string;
-  projectPath: string;
-  environmentName: string;
-  deployMode: WildFlyDeployMode;
-  startServer: boolean;
-  lastRun: {
-    status: string;
-    startedAt: string;
-    durationMs: number | null;
-  } | null;
 }
 
 export interface DeploymentPlanPreview {

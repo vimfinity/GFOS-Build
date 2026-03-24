@@ -7,7 +7,6 @@ import type {
   ConfigResponse,
   DeploymentPlanPreview,
   DeploymentProjectInspectionResponse,
-  DeploymentWorkflowListItem,
   GitInfoResponse,
   HealthResponse,
   JdkDetectionResponse,
@@ -144,7 +143,7 @@ export class AppRuntime {
     const config = this.getSettings();
     const lastRuns = this.db.getLastRunsByPipeline();
     return this.db.listPipelineDefinitions().map((saved) => {
-      const resolved = resolvePipeline(saved.name, saved.definition, config);
+      const resolved = resolvePipeline(saved.name, this.normalizePipelineDefinition(saved.definition), config);
       const lastRun = lastRuns[saved.name] ?? null;
       return {
         name: saved.name,
@@ -173,7 +172,8 @@ export class AppRuntime {
   }
 
   getPipelineDefinition(name: string): PipelineConfig | null {
-    return this.db.getPipelineDefinition(name)?.definition ?? null;
+    const definition = this.db.getPipelineDefinition(name)?.definition;
+    return definition ? this.normalizePipelineDefinition(definition) : null;
   }
 
   getResolvedPipeline(name: string): Pipeline {
@@ -182,7 +182,7 @@ export class AppRuntime {
     if (!saved) {
       throw new Error(`Pipeline "${name}" not found.`);
     }
-    return resolvePipeline(saved.name, saved.definition, config);
+    return resolvePipeline(saved.name, this.normalizePipelineDefinition(saved.definition), config);
   }
 
   getResumeIndex(name: string): number {
@@ -196,7 +196,7 @@ export class AppRuntime {
       throw new Error(`Pipeline "${input.name}" not found.`);
     }
 
-    const pipeline = resolvePipeline(saved.name, saved.definition, config);
+    const pipeline = resolvePipeline(saved.name, this.normalizePipelineDefinition(saved.definition), config);
     const fromIndex = input.from ? resolveFromArg(pipeline, input.from) : 0;
     const jobId = randomUUID();
     const runId = this.db.createRun({
@@ -226,39 +226,6 @@ export class AppRuntime {
     return { jobId, runId };
   }
 
-  listDeploymentWorkflows(): DeploymentWorkflowListItem[] {
-    const lastRuns = this.db.getLastRunsByDeployment();
-    return this.db.listDeploymentWorkflowDefinitions().map((saved) => ({
-      name: saved.name,
-      description: saved.definition.description,
-      projectPath: saved.definition.projectPath,
-      environmentName: saved.definition.environmentName,
-      deployMode: saved.definition.deployMode ?? (saved.definition.startServer ? 'filesystem-scanner' : 'management-cli'),
-      startServer: saved.definition.startServer,
-      lastRun: lastRuns[saved.name] ?? null,
-    }));
-  }
-
-  createDeploymentWorkflow(input: { name: string; workflow: unknown }): { ok: boolean; name: string } {
-    const definition = deploymentWorkflowConfigSchema.parse(input.workflow);
-    this.db.saveDeploymentWorkflowDefinition(input.name, definition);
-    return { ok: true, name: input.name };
-  }
-
-  updateDeploymentWorkflow(input: { name: string; workflow: unknown }): { ok: boolean; name: string } {
-    const definition = deploymentWorkflowConfigSchema.parse(input.workflow);
-    this.db.saveDeploymentWorkflowDefinition(input.name, definition);
-    return { ok: true, name: input.name };
-  }
-
-  deleteDeploymentWorkflow(name: string): void {
-    this.db.deleteDeploymentWorkflowDefinition(name);
-  }
-
-  getDeploymentWorkflowDefinition(name: string): DeploymentWorkflowConfig | null {
-    return this.db.getDeploymentWorkflowDefinition(name)?.definition ?? null;
-  }
-
   async inspectDeploymentProject(projectPath: string): Promise<DeploymentProjectInspectionResponse> {
     const projectResult = await this.inspectProject(projectPath);
     const inspection = await this.deploymentWorkflowService.inspectProject(projectPath);
@@ -280,29 +247,6 @@ export class AppRuntime {
       workflow: toDeploymentDefinition(workflow),
       environment,
     });
-  }
-
-  runDeploymentWorkflow(input: { name: string }): StartJobResponse {
-    const config = this.getSettings();
-    const saved = this.db.getDeploymentWorkflowDefinition(input.name);
-    if (!saved) {
-      throw new Error(`Deployment workflow "${input.name}" not found.`);
-    }
-    const environment = config.wildfly.environments[saved.definition.environmentName];
-    if (!environment) {
-      throw new Error(`WildFly environment "${saved.definition.environmentName}" not found.`);
-    }
-    const jobId = randomUUID();
-    const runId = this.db.createRun({
-      jobId,
-      kind: 'deployment',
-      workflowName: input.name,
-      title: input.name,
-    });
-    const job = this.createJob(jobId, new AbortController());
-    const workflow = toDeploymentDefinition(saved.definition);
-    void this.runDeploymentWorkflowJob(job, input.name, workflow, environment, runId);
-    return { jobId, runId };
   }
 
   cancelJob(jobId: string): void {
@@ -510,7 +454,7 @@ export class AppRuntime {
     if (
       step.buildSystem === 'maven' &&
       step.mode === 'deploy' &&
-      step.deploymentWorkflowName
+      step.deploy
     ) {
       return this.executePipelineDeploymentStep(job, pipeline, step, index, runId);
     }
@@ -596,32 +540,31 @@ export class AppRuntime {
     runId: number,
   ): Promise<BuildStepResult[]> {
     const config = this.getSettings();
-    const workflowName = step.deploymentWorkflowName;
-    if (!workflowName) {
-      throw new Error(`Pipeline step "${step.label}" is missing a deployment workflow reference.`);
+    if (!step.deploy) {
+      throw new Error(`Pipeline step "${step.label}" is missing deployment settings.`);
     }
-    const saved = this.db.getDeploymentWorkflowDefinition(workflowName);
-    if (!saved) {
-      throw new Error(`Deployment workflow "${workflowName}" not found.`);
-    }
-    const environment = config.wildfly.environments[saved.definition.environmentName];
+    const environment = config.wildfly.environments[step.deploy.environmentName];
     if (!environment) {
-      throw new Error(`WildFly environment "${saved.definition.environmentName}" not found.`);
-    }
-    if (path.normalize(saved.definition.projectPath) !== path.normalize(step.path)) {
-      throw new Error(
-        `Pipeline step "${step.label}" references deployment workflow "${workflowName}" for a different project path.`,
-      );
+      throw new Error(`WildFly environment "${step.deploy.environmentName}" not found.`);
     }
 
-    const workflow = toDeploymentDefinition(saved.definition);
+    const workflow = toDeploymentDefinition({
+      projectPath: step.path,
+      artifactSelector: step.deploy.artifactSelector,
+      environmentName: step.deploy.environmentName,
+      standaloneProfileName: step.deploy.standaloneProfileName,
+      cleanupPresetName: step.deploy.cleanupPresetName,
+      startupPresetName: step.deploy.startupPresetName,
+      deployMode: step.deploy.deployMode,
+      startServer: step.deploy.startServer,
+    });
     const results: BuildStepResult[] = [];
     let persistedStepRunId: number | undefined;
     let logSeq = 0;
 
     for await (const event of this.deploymentWorkflowService.run(
       {
-        workflowName: `${pipeline.name}:${workflowName}`,
+        workflowName: `${pipeline.name}:${step.label}`,
         workflow,
         environment,
       },
@@ -707,6 +650,11 @@ export class AppRuntime {
   }
 
   private async runQuickJob(job: RuntimeJob, step: BuildStep, runId: number): Promise<void> {
+    if (step.buildSystem === 'maven' && step.mode === 'deploy' && step.deploy) {
+      await this.runQuickDeploymentJob(job, step, runId);
+      return;
+    }
+
     const startedAt = Date.now();
     const results: BuildStepResult[] = [];
     let persistedStepRunId: number | undefined;
@@ -790,45 +738,52 @@ export class AppRuntime {
     }
   }
 
-  private async runScanJob(job: RuntimeJob): Promise<void> {
-    try {
-      const config = this.getSettings();
-      for await (const event of this.scanner.scan(toScanOptions(config), DEFAULT_SCAN_JOB_TTL_MS, true)) {
-        this.emit(job, { type: 'event', jobId: job.jobId, event });
-      }
-      this.finishJob(job);
-    } catch (error) {
-      this.failJob(job, error);
-    }
-  }
-
-  private async runDeploymentWorkflowJob(
+  private async runQuickDeploymentJob(
     job: RuntimeJob,
-    workflowName: string,
-    workflow: DeploymentWorkflowDefinition,
-    environment: AppConfig['wildfly']['environments'][string],
+    step: Extract<BuildStep, { buildSystem: 'maven' }>,
     runId: number,
   ): Promise<void> {
+    const config = this.getSettings();
+    const deploy = step.deploy;
+    if (!deploy) {
+      throw new Error(`Quick run "${step.label}" is missing deployment settings.`);
+    }
+    const environment = config.wildfly.environments[deploy.environmentName];
+    if (!environment) {
+      throw new Error(`WildFly environment "${deploy.environmentName}" not found.`);
+    }
+
     let persistedStepRunId: number | undefined;
     let logSeq = 0;
+
     try {
-      for await (const event of this.deploymentWorkflowService.run({
-        workflowName,
-        workflow,
-        environment,
-      }, job.controller?.signal)) {
+      for await (const event of this.deploymentWorkflowService.run(
+        {
+          workflowName: step.label,
+          workflow: {
+            projectPath: step.path,
+            artifactSelector: deploy.artifactSelector,
+            environmentName: deploy.environmentName,
+            standaloneProfileName: deploy.standaloneProfileName,
+            cleanupPresetName: deploy.cleanupPresetName,
+            startupPresetName: deploy.startupPresetName,
+            deployMode: deploy.deployMode,
+            startServer: deploy.startServer,
+          },
+          environment,
+        },
+        job.controller?.signal,
+      )) {
         if (event.type === 'step:start') {
           const gitInfo = this.gitInfoReader.getInfo(event.step.path);
           persistedStepRunId = this.db.createStepRun({
             runId,
             jobId: job.jobId,
-            workflowKind: 'deployment',
-            workflowName,
+            workflowKind: 'quick',
             projectPath: event.step.path,
             projectName: event.step.label,
             buildSystem: event.step.buildSystem,
             command: toCommandString(event.step),
-            javaHome: event.step.buildSystem === 'maven' ? event.step.javaHome : undefined,
             stepIndex: event.index,
             stepLabel: event.step.label,
             branch: gitInfo.branch ?? undefined,
@@ -836,9 +791,11 @@ export class AppRuntime {
           this.emit(job, { type: 'event', jobId: job.jobId, event: { ...event, runId: persistedStepRunId } });
           continue;
         }
+
         if (event.type === 'step:output' && persistedStepRunId !== undefined) {
           this.db.appendStepLog(persistedStepRunId, logSeq++, event.stream, event.line);
         }
+
         if (event.type === 'step:done' && persistedStepRunId !== undefined) {
           this.db.finishStepRun({
             id: persistedStepRunId,
@@ -849,6 +806,7 @@ export class AppRuntime {
           persistedStepRunId = undefined;
           logSeq = 0;
         }
+
         if (event.type === 'run:done') {
           this.db.finishRun({
             id: runId,
@@ -856,11 +814,25 @@ export class AppRuntime {
             durationMs: event.result.durationMs,
           });
         }
+
+        this.emit(job, { type: 'event', jobId: job.jobId, event });
+      }
+
+      this.finishJob(job);
+    } catch (error) {
+      this.db.finishRun({ id: runId, status: 'failed', durationMs: 0 });
+      this.failJob(job, error);
+    }
+  }
+
+  private async runScanJob(job: RuntimeJob): Promise<void> {
+    try {
+      const config = this.getSettings();
+      for await (const event of this.scanner.scan(toScanOptions(config), DEFAULT_SCAN_JOB_TTL_MS, true)) {
         this.emit(job, { type: 'event', jobId: job.jobId, event });
       }
       this.finishJob(job);
     } catch (error) {
-      this.db.finishRun({ id: runId, status: 'failed', durationMs: 0 });
       this.failJob(job, error);
     }
   }
@@ -899,6 +871,48 @@ export class AppRuntime {
     return this.options.settingsPath ?? getConfigPath(this.stateRootDir);
   }
 
+  private normalizePipelineDefinition(definition: PipelineConfig): PipelineConfig {
+    return {
+      ...definition,
+      steps: definition.steps.map((step) => {
+        if (
+          step.buildSystem !== 'maven' ||
+          step.mode !== 'deploy' ||
+          step.deploy ||
+          !step.deploymentWorkflowName
+        ) {
+          return step;
+        }
+
+        const legacyWorkflow = this.db.getDeploymentWorkflowDefinition(step.deploymentWorkflowName);
+        if (!legacyWorkflow) {
+          return {
+            ...step,
+            deploy: {
+              artifactSelector: { kind: 'auto' },
+              environmentName: '',
+              standaloneProfileName: '',
+              startServer: true,
+            },
+          };
+        }
+
+        return {
+          ...step,
+          deploy: {
+            artifactSelector: legacyWorkflow.definition.artifactSelector,
+            environmentName: legacyWorkflow.definition.environmentName,
+            standaloneProfileName: legacyWorkflow.definition.standaloneProfileName,
+            cleanupPresetName: legacyWorkflow.definition.cleanupPresetName,
+            startupPresetName: legacyWorkflow.definition.startupPresetName,
+            deployMode: legacyWorkflow.definition.deployMode,
+            startServer: legacyWorkflow.definition.startServer,
+          },
+        };
+      }),
+    };
+  }
+
   private resolveQuickRunStep(input: Record<string, unknown>, config: AppConfig): BuildStep {
     const buildSystem = input['buildSystem'];
     if (buildSystem === 'node') {
@@ -921,6 +935,7 @@ export class AppRuntime {
         path: input['path'],
         label: input['label'],
         buildSystem: 'maven',
+        mode: input['mode'] ?? 'build',
         modulePath: input['modulePath'],
         submoduleBuildStrategy: input['submoduleBuildStrategy'],
         goals: input['goals'],
@@ -929,6 +944,7 @@ export class AppRuntime {
         extraOptions: input['extraOptions'],
         javaVersion: input['javaVersion'] ?? input['java'],
         executionMode: input['executionMode'] ?? 'internal',
+        deploy: input['deploy'],
       }) as BuildStepConfig,
       config,
     );
@@ -982,7 +998,6 @@ function toPipelineStep(step: BuildStep): PipelineStep {
     path: step.path,
     buildSystem: step.buildSystem,
     executionMode: step.executionMode,
-    deploymentWorkflowName: step.deploymentWorkflowName,
     modulePath: step.modulePath,
     submoduleBuildStrategy: step.submoduleBuildStrategy,
     goals: step.goals,
@@ -993,6 +1008,7 @@ function toPipelineStep(step: BuildStep): PipelineStep {
     javaVersion: step.javaVersion,
     javaHome: step.javaHome,
     mode: step.mode,
+    deploy: step.deploy,
   };
 }
 

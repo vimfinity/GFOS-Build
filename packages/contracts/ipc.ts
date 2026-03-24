@@ -5,7 +5,6 @@ import type {
   ConfigResponse,
   DeploymentPlanPreview,
   DeploymentProjectInspectionResponse,
-  DeploymentWorkflowListItem,
   GitInfoResponse,
   JdkDetectionResponse,
   PipelineListItem,
@@ -23,12 +22,6 @@ export const IPC = {
   UPDATE_PIPELINE: 'gfos:update-pipeline',
   DELETE_PIPELINE: 'gfos:delete-pipeline',
   RUN_PIPELINE: 'gfos:run-pipeline',
-  LIST_DEPLOYMENT_WORKFLOWS: 'gfos:list-deployment-workflows',
-  CREATE_DEPLOYMENT_WORKFLOW: 'gfos:create-deployment-workflow',
-  UPDATE_DEPLOYMENT_WORKFLOW: 'gfos:update-deployment-workflow',
-  DELETE_DEPLOYMENT_WORKFLOW: 'gfos:delete-deployment-workflow',
-  GET_DEPLOYMENT_WORKFLOW: 'gfos:get-deployment-workflow',
-  RUN_DEPLOYMENT_WORKFLOW: 'gfos:run-deployment-workflow',
   RUN_QUICK: 'gfos:run-quick',
   CANCEL_JOB: 'gfos:cancel-job',
   LIST_RUNS: 'gfos:list-runs',
@@ -61,12 +54,6 @@ export interface ElectronBridge {
   updatePipeline: (input: { name: string; pipeline: unknown }) => Promise<{ ok: boolean; name: string }>;
   deletePipeline: (name: string) => Promise<void>;
   runPipeline: (input: { name: string; from?: string }) => Promise<StartJobResponse>;
-  listDeploymentWorkflows: () => Promise<DeploymentWorkflowListItem[]>;
-  createDeploymentWorkflow: (input: { name: string; workflow: unknown }) => Promise<{ ok: boolean; name: string }>;
-  updateDeploymentWorkflow: (input: { name: string; workflow: unknown }) => Promise<{ ok: boolean; name: string }>;
-  deleteDeploymentWorkflow: (name: string) => Promise<void>;
-  getDeploymentWorkflow: (name: string) => Promise<unknown | null>;
-  runDeploymentWorkflow: (input: { name: string }) => Promise<StartJobResponse>;
   runQuick: (input: Record<string, unknown>) => Promise<StartJobResponse>;
   cancelJob: (jobId: string) => Promise<void>;
   listRuns: (opts?: { pipeline?: string; limit?: number }) => Promise<BuildRunRowApi[]>;
