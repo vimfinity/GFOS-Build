@@ -353,4 +353,77 @@ describe('RepositoryScanner', () => {
       expect(found.project.node?.packageManager).toBe('npm');
     }
   });
+
+  it('surfaces static deployable Maven candidates from pom.xml metadata', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/deployable-parent');
+
+    fs.addDirectory(rootPath, [dirEntry('web', true), dirEntry('batch', true)]);
+    fs.addDirectory(path.join(rootPath, 'web'), []);
+    fs.addDirectory(path.join(rootPath, 'batch'), []);
+    fs.addFile(
+      path.join(rootPath, 'pom.xml'),
+      `<project>
+        <artifactId>deployable-parent</artifactId>
+        <version>2.0.0</version>
+        <packaging>pom</packaging>
+        <modules>
+          <module>web</module>
+          <module>batch</module>
+        </modules>
+      </project>`,
+    );
+    fs.addFile(
+      path.join(rootPath, 'web', 'pom.xml'),
+      `<project>
+        <artifactId>web</artifactId>
+        <version>2.0.0</version>
+        <packaging>war</packaging>
+        <build>
+          <directory>custom-target</directory>
+          <finalName>web-dev</finalName>
+        </build>
+      </project>`,
+    );
+    fs.addFile(
+      path.join(rootPath, 'batch', 'pom.xml'),
+      `<project>
+        <artifactId>batch</artifactId>
+        <version>2.0.0</version>
+        <packaging>jar</packaging>
+      </project>`,
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((event) => event.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.maven?.deployableCandidates).toEqual([
+        {
+          modulePath: 'batch',
+          artifactId: 'batch',
+          packaging: 'jar',
+          declaredFinalName: undefined,
+          declaredBuildDirectory: undefined,
+          expectedDefaultFileName: 'batch-2.0.0.jar',
+          selectionConfidence: 'manual',
+        },
+        {
+          modulePath: 'web',
+          artifactId: 'web',
+          packaging: 'war',
+          declaredFinalName: 'web-dev',
+          declaredBuildDirectory: 'custom-target',
+          expectedDefaultFileName: 'web-dev.war',
+          selectionConfidence: 'high',
+        },
+      ]);
+    }
+  });
 });

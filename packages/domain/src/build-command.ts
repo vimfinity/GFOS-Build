@@ -5,7 +5,7 @@ import type {
   MavenProfileState,
   NodeCommandType,
   PackageManager,
-} from './types.js';
+} from '@gfos-build/contracts';
 
 const MAVEN_OPTION_FLAG_BY_KEY: Record<MavenOptionKey, string> = {
   skipTests: '-DskipTests',
@@ -20,11 +20,14 @@ const MAVEN_OPTION_FLAG_BY_KEY: Record<MavenOptionKey, string> = {
 };
 
 export function buildCommandString(step: BuildStep): string {
-  if (step.buildSystem === 'maven') {
-    return [step.mavenExecutable, ...buildMavenArgs(step)].join(' ');
+  switch (step.buildSystem) {
+    case 'maven':
+      return [step.mavenExecutable, ...buildMavenArgs(step)].join(' ');
+    case 'wildfly':
+      return step.command;
+    case 'node':
+      return buildNodeCommandString(step.packageManager ?? 'npm', step.commandType, step.args, step.script);
   }
-
-  return buildNodeCommandString(step.packageManager ?? 'npm', step.commandType, step.args, step.script);
 }
 
 export function buildMavenArgs(step: MavenBuildStep): string[] {

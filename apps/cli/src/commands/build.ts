@@ -28,6 +28,7 @@ export async function runBuild(
     {
       path: resolvedPath,
       buildSystem: 'maven',
+      mode: 'build',
       goals,
       optionKeys: config.maven.defaultOptionKeys,
       profileStates: {},
@@ -51,6 +52,7 @@ export async function runBuild(
   const { jobId } = runtime.runQuick({
     path: resolvedPath,
     buildSystem: 'maven',
+    mode: 'build',
     goals,
     optionKeys: config.maven.defaultOptionKeys,
     profileStates: {},

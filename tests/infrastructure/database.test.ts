@@ -115,4 +115,33 @@ describe('AppDatabase', () => {
       db.close();
     }
   });
+
+  it('stores deployment workflows as first-class generic workflow definitions', () => {
+    tempDir = mkdtempSync(path.join(tmpdir(), 'gfos-build-db-'));
+    const db = new AppDatabase(path.join(tempDir, 'builds.sqlite'));
+    try {
+      db.saveDeploymentWorkflowDefinition('local-web', {
+        projectPath: 'C:/repo/web',
+        build: {
+          goals: ['clean', 'install'],
+          optionKeys: [],
+          profileStates: {},
+          extraOptions: [],
+          submoduleBuildStrategy: 'root-pl',
+        },
+        artifactSelector: { kind: 'auto' },
+        environmentName: 'local',
+        standaloneProfileName: 'dev',
+        deployMode: 'filesystem-scanner',
+        startServer: true,
+      });
+
+      expect(db.listDeploymentWorkflowDefinitions()).toEqual([
+        expect.objectContaining({ name: 'local-web' }),
+      ]);
+      expect(db.getDeploymentWorkflowDefinition('local-web')?.definition.environmentName).toBe('local');
+    } finally {
+      db.close();
+    }
+  });
 });

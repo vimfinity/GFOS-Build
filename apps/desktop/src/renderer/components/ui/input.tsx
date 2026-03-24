@@ -3,20 +3,34 @@ import { Minus, Plus } from 'lucide-react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 
+function FieldLabel({
+  htmlFor,
+  label,
+  required,
+}: {
+  htmlFor?: string;
+  label: string;
+  required?: boolean;
+}) {
+  return (
+    <label htmlFor={htmlFor} className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+      {label}
+      {required ? <span className="ml-1 text-destructive">*</span> : null}
+    </label>
+  );
+}
+
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  description?: string;
   error?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, id, ...props }, ref) => {
+  ({ className, label, description, error, id, ...props }, ref) => {
     return (
       <div className="flex flex-col gap-1.5">
-        {label && (
-          <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            {label}
-          </label>
-        )}
+        {label ? <FieldLabel htmlFor={id} label={label} required={props.required} /> : null}
         <input
           id={id}
           ref={ref}
@@ -29,6 +43,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           )}
           {...props}
         />
+        {description && !error ? <span className="text-xs text-muted-foreground">{description}</span> : null}
         {error && <span className="text-xs text-destructive">{error}</span>}
       </div>
     );
@@ -38,18 +53,15 @@ Input.displayName = 'Input';
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
+  description?: string;
   error?: string;
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, label, error, id, ...props }, ref) => {
+  ({ className, label, description, error, id, ...props }, ref) => {
     return (
       <div className="flex flex-col gap-1.5">
-        {label && (
-          <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            {label}
-          </label>
-        )}
+        {label ? <FieldLabel htmlFor={id} label={label} required={props.required} /> : null}
         <textarea
           id={id}
           ref={ref}
@@ -62,6 +74,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           )}
           {...props}
         />
+        {description && !error ? <span className="text-xs text-muted-foreground">{description}</span> : null}
         {error && <span className="text-xs text-destructive">{error}</span>}
       </div>
     );
@@ -72,7 +85,9 @@ Textarea.displayName = 'Textarea';
 export interface NumberFieldProps {
   id?: string;
   label?: string;
+  description?: string;
   error?: string;
+  required?: boolean;
   value: number;
   onChange: (value: number) => void;
   min?: number;
@@ -91,7 +106,9 @@ function clampNumber(value: number, min?: number, max?: number) {
 export function NumberField({
   id,
   label,
+  description,
   error,
+  required,
   value,
   onChange,
   min,
@@ -105,11 +122,7 @@ export function NumberField({
 
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      {label && (
-        <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          {label}
-        </label>
-      )}
+      {label ? <FieldLabel htmlFor={id} label={label} required={required} /> : null}
       <div className="field-shell h-11 rounded-2xl px-1.5 pl-4">
         <input
           id={id}
@@ -150,6 +163,7 @@ export function NumberField({
           </Tooltip>
         </div>
       </div>
+      {description && !error ? <span className="text-xs text-muted-foreground">{description}</span> : null}
       {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );

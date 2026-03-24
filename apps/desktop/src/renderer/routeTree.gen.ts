@@ -14,6 +14,7 @@ import { Route as StatsIndexRouteImport } from './routes/stats/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as PipelinesIndexRouteImport } from './routes/pipelines/index'
+import { Route as DeploymentsIndexRouteImport } from './routes/deployments/index'
 import { Route as BuildsIndexRouteImport } from './routes/builds/index'
 import { Route as BuildsJobIdRouteImport } from './routes/builds/$jobId'
 
@@ -42,6 +43,11 @@ const PipelinesIndexRoute = PipelinesIndexRouteImport.update({
   path: '/pipelines/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DeploymentsIndexRoute = DeploymentsIndexRouteImport.update({
+  id: '/deployments/',
+  path: '/deployments/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BuildsIndexRoute = BuildsIndexRouteImport.update({
   id: '/builds/',
   path: '/builds/',
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds/': typeof BuildsIndexRoute
+  '/deployments/': typeof DeploymentsIndexRoute
   '/pipelines/': typeof PipelinesIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds': typeof BuildsIndexRoute
+  '/deployments': typeof DeploymentsIndexRoute
   '/pipelines': typeof PipelinesIndexRoute
   '/projects': typeof ProjectsIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/builds/$jobId': typeof BuildsJobIdRoute
   '/builds/': typeof BuildsIndexRoute
+  '/deployments/': typeof DeploymentsIndexRoute
   '/pipelines/': typeof PipelinesIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/builds/$jobId'
     | '/builds/'
+    | '/deployments/'
     | '/pipelines/'
     | '/projects/'
     | '/settings/'
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/builds/$jobId'
     | '/builds'
+    | '/deployments'
     | '/pipelines'
     | '/projects'
     | '/settings'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/builds/$jobId'
     | '/builds/'
+    | '/deployments/'
     | '/pipelines/'
     | '/projects/'
     | '/settings/'
@@ -115,6 +127,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BuildsJobIdRoute: typeof BuildsJobIdRoute
   BuildsIndexRoute: typeof BuildsIndexRoute
+  DeploymentsIndexRoute: typeof DeploymentsIndexRoute
   PipelinesIndexRoute: typeof PipelinesIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
@@ -158,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PipelinesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/deployments/': {
+      id: '/deployments/'
+      path: '/deployments'
+      fullPath: '/deployments/'
+      preLoaderRoute: typeof DeploymentsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/builds/': {
       id: '/builds/'
       path: '/builds'
@@ -179,6 +199,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BuildsJobIdRoute: BuildsJobIdRoute,
   BuildsIndexRoute: BuildsIndexRoute,
+  DeploymentsIndexRoute: DeploymentsIndexRoute,
   PipelinesIndexRoute: PipelinesIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,

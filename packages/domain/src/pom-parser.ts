@@ -1,8 +1,11 @@
 export interface PomMetadata {
   artifactId: string;
+  version?: string;
   packaging: string;
   isAggregator: boolean;
   javaVersion?: string;
+  buildDirectory?: string;
+  finalName?: string;
   modules: string[];
   profiles: Array<{ id: string; activeByDefault: boolean }>;
 }
@@ -11,9 +14,12 @@ export function parsePom(content: string): PomMetadata {
   const normalized = stripXmlComments(content);
   return {
     artifactId: extractArtifactId(normalized) ?? 'unknown',
+    version: extractProjectVersion(normalized),
     packaging: extractTagValue(normalized, 'packaging') ?? 'jar',
     isAggregator: extractTagBlocks(normalized, 'modules').length > 0,
     javaVersion: extractJavaVersion(normalized),
+    buildDirectory: extractBuildTagValue(normalized, 'directory'),
+    finalName: extractBuildTagValue(normalized, 'finalName'),
     modules: extractModules(normalized),
     profiles: extractProfiles(normalized),
   };
@@ -35,6 +41,20 @@ function extractJavaVersion(content: string): string | undefined {
     extractTagValue(content, 'maven.compiler.source') ??
     extractTagValue(content, 'maven.compiler.release')
   );
+}
+
+function extractProjectVersion(content: string): string | undefined {
+  const parentEnd = content.indexOf('</parent>');
+  const searchIn = parentEnd !== -1 ? content.slice(parentEnd) : content;
+  return extractTagValue(searchIn, 'version');
+}
+
+function extractBuildTagValue(content: string, tag: string): string | undefined {
+  const buildBlock = extractTagBlocks(content, 'build')[0];
+  if (!buildBlock) {
+    return undefined;
+  }
+  return extractTagValue(buildBlock, tag);
 }
 
 function extractModules(content: string): string[] {

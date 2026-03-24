@@ -595,6 +595,7 @@
     display: inline-flex;
     height: 2.75rem;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem;
     border-radius: 9999px;
     border: 1px solid var(--field-border);

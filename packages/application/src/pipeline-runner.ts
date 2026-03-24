@@ -1,10 +1,10 @@
 import type { BuildRunner } from './build-runner.js';
-import type { BuildCompletionStatus, Pipeline, BuildEvent, BuildStepResult, RunResult } from '@gfos-build/domain';
+import type { BuildCompletionStatus, BuildEvent, BuildStepResult, PackageManager, Pipeline, RunResult } from '@gfos-build/domain';
 import { buildCommandString } from '@gfos-build/domain';
 import { type GitInfoReader, noopGitInfoReader } from './git-info.js';
 
 export interface PipelineRunStore {
-  createRun(params: { jobId?: string; kind: 'pipeline'; pipelineName: string; title: string }): number;
+  createRun(params: { jobId?: string; kind: 'pipeline'; workflowName: string; title: string }): number;
   finishRun(params: { id: number; status: BuildCompletionStatus; durationMs: number; stoppedAt?: number }): void;
   createStepRun(params: {
     runId: number;
@@ -12,11 +12,12 @@ export interface PipelineRunStore {
     projectPath: string;
     projectName: string;
     buildSystem: string;
-    packageManager?: string;
-    executionMode?: string;
+    packageManager?: PackageManager;
+    executionMode?: 'internal' | 'external';
     command: string;
     javaHome?: string;
-    pipelineName?: string;
+    workflowKind?: 'pipeline';
+    workflowName?: string;
     stepIndex?: number;
     stepLabel: string;
     branch?: string;
@@ -50,7 +51,7 @@ export class PipelineRunner {
       this.db.createRun({
         jobId,
         kind: 'pipeline',
-        pipelineName: pipeline.name,
+        workflowName: pipeline.name,
         title: pipeline.name,
       });
     const results: BuildStepResult[] = [];
@@ -81,7 +82,8 @@ export class PipelineRunner {
                 executionMode: event.step.buildSystem === 'node' ? event.step.executionMode : undefined,
                 command: buildCommandString(event.step),
                 javaHome: event.step.buildSystem === 'maven' ? event.step.javaHome : undefined,
-                pipelineName: pipeline.name,
+                workflowKind: 'pipeline',
+                workflowName: pipeline.name,
                 stepIndex: displayIndex,
                 stepLabel: event.step.label,
                 branch: gitInfo.branch ?? undefined,

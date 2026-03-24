@@ -1,6 +1,7 @@
 // Shared desktop/CLI-facing query and command types.
 import type {
   BuildEvent,
+  DeployableArtifactCandidate,
   ExecutionMode,
   MavenOptionKey,
   MavenProfileState,
@@ -9,6 +10,9 @@ import type {
   PackageManager,
   Project,
   ScanEvent,
+  WildFlyDeployMode,
+  WildFlyEnvironmentConfig,
+  WorkflowKind,
 } from './types.js';
 
 export interface HealthResponse {
@@ -30,6 +34,9 @@ export interface ConfigResponse {
     node: { executables: Record<PackageManager, string> };
     jdkRegistry: Record<string, string>;
     scan: { includeHidden: boolean; exclude: string[] };
+    wildfly: {
+      environments: Record<string, WildFlyEnvironmentConfig>;
+    };
   };
   configPath: string;
 }
@@ -38,9 +45,11 @@ export interface ConfigResponse {
 export interface PipelineStep {
   label: string;
   path: string;
-  buildSystem: 'maven' | 'node';
+  buildSystem: 'maven' | 'node' | 'wildfly';
   packageManager?: PackageManager;
   executionMode?: ExecutionMode;
+  mode?: 'build' | 'deploy';
+  deploymentWorkflowName?: string;
   commandType?: NodeCommandType;
   modulePath?: string;
   submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
@@ -53,6 +62,9 @@ export interface PipelineStep {
   args?: string[];
   javaVersion?: string;
   javaHome?: string;
+  environmentName?: string;
+  deployMode?: WildFlyDeployMode;
+  command?: string;
 }
 
 /** One saved pipeline entry. */
@@ -73,6 +85,7 @@ export interface PipelineListItem {
 export interface BuildRunRowApi {
   id: number;
   job_id: string | null;
+  workflow_kind: WorkflowKind;
   project_path: string;
   project_name: string;
   build_system: string;
@@ -133,6 +146,11 @@ export interface ProjectInspectionResponse {
   project: Project | null;
 }
 
+export interface DeploymentProjectInspectionResponse {
+  project: Project | null;
+  deployableCandidates: DeployableArtifactCandidate[];
+}
+
 export interface DetectedJdkApi {
   version: string;
   path: string;
@@ -146,6 +164,28 @@ export interface JdkDetectionResponse {
 export interface GitInfoResponse {
   branch: string | null;
   isDirty: boolean;
+}
+
+export interface DeploymentWorkflowListItem {
+  name: string;
+  description?: string;
+  projectPath: string;
+  environmentName: string;
+  deployMode: WildFlyDeployMode;
+  startServer: boolean;
+  lastRun: {
+    status: string;
+    startedAt: string;
+    durationMs: number | null;
+  } | null;
+}
+
+export interface DeploymentPlanPreview {
+  recommendedDeployMode: WildFlyDeployMode;
+  resolvedArtifactPattern: string;
+  resolvedStartupCommand: string | null;
+  cleanupPaths: string[];
+  warnings: string[];
 }
 
 /** Live run event envelope delivered over the desktop bridge. */

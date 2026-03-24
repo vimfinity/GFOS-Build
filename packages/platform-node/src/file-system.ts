@@ -12,6 +12,8 @@ export interface FileSystem {
   readFile(p: string): Promise<string>;
   writeFile(p: string, content: string): Promise<void>;
   mkdir(p: string, options?: { recursive: boolean }): Promise<void>;
+  copyFile(from: string, to: string): Promise<void>;
+  rm(p: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
 }
 
 export class NodeFileSystem implements FileSystem {
@@ -39,5 +41,14 @@ export class NodeFileSystem implements FileSystem {
 
   async mkdir(p: string, options?: { recursive: boolean }): Promise<void> {
     await fs.mkdir(p, options);
+  }
+
+  async copyFile(from: string, to: string): Promise<void> {
+    await fs.mkdir(path.dirname(to), { recursive: true });
+    await fs.copyFile(from, to);
+  }
+
+  async rm(p: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+    await fs.rm(p, options);
   }
 }

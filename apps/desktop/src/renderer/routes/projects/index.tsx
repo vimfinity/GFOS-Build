@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { scanQuery, configQuery, useRefreshScan, useQuickRun } from '@/api/queries';
+import { scanQuery, configQuery, useCreateDeploymentWorkflow, useRefreshScan, useRunDeploymentWorkflow, useQuickRun } from '@/api/queries';
 import { waitForJobCompletion, waitForScanCompletion } from '@/api/run-events';
 import { useState, useMemo, useEffect, useDeferredValue, useRef, startTransition } from 'react';
 import {
@@ -38,7 +38,9 @@ import { getNodeScriptChoices, getNodeScriptComboboxOptions } from '@/lib/node-s
 import { cn } from '@/lib/utils';
 import { useGitInfo, useGitInfoBatch } from '@/api/queries';
 import { BranchBadge } from '@/components/BranchBadge';
+import { DeploymentEditor, serializeDeploymentWorkflow } from '@/components/DeploymentEditor';
 import type {
+  BuildSystem,
   ExecutionMode,
   MavenOptionKey,
   MavenProfileState,
@@ -71,15 +73,19 @@ function getRelativePath(project: Project, roots: Record<string, string>): strin
   return norm.startsWith(rootNorm) ? norm.slice(rootNorm.length + 1) : project.path;
 }
 
-function SystemBadge({ system }: { system: 'maven' | 'node' }) {
+function SystemBadge({ system }: { system: BuildSystem }) {
   return (
     <span
       className={cn(
         'pill-meta',
-        system === 'maven' ? 'bg-primary/10 text-primary' : 'bg-success/10 text-success'
+        system === 'maven'
+          ? 'bg-primary/10 text-primary'
+          : system === 'node'
+            ? 'bg-success/10 text-success'
+            : 'bg-warning/10 text-warning'
       )}
     >
-      {system === 'maven' ? 'Maven' : 'Node'}
+      {system === 'maven' ? 'Maven' : system === 'node' ? 'Node' : 'WildFly'}
     </span>
   );
 }
@@ -449,12 +455,14 @@ function ProjectRow({
   project,
   subPath,
   onBuild,
+  onDeploy,
   gitInfo,
   disabled = false,
 }: {
   project: Project;
   subPath: string;
   onBuild: (project: Project) => void;
+  onDeploy: (project: Project) => void;
   gitInfo?: { branch: string | null; isDirty?: boolean };
   disabled?: boolean;
 }) {
@@ -501,6 +509,17 @@ function ProjectRow({
         <Play size={11} />
         Run
       </Button>
+      {project.buildSystem === 'maven' ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => onDeploy(project)}
+          disabled={disabled}
+        >
+          Deploy
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -509,12 +528,14 @@ function FlatProjectRow({
   project,
   roots,
   onBuild,
+  onDeploy,
   gitInfo,
   disabled = false,
 }: {
   project: Project;
   roots: Record<string, string>;
   onBuild: (project: Project) => void;
+  onDeploy: (project: Project) => void;
   gitInfo?: { branch: string | null; isDirty?: boolean };
   disabled?: boolean;
 }) {
@@ -556,6 +577,17 @@ function FlatProjectRow({
         <Play size={11} />
         Run
       </Button>
+      {project.buildSystem === 'maven' ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => onDeploy(project)}
+          disabled={disabled}
+        >
+          Deploy
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -568,12 +600,15 @@ function ProjectsView() {
   const { data: configData } = useQuery(configQuery);
   const refreshScan = useRefreshScan();
   const quickRun = useQuickRun();
+  const createDeploymentWorkflow = useCreateDeploymentWorkflow();
+  const runDeploymentWorkflow = useRunDeploymentWorkflow();
 
   const [search, setSearch] = useState('');
   const [sysFilter, setSysFilter] = useState<SysFilter>('all');
   const [sortBy, setSortBy] = useState<SortBy>('name-asc');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [buildTarget, setBuildTarget] = useState<Project | null>(null);
+  const [deployTarget, setDeployTarget] = useState<Project | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const lastAutoRefreshScanAtRef = useRef<string | null>(null);
@@ -940,6 +975,7 @@ function ProjectsView() {
                         project={project}
                         roots={roots}
                         onBuild={setBuildTarget}
+                        onDeploy={setDeployTarget}
                         gitInfo={gitInfoMap?.[project.path]}
                       />
                     ))}
@@ -973,6 +1009,7 @@ function ProjectsView() {
                                     project={project}
                                     subPath={subPath}
                                     onBuild={setBuildTarget}
+                                    onDeploy={setDeployTarget}
                                     gitInfo={gitInfoMap?.[project.path]}
                                   />
                                 );
@@ -995,6 +1032,38 @@ function ProjectsView() {
         onClose={() => setBuildTarget(null)}
         onRun={(payload) => void handleBuildRun(payload)}
         isRunning={quickRun.isPending}
+      />
+      <DeploymentEditor
+        open={deployTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeployTarget(null);
+        }}
+        defaultProjectPath={deployTarget?.path}
+        initialValue={
+          deployTarget
+            ? {
+                name: `${deployTarget.name}-deploy`,
+                projectPath: deployTarget.path,
+              }
+            : undefined
+        }
+        onSave={(value) => {
+          const environments = configData?.config.wildfly.environments ?? {};
+          void createDeploymentWorkflow
+            .mutateAsync({
+              name: value.name,
+              workflow: serializeDeploymentWorkflow(value, environments),
+            })
+            .then(async () => {
+              await queryClient.invalidateQueries({ queryKey: ['deployment-workflows'] });
+              const { jobId } = await runDeploymentWorkflow.mutateAsync({ name: value.name });
+              setDeployTarget(null);
+              void navigate({ to: '/builds/$jobId', params: { jobId } });
+            });
+        }}
+        title="Deploy project"
+        description="Create or update a deployment workflow from this Maven project and run it immediately."
+        confirmLabel="Save and deploy"
       />
     </div>
   );

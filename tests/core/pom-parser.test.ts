@@ -78,6 +78,21 @@ describe('parsePom', () => {
     expect(parsePom(content).javaVersion).toBeUndefined();
   });
 
+  it('extracts version, build directory, and finalName', () => {
+    const content = `<project>
+      <artifactId>deployable-app</artifactId>
+      <version>1.2.3</version>
+      <build>
+        <directory>custom-target</directory>
+        <finalName>deployable-custom</finalName>
+      </build>
+    </project>`;
+    const result = parsePom(content);
+    expect(result.version).toBe('1.2.3');
+    expect(result.buildDirectory).toBe('custom-target');
+    expect(result.finalName).toBe('deployable-custom');
+  });
+
   it('parses a full realistic pom.xml', () => {
     const content = `<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0">

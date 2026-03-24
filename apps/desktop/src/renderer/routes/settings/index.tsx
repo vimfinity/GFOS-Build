@@ -7,7 +7,7 @@ import { JdkRegistryFields, type JdkRegistryEntry } from '@/components/JdkRegist
 import { MAVEN_OPTIONS } from '@/components/MavenCommandFields';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Input, Textarea } from '@/components/ui/input';
 import { TagInput } from '@/components/ui/tag-input';
 import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -62,6 +62,7 @@ function createConfigPayload({
   rootEntries,
   includeHidden,
   excludePatterns,
+  wildflyEnvironments,
 }: {
   mavenExec: string;
   mavenGoals: string[];
@@ -72,6 +73,7 @@ function createConfigPayload({
   rootEntries: KvEntry[];
   includeHidden: boolean;
   excludePatterns: string[];
+  wildflyEnvironments: Record<string, unknown>;
 }) {
   return {
     maven: {
@@ -97,6 +99,9 @@ function createConfigPayload({
       includeHidden,
       exclude: excludePatterns,
     },
+    wildfly: {
+      environments: wildflyEnvironments,
+    },
   };
 }
 
@@ -115,6 +120,7 @@ function SettingsView() {
   const [rootEntries, setRootEntries] = useState<KvEntry[]>([]);
   const [includeHidden, setIncludeHidden] = useState(false);
   const [excludePatterns, setExcludePatterns] = useState<string[]>([]);
+  const [wildflyEnvironmentsText, setWildflyEnvironmentsText] = useState('{}');
   const [themePreference, setThemePreference] = useState<ThemePreference>('system');
   const [baselineSnapshot, setBaselineSnapshot] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -138,6 +144,7 @@ function SettingsView() {
     const nextRootEntries = Object.entries(config.roots).map(([key, value]) => ({ key, value }));
     const nextIncludeHidden = config.scan.includeHidden;
     const nextExcludePatterns = config.scan.exclude;
+    const nextWildflyEnvironments = config.wildfly.environments;
 
     setMavenExec(nextMavenExec);
     setMavenGoals(nextMavenGoals);
@@ -148,6 +155,7 @@ function SettingsView() {
     setRootEntries(nextRootEntries);
     setIncludeHidden(nextIncludeHidden);
     setExcludePatterns(nextExcludePatterns);
+    setWildflyEnvironmentsText(JSON.stringify(nextWildflyEnvironments, null, 2));
     setBaselineSnapshot(
       JSON.stringify(
         createConfigPayload({
@@ -160,11 +168,20 @@ function SettingsView() {
           rootEntries: nextRootEntries,
           includeHidden: nextIncludeHidden,
           excludePatterns: nextExcludePatterns,
+          wildflyEnvironments: nextWildflyEnvironments,
         }),
       ),
     );
     setThemePreference(getStoredThemePreference());
   }, [configData]);
+
+  const parsedWildflyEnvironments = useMemo(() => {
+    try {
+      return parseWildflyEnvironmentsText(wildflyEnvironmentsText);
+    } catch {
+      return null;
+    }
+  }, [wildflyEnvironmentsText]);
 
   const currentPayload = useMemo(
     () =>
@@ -178,6 +195,7 @@ function SettingsView() {
         rootEntries,
         includeHidden,
         excludePatterns,
+        wildflyEnvironments: parsedWildflyEnvironments ?? {},
       }),
     [
       mavenExec,
@@ -189,6 +207,7 @@ function SettingsView() {
       rootEntries,
       includeHidden,
       excludePatterns,
+      parsedWildflyEnvironments,
     ],
   );
   const currentSnapshot = useMemo(() => JSON.stringify(currentPayload), [currentPayload]);
@@ -241,6 +260,9 @@ function SettingsView() {
     setSaveState('saving');
     setSaveError(null);
     try {
+      if (parsedWildflyEnvironments === null) {
+        throw new Error('WildFly environments JSON is invalid.');
+      }
       await saveConfig.mutateAsync(currentPayload);
       void queryClient.invalidateQueries({ queryKey: ['config'] });
       setBaselineSnapshot(currentSnapshot);
@@ -469,6 +491,27 @@ function SettingsView() {
           </ConfigCard>
 
           <ConfigCard
+            title="WildFly"
+            description="Named local WildFly environments, standalone profiles, cleanup presets, and startup presets used by deployment workflows."
+            icon={<Settings size={14} className="text-primary" />}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Textarea
+                label="WildFly environments JSON"
+                value={wildflyEnvironmentsText}
+                onChange={(e) => setWildflyEnvironmentsText(e.target.value)}
+                className="min-h-[240px] font-mono text-[12px]"
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground/72">
+                Edit the `wildfly.environments` object directly to define named environments, standalone profiles, cleanup presets, and startup presets used by deployment workflows.
+              </p>
+              {parsedWildflyEnvironments === null ? (
+                <p className="text-[11px] text-destructive">The JSON above is invalid and cannot be saved.</p>
+              ) : null}
+            </div>
+          </ConfigCard>
+
+          <ConfigCard
             title="Node Package Managers"
             description="Executable overrides used when GFOS Build starts npm, pnpm, or bun scripts."
             icon={<Settings size={14} className="text-primary" />}
@@ -693,4 +736,12 @@ function ConfigCard({
       <CardContent className="flex flex-col gap-4">{children}</CardContent>
     </Card>
   );
+}
+
+function parseWildflyEnvironmentsText(value: string): Record<string, unknown> {
+  const parsed = JSON.parse(value || '{}') as unknown;
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('WildFly environments must be a JSON object.');
+  }
+  return parsed as Record<string, unknown>;
 }

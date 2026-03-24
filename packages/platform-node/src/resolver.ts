@@ -53,6 +53,8 @@ export function resolveStep(stepConfig: BuildStepConfig, config: AppConfig): Bui
   return {
     path: resolvedPath,
     buildSystem: 'maven',
+    mode: stepConfig.mode,
+    deploymentWorkflowName: stepConfig.deploymentWorkflowName,
     modulePath: stepConfig.modulePath,
     submoduleBuildStrategy: stepConfig.submoduleBuildStrategy,
     goals,

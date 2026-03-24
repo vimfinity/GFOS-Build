@@ -4,13 +4,15 @@ import { useRef, useState, type KeyboardEvent } from 'react';
 export interface TagInputProps {
   id?: string;
   label?: string;
+  description?: string;
+  required?: boolean;
   value: string[];
   onChange: (tags: string[]) => void;
   placeholder?: string;
   className?: string;
 }
 
-export function TagInput({ id, label, value, onChange, placeholder, className }: TagInputProps) {
+export function TagInput({ id, label, description, required, value, onChange, placeholder, className }: TagInputProps) {
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -41,6 +43,7 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
       {label && (
         <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {label}
+          {required ? <span className="ml-1 text-destructive">*</span> : null}
         </label>
       )}
       <div
@@ -82,6 +85,7 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
           className="field-input min-w-[8rem] flex-1"
         />
       </div>
+      {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
     </div>
   );
 }
