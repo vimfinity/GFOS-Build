@@ -8,6 +8,7 @@ import type {
 } from '@gfos-build/contracts';
 import { configQuery, inspectDeploymentProject, previewDeploymentPlan } from '@/api/queries';
 import { Input } from '@/components/ui/input';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -161,12 +162,30 @@ export function WildFlyDeployFields({
   const artifactOptions = useMemo(() => {
     const preferredCandidates = getPreferredDeployableCandidates(candidates);
     return [
-      { key: 'auto', label: 'Auto select' },
+      {
+        key: 'auto',
+        label: 'Auto select',
+        description: preferredCandidates.length > 0 ? 'Prefer EARs, then other high-confidence artifacts' : 'Use automatic artifact detection',
+        keywords: ['automatic', 'default'],
+      },
       ...preferredCandidates.map((candidate) => ({
         key: `${candidate.modulePath}|${candidate.packaging}`,
         label: `${candidate.modulePath || '.'} (${candidate.packaging})`,
+        description: candidate.expectedDefaultFileName ?? candidate.artifactId,
+        keywords: [
+          candidate.modulePath,
+          candidate.artifactId,
+          candidate.packaging,
+          candidate.expectedDefaultFileName ?? '',
+          candidate.declaredFinalName ?? '',
+        ],
       })),
-      { key: 'explicit', label: 'Explicit file name' },
+      {
+        key: 'explicit',
+        label: 'Explicit file name',
+        description: 'Manually type the artifact file name',
+        keywords: ['manual', 'file name'],
+      },
     ];
   }, [candidates]);
   const visibleCandidates = useMemo(() => getPreferredDeployableCandidates(candidates), [candidates]);
@@ -270,20 +289,19 @@ export function WildFlyDeployFields({
             <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Artifact target</label>
             <Tooltip content="Selects which detected deployable module should be deployed. Auto select prefers EARs, then other high-confidence artifacts." side="top">
               <div>
-                <Select value={value.artifactSelection} onValueChange={(next) => update('artifactSelection', String(next ?? ''))}>
-                  <SelectTrigger disabled={visibleCandidates.length === 0}>
-                    <SelectValue placeholder={visibleCandidates.length === 0 ? 'No deployable artifacts detected' : 'Select artifact target'}>
-                      {selectedArtifactLabel ?? null}
-                    </SelectValue>
-                  </SelectTrigger>
-                  {visibleCandidates.length > 0 ? (
-                    <SelectContent>
-                      {artifactOptions.map((option) => (
-                        <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  ) : null}
-                </Select>
+                <ComboboxField
+                  value={value.artifactSelection}
+                  options={artifactOptions.map((option) => ({
+                    value: option.key,
+                    label: option.label,
+                    description: option.description,
+                    keywords: option.keywords,
+                  }))}
+                  onValueChange={(next) => update('artifactSelection', next)}
+                  placeholder={visibleCandidates.length === 0 ? 'No deployable artifacts detected' : 'Search artifact target'}
+                  emptyText="No matching artifact targets"
+                  disabled={visibleCandidates.length === 0}
+                />
               </div>
             </Tooltip>
           </div>

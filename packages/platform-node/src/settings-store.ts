@@ -74,14 +74,25 @@ export class SettingsStore {
   }
 }
 
+const REPLACE_OBJECT_PATHS = new Set([
+  'roots',
+  'jdkRegistry',
+  'wildfly.environments',
+]);
+
 function mergePlainObjects(
   base: Record<string, unknown>,
   patch: Record<string, unknown>,
+  pathSegments: string[] = [],
 ): Record<string, unknown> {
+  const path = pathSegments.join('.');
+  if (path && REPLACE_OBJECT_PATHS.has(path)) {
+    return { ...patch };
+  }
   const next: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(patch)) {
     if (isPlainObject(value) && isPlainObject(next[key])) {
-      next[key] = mergePlainObjects(next[key] as Record<string, unknown>, value);
+      next[key] = mergePlainObjects(next[key] as Record<string, unknown>, value, [...pathSegments, key]);
       continue;
     }
     next[key] = value;

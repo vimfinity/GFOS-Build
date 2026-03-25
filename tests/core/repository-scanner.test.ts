@@ -483,4 +483,99 @@ describe('RepositoryScanner', () => {
       ]);
     }
   });
+
+  it('detects realistic EAR modules from packaging metadata even with heavy plugin configuration', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/ear-fixture');
+
+    fs.addDirectory(rootPath, [dirEntry('gfosweb', true)]);
+    fs.addDirectory(path.join(rootPath, 'gfosweb'), []);
+    fs.addFile(
+      path.join(rootPath, 'pom.xml'),
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+        <modelVersion>4.0.0</modelVersion>
+        <artifactId>ear-fixture</artifactId>
+        <version>2025.1.0</version>
+        <packaging>pom</packaging>
+        <modules>
+          <module>gfosweb</module>
+        </modules>
+      </project>`,
+    );
+    fs.addFile(
+      path.join(rootPath, 'gfosweb', 'pom.xml'),
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+        <modelVersion>4.0.0</modelVersion>
+        <parent>
+          <groupId>de.gfos</groupId>
+          <artifactId>xtime-maven-config-2025</artifactId>
+          <version>2025.1.0</version>
+        </parent>
+        <artifactId>gfosweb</artifactId>
+        <packaging>ear</packaging>
+        <profiles>
+          <profile>
+            <id>easyui</id>
+            <activation>
+              <property>
+                <name>gfos.jenkins</name>
+                <value>true</value>
+              </property>
+            </activation>
+            <dependencies>
+              <dependency>
+                <groupId>de.gfos.fixture</groupId>
+                <artifactId>easyui-web</artifactId>
+                <type>war</type>
+              </dependency>
+            </dependencies>
+          </profile>
+        </profiles>
+        <build>
+          <finalName>\${project.artifactId}-\${project.version}</finalName>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-ear-plugin</artifactId>
+              <configuration>
+                <version>8</version>
+                <defaultLibBundleDir>lib</defaultLibBundleDir>
+                <skinnyWars>true</skinnyWars>
+                <modules>
+                  <webModule>
+                    <groupId>de.gfos.xtimeweb</groupId>
+                    <artifactId>gwmenu-war</artifactId>
+                    <contextRoot>/gfos</contextRoot>
+                  </webModule>
+                </modules>
+              </configuration>
+            </plugin>
+          </plugins>
+        </build>
+      </project>`,
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((event) => event.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.maven?.deployableCandidates).toEqual([
+        {
+          modulePath: 'gfosweb',
+          artifactId: 'gfosweb',
+          packaging: 'ear',
+          declaredFinalName: 'gfosweb-2025.1.0',
+          declaredBuildDirectory: undefined,
+          expectedDefaultFileName: 'gfosweb-2025.1.0.ear',
+          selectionConfidence: 'high',
+        },
+      ]);
+    }
+  });
 });

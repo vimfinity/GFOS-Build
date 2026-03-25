@@ -378,7 +378,6 @@
 
   .field-input {
     min-width: 0;
-    flex: 1 1 auto;
     border: 0;
     background: transparent;
     color: var(--color-foreground);

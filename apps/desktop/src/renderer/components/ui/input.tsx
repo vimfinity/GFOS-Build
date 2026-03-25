@@ -136,7 +136,7 @@ export function NumberField({
             applyValue(Number(digits));
           }}
           onBlur={() => applyValue(value)}
-          className="field-input text-sm"
+          className="field-input flex-1 text-sm"
         />
         <div className="flex items-center gap-1">
           <Tooltip content="Decrease" side="bottom" disabled={min != null && value <= min}>

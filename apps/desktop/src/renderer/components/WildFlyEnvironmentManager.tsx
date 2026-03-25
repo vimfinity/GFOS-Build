@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { configQuery } from '@/api/queries';
 import { pickDirectory, pickFile } from '@/api/bridge';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { Button } from '@/components/ui/button';
 import { Input, NumberField } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TagInput } from '@/components/ui/tag-input';
 import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -250,6 +253,74 @@ function FilePathInput({
   );
 }
 
+function JavaHomeField({
+  label,
+  value,
+  placeholder,
+  jdkRegistry,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  jdkRegistry: Record<string, string>;
+  onChange: (value: string) => void;
+  }) {
+    const registryEntries = useMemo(
+      () =>
+        Object.entries(jdkRegistry)
+          .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+        .map(([version, path]) => ({
+          version,
+          path,
+          })),
+      [jdkRegistry],
+    );
+    const selectedEntry = registryEntries.find((entry) => entry.path === value);
+    const selectValue = selectedEntry?.path ?? '__system__';
+    const hasRegisteredJdks = registryEntries.length > 0;
+  
+    return (
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{label}</label>
+        <Select
+          value={selectValue}
+          onValueChange={(nextValue) => {
+            const resolvedValue = String(nextValue ?? '__system__');
+            onChange(resolvedValue === '__system__' ? '' : resolvedValue);
+          }}
+        >
+          <SelectTrigger disabled={!hasRegisteredJdks}>
+            <SelectValue placeholder={placeholder}>
+              {() => {
+                if (!hasRegisteredJdks) {
+                  return 'No JDKs registered';
+                }
+                if (selectValue === '__system__') {
+                  return 'No override';
+                }
+                return selectedEntry ? `Java ${selectedEntry.version}` : placeholder;
+              }}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__system__">No override</SelectItem>
+            {registryEntries.map((entry) => (
+              <SelectItem key={entry.path} value={entry.path}>
+                {`Java ${entry.version}`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hasRegisteredJdks ? (
+          <SettingHint>Select a registered JDK from Settings. WildFly startup uses the stored JAVA_HOME path directly.</SettingHint>
+        ) : (
+          <SettingHint>No JDKs are registered. Add JDK installations in Settings before configuring a JAVA_HOME override here.</SettingHint>
+        )}
+      </div>
+    );
+  }
+
 function RecordEntryHeader({
   title,
   subtitle,
@@ -291,6 +362,8 @@ export function WildFlyEnvironmentManager({
   emptyDescription?: string;
   editorDescription?: string;
 }) {
+  const { data: configData } = useQuery(configQuery);
+  const jdkRegistry = useMemo(() => configData?.config.jdkRegistry ?? {}, [configData]);
   const environmentEntries = Object.entries(value);
   const activeName = selectedName && value[selectedName] ? selectedName : environmentEntries[0]?.[0] ?? null;
   const activeEnvironment = activeName ? value[activeName] : null;
@@ -429,10 +502,11 @@ export function WildFlyEnvironmentManager({
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <Input label="Environment name" defaultValue={activeName} onBlur={(event) => renameEnvironment(activeName, event.target.value)} />
-                <DirectoryInput
+                <JavaHomeField
                   label="Default JAVA_HOME"
-                  placeholder="Optional environment-specific JAVA_HOME"
+                  placeholder={Object.keys(jdkRegistry).length > 0 ? 'Select a registered JDK' : 'Optional environment-specific JAVA_HOME'}
                   value={activeEnvironment.javaHome ?? ''}
+                  jdkRegistry={jdkRegistry}
                   onChange={(next) => updateEnvironment(activeName, (env) => ({ ...env, javaHome: next }))}
                 />
                 <div className="flex flex-col gap-1.5">
@@ -521,6 +595,7 @@ export function WildFlyEnvironmentManager({
 
               <WildFlyStartupPresetsEditor
                 value={activeEnvironment.startupPresets}
+                jdkRegistry={jdkRegistry}
                 onChange={(next) => updateEnvironment(activeName, (env) => ({ ...env, startupPresets: next }))}
               />
             </div>
@@ -762,9 +837,11 @@ function WildFlyCleanupPresetsEditor({
 
 function WildFlyStartupPresetsEditor({
   value,
+  jdkRegistry,
   onChange,
 }: {
   value: WildFlyEnvironmentConfig['startupPresets'];
+  jdkRegistry: Record<string, string>;
   onChange: (value: WildFlyEnvironmentConfig['startupPresets']) => void;
 }) {
   function addPreset() {
@@ -820,11 +897,12 @@ function WildFlyStartupPresetsEditor({
             />
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <Input label="Preset name" defaultValue={name} onBlur={(event) => renamePreset(name, event.target.value)} />
-              <Input
+              <JavaHomeField
                 label="JAVA_HOME override"
-                placeholder="Optional JAVA_HOME for this preset"
+                placeholder={Object.keys(jdkRegistry).length > 0 ? 'Select a registered JDK' : 'Optional JAVA_HOME for this preset'}
                 value={preset.javaHome ?? ''}
-                onChange={(event) => updatePreset(name, (current) => ({ ...current, javaHome: event.target.value }))}
+                jdkRegistry={jdkRegistry}
+                onChange={(next) => updatePreset(name, (current) => ({ ...current, javaHome: next }))}
               />
               <TagInput
                 label="JAVA_OPTS"
