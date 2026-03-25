@@ -223,7 +223,7 @@ export function OnboardingDialog({
           <JdkRegistryFields
             entries={jdks}
             onChange={setJdks}
-            emptyMessage="No JDK entries yet. Use Detect from folder if your JDKs live under a shared parent like J:\\dev\\java."
+            emptyMessage="No JDK entries yet. Use Detect from folder if your JDKs live under a shared parent like J:\dev\java."
           />
         </div>
       ),
@@ -248,7 +248,7 @@ export function OnboardingDialog({
                 <div>
                   <Input
                     label="Path"
-                    placeholder="C:\\dev\\projects"
+                    placeholder="C:\dev\projects"
                     value={root.path}
                     onChange={(e) => updateRoot(index, 'path', e.target.value)}
                   />

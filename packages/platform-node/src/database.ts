@@ -3,30 +3,32 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { BuildStatsApi, BuildRunRowApi } from '@gfos-build/contracts';
-import type { BuildCompletionStatus, ExecutionMode, PackageManager } from '@gfos-build/domain';
-import type { PipelineConfig } from './schema.js';
+import type { BuildCompletionStatus, ExecutionMode, PackageManager, WorkflowKind } from '@gfos-build/domain';
+import type { DeploymentWorkflowConfig, PipelineConfig } from './schema.js';
 import { StateCompatibilityError } from './state-errors.js';
 
 const require = createRequire(import.meta.url);
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const SCHEMA_SQL = `
 CREATE TABLE schema_meta (
   version INTEGER NOT NULL
 );
 
-CREATE TABLE pipeline_definitions (
-  name TEXT PRIMARY KEY,
+CREATE TABLE workflow_definitions (
+  workflow_kind TEXT NOT NULL,
+  name TEXT NOT NULL,
   definition_json TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (workflow_kind, name)
 );
 
-CREATE TABLE pipeline_runs (
+CREATE TABLE workflow_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   job_id TEXT,
-  run_kind TEXT NOT NULL,
-  pipeline_name TEXT,
+  workflow_kind TEXT NOT NULL,
+  workflow_name TEXT,
   title TEXT NOT NULL,
   started_at TEXT NOT NULL,
   finished_at TEXT,
@@ -35,10 +37,11 @@ CREATE TABLE pipeline_runs (
   stopped_at INTEGER
 );
 
-CREATE TABLE pipeline_step_runs (
+CREATE TABLE workflow_step_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id INTEGER NOT NULL,
   job_id TEXT,
+  workflow_kind TEXT NOT NULL,
   project_path TEXT NOT NULL,
   project_name TEXT NOT NULL,
   build_system TEXT NOT NULL,
@@ -46,7 +49,7 @@ CREATE TABLE pipeline_step_runs (
   execution_mode TEXT,
   command TEXT NOT NULL,
   java_home TEXT,
-  pipeline_name TEXT,
+  workflow_name TEXT,
   step_index INTEGER,
   step_label TEXT NOT NULL,
   started_at TEXT NOT NULL,
@@ -55,7 +58,7 @@ CREATE TABLE pipeline_step_runs (
   exit_code INTEGER,
   status TEXT NOT NULL DEFAULT 'running',
   branch TEXT,
-  FOREIGN KEY (run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE
+  FOREIGN KEY (run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
 );
 
 CREATE TABLE run_step_logs (
@@ -64,14 +67,14 @@ CREATE TABLE run_step_logs (
   seq INTEGER NOT NULL,
   stream TEXT NOT NULL DEFAULT 'stdout',
   line TEXT NOT NULL,
-  FOREIGN KEY (step_run_id) REFERENCES pipeline_step_runs(id) ON DELETE CASCADE
+  FOREIGN KEY (step_run_id) REFERENCES workflow_step_runs(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_pipeline_runs_started_at ON pipeline_runs(started_at DESC);
-CREATE INDEX idx_pipeline_runs_name ON pipeline_runs(pipeline_name);
-CREATE INDEX idx_pipeline_step_runs_run_id ON pipeline_step_runs(run_id);
-CREATE INDEX idx_pipeline_step_runs_job_id ON pipeline_step_runs(job_id);
-CREATE INDEX idx_pipeline_step_runs_started_at ON pipeline_step_runs(started_at DESC);
+CREATE INDEX idx_workflow_runs_started_at ON workflow_runs(started_at DESC);
+CREATE INDEX idx_workflow_runs_name ON workflow_runs(workflow_name);
+CREATE INDEX idx_workflow_step_runs_run_id ON workflow_step_runs(run_id);
+CREATE INDEX idx_workflow_step_runs_job_id ON workflow_step_runs(job_id);
+CREATE INDEX idx_workflow_step_runs_started_at ON workflow_step_runs(started_at DESC);
 CREATE INDEX idx_run_step_logs_step_run_id ON run_step_logs(step_run_id, seq DESC);
 `;
 
@@ -85,10 +88,17 @@ export interface SavedPipelineDefinition {
   updatedAt: string;
 }
 
+export interface SavedDeploymentWorkflowDefinition {
+  name: string;
+  definition: DeploymentWorkflowConfig;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreateRunParams {
   jobId?: string;
-  kind: 'pipeline' | 'quick';
-  pipelineName?: string;
+  kind: WorkflowKind;
+  workflowName?: string;
   title: string;
 }
 
@@ -102,6 +112,7 @@ export interface FinishRunParams {
 export interface StartStepRunParams {
   runId: number;
   jobId?: string;
+  workflowKind?: WorkflowKind;
   projectPath: string;
   projectName: string;
   buildSystem: string;
@@ -109,7 +120,7 @@ export interface StartStepRunParams {
   executionMode?: ExecutionMode;
   command: string;
   javaHome?: string;
-  pipelineName?: string;
+  workflowName?: string;
   stepIndex?: number;
   stepLabel: string;
   branch?: string;
@@ -132,6 +143,10 @@ export interface IDatabase {
   getPipelineDefinition(name: string): SavedPipelineDefinition | null;
   savePipelineDefinition(name: string, definition: PipelineConfig): void;
   deletePipelineDefinition(name: string): void;
+  listDeploymentWorkflowDefinitions(): SavedDeploymentWorkflowDefinition[];
+  getDeploymentWorkflowDefinition(name: string): SavedDeploymentWorkflowDefinition | null;
+  saveDeploymentWorkflowDefinition(name: string, definition: DeploymentWorkflowConfig): void;
+  deleteDeploymentWorkflowDefinition(name: string): void;
   createRun(params: CreateRunParams): number;
   finishRun(params: FinishRunParams): void;
   reconcileRunningRuns(activeJobIds: string[], staleAfterMs?: number): void;
@@ -141,6 +156,7 @@ export interface IDatabase {
   getRecentRuns(opts: { limit: number; pipeline?: string; project?: string }): BuildRunRowApi[];
   getBuildStats(): BuildStatsApi;
   getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }>;
+  getLastRunsByDeployment(): Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }>;
   getLastFailedStepIndex(pipelineName: string): number | null;
   getBuildLogs(stepRunId: number, opts?: { limit?: number; beforeSeq?: number }): BuildLogPage;
   clearBuildLogs(): void;
@@ -162,65 +178,46 @@ export class AppDatabase implements IDatabase {
   }
 
   listPipelineDefinitions(): SavedPipelineDefinition[] {
-    return this.db
-      .prepare(
-        `SELECT name, definition_json, created_at, updated_at
-         FROM pipeline_definitions
-         ORDER BY name ASC`,
-      )
-      .all()
-      .map((row) => ({
-        name: String((row as { name: string }).name),
-        definition: JSON.parse(String((row as { definition_json: string }).definition_json)) as PipelineConfig,
-        createdAt: String((row as { created_at: string }).created_at),
-        updatedAt: String((row as { updated_at: string }).updated_at),
-      })) as SavedPipelineDefinition[];
+    return this.listDefinitions<PipelineConfig>('pipeline');
   }
 
   getPipelineDefinition(name: string): SavedPipelineDefinition | null {
-    const row = this.db
-      .prepare(
-        `SELECT name, definition_json, created_at, updated_at
-         FROM pipeline_definitions
-         WHERE name = ?`,
-      )
-      .get(name) as { name: string; definition_json: string; created_at: string; updated_at: string } | undefined;
-
-    if (!row) return null;
-    return {
-      name: row.name,
-      definition: JSON.parse(row.definition_json) as PipelineConfig,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
+    return this.getDefinition<PipelineConfig>('pipeline', name);
   }
 
   savePipelineDefinition(name: string, definition: PipelineConfig): void {
-    const now = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO pipeline_definitions (name, definition_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(name) DO UPDATE SET
-           definition_json = excluded.definition_json,
-           updated_at = excluded.updated_at`,
-      )
-      .run(name, JSON.stringify(definition), now, now);
+    this.saveDefinition('pipeline', name, definition);
   }
 
   deletePipelineDefinition(name: string): void {
-    this.db.prepare('DELETE FROM pipeline_definitions WHERE name = ?').run(name);
+    this.deleteDefinition('pipeline', name);
+  }
+
+  listDeploymentWorkflowDefinitions(): SavedDeploymentWorkflowDefinition[] {
+    return this.listDefinitions<DeploymentWorkflowConfig>('deployment');
+  }
+
+  getDeploymentWorkflowDefinition(name: string): SavedDeploymentWorkflowDefinition | null {
+    return this.getDefinition<DeploymentWorkflowConfig>('deployment', name);
+  }
+
+  saveDeploymentWorkflowDefinition(name: string, definition: DeploymentWorkflowConfig): void {
+    this.saveDefinition('deployment', name, definition);
+  }
+
+  deleteDeploymentWorkflowDefinition(name: string): void {
+    this.deleteDefinition('deployment', name);
   }
 
   createRun(params: CreateRunParams): number {
     const now = new Date().toISOString();
     const result = this.db
       .prepare(
-        `INSERT INTO pipeline_runs
-          (job_id, run_kind, pipeline_name, title, started_at, status)
+        `INSERT INTO workflow_runs
+          (job_id, workflow_kind, workflow_name, title, started_at, status)
          VALUES (?, ?, ?, ?, ?, 'running')`,
       )
-      .run(params.jobId ?? null, params.kind, params.pipelineName ?? null, params.title, now) as {
+      .run(params.jobId ?? null, params.kind, params.workflowName ?? null, params.title, now) as {
       lastInsertRowid: number | bigint;
     };
     return Number(result.lastInsertRowid);
@@ -229,7 +226,7 @@ export class AppDatabase implements IDatabase {
   finishRun(params: FinishRunParams): void {
     this.db
       .prepare(
-        `UPDATE pipeline_runs
+        `UPDATE workflow_runs
          SET finished_at = ?, duration_ms = ?, status = ?, stopped_at = ?
          WHERE id = ?`,
       )
@@ -247,7 +244,7 @@ export class AppDatabase implements IDatabase {
 
     this.db
       .prepare(
-        `UPDATE pipeline_step_runs
+        `UPDATE workflow_step_runs
          SET finished_at = ?,
              duration_ms = CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER),
              exit_code = COALESCE(exit_code, 1),
@@ -260,7 +257,7 @@ export class AppDatabase implements IDatabase {
 
     this.db
       .prepare(
-        `UPDATE pipeline_runs
+        `UPDATE workflow_runs
          SET finished_at = ?,
              duration_ms = CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER),
              status = 'failed'
@@ -275,13 +272,14 @@ export class AppDatabase implements IDatabase {
     const now = new Date().toISOString();
     const result = this.db
       .prepare(
-        `INSERT INTO pipeline_step_runs
-          (run_id, job_id, project_path, project_name, build_system, package_manager, execution_mode, command, java_home, pipeline_name, step_index, step_label, started_at, status, branch)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
+        `INSERT INTO workflow_step_runs
+          (run_id, job_id, workflow_kind, project_path, project_name, build_system, package_manager, execution_mode, command, java_home, workflow_name, step_index, step_label, started_at, status, branch)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`,
       )
       .run(
         params.runId,
         params.jobId ?? null,
+        params.workflowKind ?? 'quick',
         params.projectPath,
         params.projectName,
         params.buildSystem,
@@ -289,7 +287,7 @@ export class AppDatabase implements IDatabase {
         params.executionMode ?? null,
         params.command,
         params.javaHome ?? null,
-        params.pipelineName ?? null,
+        params.workflowName ?? null,
         params.stepIndex ?? null,
         params.stepLabel,
         now,
@@ -301,7 +299,7 @@ export class AppDatabase implements IDatabase {
   finishStepRun(params: FinishStepRunParams): void {
     this.db
       .prepare(
-        `UPDATE pipeline_step_runs
+        `UPDATE workflow_step_runs
          SET finished_at = ?, duration_ms = ?, exit_code = ?, status = ?
          WHERE id = ?`,
       )
@@ -319,6 +317,7 @@ export class AppDatabase implements IDatabase {
       SELECT
         s.id,
         s.job_id,
+        s.workflow_kind,
         s.project_path,
         s.project_name,
         s.build_system,
@@ -326,7 +325,7 @@ export class AppDatabase implements IDatabase {
         s.execution_mode,
         s.command,
         s.java_home,
-        s.pipeline_name,
+        s.workflow_name AS pipeline_name,
         s.step_index,
         s.step_label,
         s.started_at,
@@ -335,12 +334,12 @@ export class AppDatabase implements IDatabase {
         s.exit_code,
         s.status,
         s.branch
-      FROM pipeline_step_runs s
+      FROM workflow_step_runs s
     `;
 
     if (opts.pipeline) {
       return this.db
-        .prepare(`${select} WHERE s.pipeline_name = ? ORDER BY s.started_at DESC LIMIT ?`)
+        .prepare(`${select} WHERE s.workflow_name = ? ORDER BY s.started_at DESC LIMIT ?`)
         .all(opts.pipeline, opts.limit) as unknown as BuildRunRowApi[];
     }
 
@@ -361,7 +360,7 @@ export class AppDatabase implements IDatabase {
            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_count,
            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failure_count,
            AVG(CASE WHEN status IN ('success', 'failed') THEN duration_ms END) AS avg_duration_ms
-         FROM pipeline_step_runs`,
+         FROM workflow_step_runs`,
       )
       .get() as { total: number; success_count: number; failure_count: number; avg_duration_ms: number | null } | undefined) ?? {
       total: 0,
@@ -373,13 +372,13 @@ export class AppDatabase implements IDatabase {
     const byPipeline = (this.db
       .prepare(
         `SELECT
-           pipeline_name AS name,
+           workflow_name AS name,
            COUNT(CASE WHEN status IN ('success', 'failed', 'launched') THEN 1 END) AS runs,
            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
            AVG(CASE WHEN status IN ('success', 'failed', 'launched') THEN duration_ms END) AS avg_ms
-         FROM pipeline_runs
-         WHERE pipeline_name IS NOT NULL
-         GROUP BY pipeline_name
+         FROM workflow_runs
+         WHERE workflow_kind = 'pipeline' AND workflow_name IS NOT NULL
+         GROUP BY workflow_name
          ORDER BY runs DESC`,
       )
       .all() as Array<{ name: string; runs: number; successes: number; avg_ms: number | null }>)
@@ -394,7 +393,7 @@ export class AppDatabase implements IDatabase {
            COUNT(CASE WHEN status IN ('success', 'failed', 'launched') THEN 1 END) AS runs,
            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
            AVG(CASE WHEN status IN ('success', 'failed', 'launched') THEN duration_ms END) AS avg_ms
-         FROM pipeline_step_runs
+         FROM workflow_step_runs
          GROUP BY project_path
          HAVING runs > 0
          ORDER BY runs DESC
@@ -410,7 +409,7 @@ export class AppDatabase implements IDatabase {
            project_path AS path,
            AVG(duration_ms) AS avg_ms,
            COUNT(*) AS runs
-         FROM pipeline_step_runs
+         FROM workflow_step_runs
          WHERE status = 'success' AND duration_ms IS NOT NULL
          GROUP BY project_path, step_label
          HAVING COUNT(*) >= 2
@@ -432,38 +431,20 @@ export class AppDatabase implements IDatabase {
   }
 
   getLastRunsByPipeline(): Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }> {
-    const rows = this.db
-      .prepare(
-        `SELECT pipeline_name, status, started_at, duration_ms, stopped_at
-         FROM pipeline_runs
-         WHERE pipeline_name IS NOT NULL
-           AND id IN (
-             SELECT MAX(id)
-             FROM pipeline_runs
-             WHERE pipeline_name IS NOT NULL
-             GROUP BY pipeline_name
-           )`,
-      )
-      .all() as Array<{ pipeline_name: string; status: string; started_at: string; duration_ms: number | null; stopped_at: number | null }>;
+    return this.getLastRunsByWorkflowKind('pipeline');
+  }
 
-    const result: Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }> = {};
-    for (const row of rows) {
-      result[row.pipeline_name] = {
-        status: row.status,
-        startedAt: row.started_at,
-        durationMs: row.duration_ms,
-        stoppedAt: row.stopped_at,
-      };
-    }
-    return result;
+  getLastRunsByDeployment(): Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }> {
+    return this.getLastRunsByWorkflowKind('deployment');
   }
 
   getLastFailedStepIndex(pipelineName: string): number | null {
     const row = this.db
       .prepare(
         `SELECT stopped_at
-         FROM pipeline_runs
-         WHERE pipeline_name = ?
+         FROM workflow_runs
+         WHERE workflow_kind = 'pipeline'
+           AND workflow_name = ?
            AND status = 'failed'
          ORDER BY started_at DESC
          LIMIT 1`,
@@ -510,12 +491,93 @@ export class AppDatabase implements IDatabase {
 
   clearAllBuilds(): void {
     this.db.exec('DELETE FROM run_step_logs');
-    this.db.exec('DELETE FROM pipeline_step_runs');
-    this.db.exec('DELETE FROM pipeline_runs');
+    this.db.exec('DELETE FROM workflow_step_runs');
+    this.db.exec('DELETE FROM workflow_runs');
   }
 
   close(): void {
     this.db.close();
+  }
+
+  private listDefinitions<T>(kind: Exclude<WorkflowKind, 'quick'>): Array<{ name: string; definition: T; createdAt: string; updatedAt: string }> {
+    return this.db
+      .prepare(
+        `SELECT name, definition_json, created_at, updated_at
+         FROM workflow_definitions
+         WHERE workflow_kind = ?
+         ORDER BY name ASC`,
+      )
+      .all(kind)
+      .map((row) => ({
+        name: String((row as { name: string }).name),
+        definition: JSON.parse(String((row as { definition_json: string }).definition_json)) as T,
+        createdAt: String((row as { created_at: string }).created_at),
+        updatedAt: String((row as { updated_at: string }).updated_at),
+      }));
+  }
+
+  private getDefinition<T>(kind: Exclude<WorkflowKind, 'quick'>, name: string): { name: string; definition: T; createdAt: string; updatedAt: string } | null {
+    const row = this.db
+      .prepare(
+        `SELECT name, definition_json, created_at, updated_at
+         FROM workflow_definitions
+         WHERE workflow_kind = ? AND name = ?`,
+      )
+      .get(kind, name) as { name: string; definition_json: string; created_at: string; updated_at: string } | undefined;
+
+    if (!row) return null;
+    return {
+      name: row.name,
+      definition: JSON.parse(row.definition_json) as T,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private saveDefinition(kind: Exclude<WorkflowKind, 'quick'>, name: string, definition: object): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO workflow_definitions (workflow_kind, name, definition_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(workflow_kind, name) DO UPDATE SET
+           definition_json = excluded.definition_json,
+           updated_at = excluded.updated_at`,
+      )
+      .run(kind, name, JSON.stringify(definition), now, now);
+  }
+
+  private deleteDefinition(kind: Exclude<WorkflowKind, 'quick'>, name: string): void {
+    this.db.prepare('DELETE FROM workflow_definitions WHERE workflow_kind = ? AND name = ?').run(kind, name);
+  }
+
+  private getLastRunsByWorkflowKind(kind: Exclude<WorkflowKind, 'quick'>): Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }> {
+    const rows = this.db
+      .prepare(
+        `SELECT workflow_name, status, started_at, duration_ms, stopped_at
+         FROM workflow_runs
+         WHERE workflow_kind = ?
+           AND workflow_name IS NOT NULL
+           AND id IN (
+             SELECT MAX(id)
+             FROM workflow_runs
+             WHERE workflow_kind = ?
+               AND workflow_name IS NOT NULL
+             GROUP BY workflow_name
+           )`,
+      )
+      .all(kind, kind) as Array<{ workflow_name: string; status: string; started_at: string; duration_ms: number | null; stopped_at: number | null }>;
+
+    const result: Record<string, { status: string; startedAt: string; durationMs: number | null; stoppedAt: number | null }> = {};
+    for (const row of rows) {
+      result[row.workflow_name] = {
+        status: row.status,
+        startedAt: row.started_at,
+        durationMs: row.duration_ms,
+        stoppedAt: row.stopped_at,
+      };
+    }
+    return result;
   }
 
   private initializeSchema(existed: boolean, dbPath: string): void {
@@ -541,18 +603,21 @@ export class AppDatabase implements IDatabase {
         return;
       }
 
-      // Migrate v2 → v3: add branch column to pipeline_step_runs
-      if (currentVersion === 2 && SCHEMA_VERSION >= 3) {
+      if (currentVersion === 2) {
         this.db.exec('ALTER TABLE pipeline_step_runs ADD COLUMN branch TEXT');
-        this.db.prepare('UPDATE schema_meta SET version = ?').run(SCHEMA_VERSION);
+        this.db.prepare('UPDATE schema_meta SET version = 3').run();
+        this.migrateV3ToV4();
         return;
       }
 
-      if (currentVersion !== SCHEMA_VERSION) {
-        throw new StateCompatibilityError(
-          `State schema version ${currentVersion} is incompatible with version ${SCHEMA_VERSION}.`,
-        );
+      if (currentVersion === 3) {
+        this.migrateV3ToV4();
+        return;
       }
+
+      throw new StateCompatibilityError(
+        `State schema version ${currentVersion} is incompatible with version ${SCHEMA_VERSION}.`,
+      );
     } catch (error) {
       if (error instanceof StateCompatibilityError) {
         throw error;
@@ -561,6 +626,49 @@ export class AppDatabase implements IDatabase {
         error instanceof Error ? error.message : 'State database could not be validated.',
       );
     }
+  }
+
+  private migrateV3ToV4(): void {
+    this.db.exec(`
+ALTER TABLE pipeline_definitions RENAME TO workflow_definitions_legacy;
+CREATE TABLE workflow_definitions (
+  workflow_kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  definition_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (workflow_kind, name)
+);
+INSERT INTO workflow_definitions (workflow_kind, name, definition_json, created_at, updated_at)
+SELECT 'pipeline', name, definition_json, created_at, updated_at
+FROM workflow_definitions_legacy;
+DROP TABLE workflow_definitions_legacy;
+
+ALTER TABLE pipeline_runs RENAME TO workflow_runs;
+ALTER TABLE workflow_runs RENAME COLUMN run_kind TO workflow_kind;
+ALTER TABLE workflow_runs RENAME COLUMN pipeline_name TO workflow_name;
+
+ALTER TABLE pipeline_step_runs RENAME TO workflow_step_runs;
+ALTER TABLE workflow_step_runs ADD COLUMN workflow_kind TEXT;
+UPDATE workflow_step_runs
+SET workflow_kind = COALESCE(
+  (SELECT workflow_kind FROM workflow_runs WHERE workflow_runs.id = workflow_step_runs.run_id),
+  'quick'
+);
+ALTER TABLE workflow_step_runs RENAME COLUMN pipeline_name TO workflow_name;
+
+DROP INDEX IF EXISTS idx_pipeline_runs_started_at;
+DROP INDEX IF EXISTS idx_pipeline_runs_name;
+DROP INDEX IF EXISTS idx_pipeline_step_runs_run_id;
+DROP INDEX IF EXISTS idx_pipeline_step_runs_job_id;
+DROP INDEX IF EXISTS idx_pipeline_step_runs_started_at;
+CREATE INDEX idx_workflow_runs_started_at ON workflow_runs(started_at DESC);
+CREATE INDEX idx_workflow_runs_name ON workflow_runs(workflow_name);
+CREATE INDEX idx_workflow_step_runs_run_id ON workflow_step_runs(run_id);
+CREATE INDEX idx_workflow_step_runs_job_id ON workflow_step_runs(job_id);
+CREATE INDEX idx_workflow_step_runs_started_at ON workflow_step_runs(started_at DESC);
+`);
+    this.db.prepare('UPDATE schema_meta SET version = ?').run(SCHEMA_VERSION);
   }
 
   private isNewDatabaseFile(dbPath: string): boolean {

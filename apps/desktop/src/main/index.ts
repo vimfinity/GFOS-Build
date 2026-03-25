@@ -215,6 +215,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.GET_SCAN, () => getRuntime().getScan());
   ipcMain.handle(IPC.REFRESH_SCAN, () => getRuntime().refreshScan());
   ipcMain.handle(IPC.INSPECT_PROJECT, (_event, projectPath: string) => getRuntime().inspectProject(projectPath));
+  ipcMain.handle(IPC.INSPECT_DEPLOYMENT_PROJECT, (_event, projectPath: string) => getRuntime().inspectDeploymentProject(projectPath));
+  ipcMain.handle(IPC.PREVIEW_DEPLOYMENT_PLAN, (_event, input: Record<string, unknown>) => getRuntime().previewDeploymentPlan(input));
   ipcMain.handle(IPC.DETECT_JDKS, (_event, baseDir: string) => getRuntime().detectJdks(baseDir));
   ipcMain.handle(IPC.CLEAR_RUN_LOGS, () => getRuntime().clearRunLogs());
   ipcMain.handle(IPC.CLEAR_RUNS, () => getRuntime().clearRuns());
@@ -226,6 +228,17 @@ function registerIpcHandlers(): void {
     const options: OpenDialogOptions = {
       properties: ['openDirectory'],
       title: 'Select workspace root',
+    };
+    const result = ownerWindow ? await dialog.showOpenDialog(ownerWindow, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle(IPC.OPEN_FILE, async (_event, input?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => {
+    const ownerWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined;
+    const options: OpenDialogOptions = {
+      properties: ['openFile'],
+      title: input?.title ?? 'Select file',
+      filters: input?.filters,
     };
     const result = ownerWindow ? await dialog.showOpenDialog(ownerWindow, options) : await dialog.showOpenDialog(options);
     return result.canceled ? null : result.filePaths[0] ?? null;

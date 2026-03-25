@@ -4,13 +4,15 @@ import { useRef, useState, type KeyboardEvent } from 'react';
 export interface TagInputProps {
   id?: string;
   label?: string;
+  description?: string;
+  required?: boolean;
   value: string[];
   onChange: (tags: string[]) => void;
   placeholder?: string;
   className?: string;
 }
 
-export function TagInput({ id, label, value, onChange, placeholder, className }: TagInputProps) {
+export function TagInput({ id, label, description, required, value, onChange, placeholder, className }: TagInputProps) {
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -41,12 +43,13 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
       {label && (
         <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {label}
+          {required ? <span className="ml-1 text-destructive">*</span> : null}
         </label>
       )}
       <div
         className={cn(
           'flex min-h-11 flex-wrap gap-1.5 rounded-[18px] border px-4 py-3 [background:var(--field-bg)] [border-color:var(--field-border)]',
-          'focus-within:border-ring focus-within:[box-shadow:0_0_0_1px_var(--color-ring)]',
+          'focus-within:border-ring focus-within:[box-shadow:inset_0_0_0_1px_var(--color-ring)]',
           'cursor-text',
           className,
         )}
@@ -55,7 +58,7 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
         {value.map((tag, i) => (
           <span
             key={i}
-            className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs text-secondary-foreground transition-colors focus-within:border-ring focus-within:[box-shadow:0_0_0_1px_var(--color-ring)]"
+            className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs text-secondary-foreground transition-colors focus-within:border-ring focus-within:[box-shadow:inset_0_0_0_1px_var(--color-ring)]"
           >
             {tag}
             <button
@@ -82,6 +85,7 @@ export function TagInput({ id, label, value, onChange, placeholder, className }:
           className="field-input min-w-[8rem] flex-1"
         />
       </div>
+      {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
     </div>
   );
 }

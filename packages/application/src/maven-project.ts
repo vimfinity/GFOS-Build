@@ -1,5 +1,10 @@
 import path from 'node:path';
-import type { MavenMetadata, MavenModuleMetadata, MavenProfileMetadata } from '@gfos-build/domain';
+import type {
+  DeployableArtifactCandidate,
+  MavenMetadata,
+  MavenModuleMetadata,
+  MavenProfileMetadata,
+} from '@gfos-build/domain';
 import { parsePom } from '@gfos-build/domain';
 import type { FileSystem } from './file-system.js';
 
@@ -14,9 +19,13 @@ export async function inspectMavenProject(fs: FileSystem, projectPath: string): 
   const profiles: MavenProfileMetadata[] = [];
 
   let rootArtifactId = 'unknown';
+  let rootVersion: string | undefined;
   let rootPackaging = 'jar';
   let rootJavaVersion: string | undefined;
+  let rootBuildDirectory: string | undefined;
+  let rootFinalName: string | undefined;
   let isAggregator = false;
+  const deployableCandidates: DeployableArtifactCandidate[] = [];
 
   async function visitModule(modulePath: string): Promise<void> {
     const normalizedModulePath = path.normalize(modulePath);
@@ -31,29 +40,41 @@ export async function inspectMavenProject(fs: FileSystem, projectPath: string): 
     }
 
     let parsed;
+    let pomContent = '';
     try {
-      parsed = parsePom(await fs.readFile(currentPomPath));
+      pomContent = await fs.readFile(currentPomPath);
+      parsed = parsePom(pomContent);
     } catch {
       return;
     }
+    const effectiveVersion = parsed.version ?? extractParentVersionFromPom(pomContent);
+    const effectiveFinalName = resolvePomPlaceholders(parsed.finalName, parsed.artifactId, effectiveVersion);
 
     const relativePath = toPortablePath(path.relative(projectPath, modulePath));
 
-    if (relativePath === '') {
-      rootArtifactId = parsed.artifactId;
-      rootPackaging = parsed.packaging;
-      rootJavaVersion = parsed.javaVersion;
-      isAggregator = parsed.isAggregator;
-    } else {
-      modules.push({
+      if (relativePath === '') {
+        rootArtifactId = parsed.artifactId;
+        rootVersion = effectiveVersion;
+        rootPackaging = parsed.packaging;
+        rootJavaVersion = parsed.javaVersion;
+        rootBuildDirectory = parsed.buildDirectory;
+        rootFinalName = effectiveFinalName;
+        isAggregator = parsed.isAggregator;
+      } else {
+        modules.push({
         id: parsed.artifactId,
         name: path.basename(modulePath),
         relativePath,
         fullPath: modulePath,
-        packaging: parsed.packaging,
-        javaVersion: parsed.javaVersion,
-      });
-    }
+          packaging: parsed.packaging,
+          javaVersion: parsed.javaVersion,
+        });
+      }
+
+      const deployableCandidate = toDeployableCandidate(parsed, relativePath, effectiveVersion, effectiveFinalName);
+      if (deployableCandidate) {
+        deployableCandidates.push(deployableCandidate);
+      }
 
     for (const profile of parsed.profiles) {
       profiles.push({
@@ -88,11 +109,15 @@ export async function inspectMavenProject(fs: FileSystem, projectPath: string): 
   return {
     pomPath,
     artifactId: rootArtifactId,
+    version: rootVersion,
     packaging: rootPackaging,
     isAggregator,
     javaVersion: highestJavaVersion([rootJavaVersion, ...dedupedModules.map((m) => m.javaVersion)]),
+    buildDirectory: rootBuildDirectory,
+    finalName: rootFinalName,
     modules: dedupedModules,
     profiles: dedupeProfiles(profiles),
+    deployableCandidates: dedupeDeployableCandidates(deployableCandidates),
     hasMvnConfig,
     mvnConfigContent,
   };
@@ -128,4 +153,71 @@ function highestJavaVersion(versions: (string | undefined)[]): string | undefine
 
 function toPortablePath(value: string): string {
   return value.replace(/\\/g, '/');
+}
+
+function toDeployableCandidate(
+  parsed: ReturnType<typeof parsePom>,
+  relativePath: string,
+  effectiveVersion: string | undefined,
+  effectiveFinalName: string | undefined,
+): DeployableArtifactCandidate | null {
+  const packaging = parsed.packaging.toLowerCase();
+  if (packaging === 'pom') {
+    return null;
+  }
+  if (!['ear', 'war', 'rar', 'jar'].includes(packaging)) {
+    return null;
+  }
+
+  return {
+    modulePath: relativePath,
+    artifactId: parsed.artifactId,
+    packaging: packaging as DeployableArtifactCandidate['packaging'],
+    declaredFinalName: effectiveFinalName,
+    declaredBuildDirectory: parsed.buildDirectory,
+    expectedDefaultFileName: `${effectiveFinalName ?? defaultFinalName(parsed.artifactId, effectiveVersion)}.${packaging}`,
+    selectionConfidence: packaging === 'jar' ? 'manual' : 'high',
+  };
+}
+
+function dedupeDeployableCandidates(candidates: DeployableArtifactCandidate[]): DeployableArtifactCandidate[] {
+  const byKey = new Map<string, DeployableArtifactCandidate>();
+  for (const candidate of candidates) {
+    byKey.set(`${candidate.modulePath}:${candidate.artifactId}:${candidate.packaging}`, candidate);
+  }
+  return [...byKey.values()].sort(
+    (a, b) => a.modulePath.localeCompare(b.modulePath) || a.artifactId.localeCompare(b.artifactId),
+  );
+}
+
+function defaultFinalName(artifactId: string, version?: string): string {
+  return version ? `${artifactId}-${version}` : artifactId;
+}
+
+function resolvePomPlaceholders(
+  value: string | undefined,
+  artifactId: string,
+  version: string | undefined,
+): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return value
+    .replaceAll('${project.artifactId}', artifactId)
+    .replaceAll('${artifactId}', artifactId)
+    .replaceAll('${project.version}', version ?? '')
+    .replaceAll('${version}', version ?? '');
+}
+
+function extractParentVersionFromPom(content: string): string | undefined {
+  const parentMatch = content.match(
+    /<(?:(?:[\w-]+):)?parent(?:\s[^>]*)?>([\s\S]*?)<\/(?:(?:[\w-]+):)?parent>/,
+  );
+  if (!parentMatch?.[1]) {
+    return undefined;
+  }
+  const versionMatch = parentMatch[1].match(
+    /<(?:(?:[\w-]+):)?version(?:\s[^>]*)?>([\s\S]*?)<\/(?:(?:[\w-]+):)?version>/,
+  );
+  return versionMatch?.[1]?.trim() || undefined;
 }

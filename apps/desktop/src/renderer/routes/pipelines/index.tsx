@@ -10,6 +10,7 @@ import {
 } from '@/api/queries';
 import { PipelineCard } from '@/components/PipelineCard';
 import { PipelineDialog, type PipelineFormData } from '@/components/PipelineDialog';
+import { serializeWildFlyDeployTarget } from '@/components/WildFlyDeployFields';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { Button } from '@/components/ui/button';
 import { SearchField } from '@/components/ui/search-field';
@@ -94,6 +95,11 @@ function PipelinesView() {
               label: step.label || undefined,
               modulePath: step.mavenModulePath || undefined,
               submoduleBuildStrategy: step.mavenModulePath ? step.mavenSubmoduleBuildStrategy : undefined,
+              mode: step.mavenMode,
+              deploy:
+                step.mavenMode === 'deploy'
+                  ? serializeWildFlyDeployTarget(step.deployConfig, [])
+                  : undefined,
               goals: step.mavenGoals,
               optionKeys: step.mavenOptionKeys,
               profileStates: step.mavenProfileStates,

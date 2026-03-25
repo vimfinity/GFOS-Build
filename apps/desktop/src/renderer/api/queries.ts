@@ -4,6 +4,8 @@ import type {
   BuildRunRowApi,
   BuildStatsApi,
   ConfigResponse,
+  DeploymentPlanPreview,
+  DeploymentProjectInspectionResponse,
   GitInfoResponse,
   HealthResponse,
   JdkDetectionResponse,
@@ -12,7 +14,7 @@ import type {
   ScanResponse,
   StartJobResponse,
 } from '@gfos-build/contracts';
-import type { ExecutionMode, MavenOptionKey, MavenProfileState, MavenSubmoduleBuildStrategy, NodeCommandType } from '@gfos-build/contracts';
+import type { ExecutionMode, MavenOptionKey, MavenProfileState, MavenStepMode, MavenSubmoduleBuildStrategy, NodeCommandType, WildFlyDeployTarget } from '@gfos-build/contracts';
 import { getDesktopApi } from './client';
 
 export const healthQuery = queryOptions({
@@ -124,6 +126,8 @@ export function useQuickRun() {
     mutationFn: (body: {
       path: string;
       buildSystem: 'maven' | 'node';
+      mode?: MavenStepMode;
+      deploy?: WildFlyDeployTarget;
       modulePath?: string;
       submoduleBuildStrategy?: MavenSubmoduleBuildStrategy;
       goals?: string[];
@@ -141,6 +145,14 @@ export function useQuickRun() {
 
 export function inspectProject(projectPath: string): Promise<ProjectInspectionResponse> {
   return getDesktopApi().inspectProject(projectPath);
+}
+
+export function inspectDeploymentProject(projectPath: string): Promise<DeploymentProjectInspectionResponse> {
+  return getDesktopApi().inspectDeploymentProject(projectPath);
+}
+
+export function previewDeploymentPlan(input: Record<string, unknown>): Promise<DeploymentPlanPreview> {
+  return getDesktopApi().previewDeploymentPlan(input);
 }
 
 export function useDetectJdks() {

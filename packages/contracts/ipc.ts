@@ -3,6 +3,8 @@ import type {
   BuildRunRowApi,
   BuildStatsApi,
   ConfigResponse,
+  DeploymentPlanPreview,
+  DeploymentProjectInspectionResponse,
   GitInfoResponse,
   JdkDetectionResponse,
   PipelineListItem,
@@ -28,10 +30,13 @@ export const IPC = {
   GET_SCAN: 'gfos:get-scan',
   REFRESH_SCAN: 'gfos:refresh-scan',
   INSPECT_PROJECT: 'gfos:inspect-project',
+  INSPECT_DEPLOYMENT_PROJECT: 'gfos:inspect-deployment-project',
+  PREVIEW_DEPLOYMENT_PLAN: 'gfos:preview-deployment-plan',
   DETECT_JDKS: 'gfos:detect-jdks',
   CLEAR_RUN_LOGS: 'gfos:clear-run-logs',
   CLEAR_RUNS: 'gfos:clear-runs',
   OPEN_DIRECTORY: 'gfos:open-directory',
+  OPEN_FILE: 'gfos:open-file',
   GET_GIT_INFO: 'gfos:get-git-info',
   GET_GIT_INFO_BATCH: 'gfos:get-git-info-batch',
   RUN_SUBSCRIBE: 'gfos:run-subscribe',
@@ -57,10 +62,13 @@ export interface ElectronBridge {
   getScan: () => Promise<ScanResponse>;
   refreshScan: () => Promise<StartJobResponse>;
   inspectProject: (path: string) => Promise<ProjectInspectionResponse>;
+  inspectDeploymentProject: (path: string) => Promise<DeploymentProjectInspectionResponse>;
+  previewDeploymentPlan: (input: Record<string, unknown>) => Promise<DeploymentPlanPreview>;
   detectJdks: (path: string) => Promise<JdkDetectionResponse>;
   clearRunLogs: () => Promise<void>;
   clearRuns: () => Promise<void>;
   openDirectory: () => Promise<string | null>;
+  openFile: (opts?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>;
   getGitInfo: (path: string) => Promise<GitInfoResponse>;
   getGitInfoBatch: (paths: string[]) => Promise<Record<string, GitInfoResponse>>;
   onRunEvent: (jobId: string, listener: (event: import('./api.js').RunEventEnvelope) => void) => () => void;

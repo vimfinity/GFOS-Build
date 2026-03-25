@@ -16,6 +16,7 @@ interface ComboboxFieldProps {
   onValueChange: (value: string) => void;
   placeholder?: string;
   emptyText?: string;
+  disabled?: boolean;
 }
 
 export function ComboboxField({
@@ -24,6 +25,7 @@ export function ComboboxField({
   onValueChange,
   placeholder = 'Select an option',
   emptyText = 'No matching results',
+  disabled = false,
 }: ComboboxFieldProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -38,16 +40,31 @@ export function ComboboxField({
   );
 
   const filteredOptions = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
+    const trimmed = query.trim();
     if (!trimmed) {
       return options;
     }
-    return options.filter((option) =>
-      option.label.toLowerCase().includes(trimmed) ||
-      option.description?.toLowerCase().includes(trimmed) ||
-      option.keywords?.some((keyword) => keyword.toLowerCase().includes(trimmed)),
-    );
+    return options
+      .map((option, index) => ({
+        option,
+        index,
+        score: getComboboxOptionScore(option, trimmed),
+      }))
+      .filter((entry) => entry.score !== null)
+      .toSorted((left, right) => {
+        if (left.score !== right.score) {
+          return left.score - right.score;
+        }
+        return left.index - right.index;
+      })
+      .map((entry) => entry.option);
   }, [options, query]);
+
+  useEffect(() => {
+    if (!disabled) return;
+    setOpen(false);
+    setQuery('');
+  }, [disabled]);
 
   useEffect(() => {
     setHighlightedIndex(0);
@@ -129,8 +146,13 @@ export function ComboboxField({
           setQuery(event.target.value);
           if (!open) setOpen(true);
         }}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          if (!disabled) setOpen(true);
+        }}
         onKeyDown={(event) => {
+          if (disabled) {
+            return;
+          }
           if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter')) {
             event.preventDefault();
             setOpen(true);
@@ -171,7 +193,8 @@ export function ComboboxField({
           }
         }}
         placeholder={placeholder}
-        className="field-input h-11 w-full rounded-2xl border pr-10 pl-4 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
+        disabled={disabled}
+        className="field-input h-11 w-full rounded-2xl border pr-10 pl-4 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-70"
       />
       <ChevronDown
         size={15}
@@ -181,7 +204,7 @@ export function ComboboxField({
         )}
       />
 
-      {open && createPortal(
+      {open && !disabled && createPortal(
         <div
           ref={listboxRef}
           id={listboxId}
@@ -225,4 +248,67 @@ export function ComboboxField({
       )}
     </div>
   );
+}
+
+function getComboboxOptionScore(option: ComboboxOption, query: string): number | null {
+  const normalizedQuery = normalizeComboboxSearchValue(query);
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  const candidates = [
+    option.label,
+    option.description,
+    ...(option.keywords ?? []),
+  ].filter((value): value is string => Boolean(value));
+
+  let bestScore: number | null = null;
+  for (const candidate of candidates) {
+    const score = scoreFuzzyMatch(normalizeComboboxSearchValue(candidate), normalizedQuery);
+    if (score === null) {
+      continue;
+    }
+    if (bestScore === null || score < bestScore) {
+      bestScore = score;
+    }
+  }
+
+  return bestScore;
+}
+
+function normalizeComboboxSearchValue(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function scoreFuzzyMatch(candidate: string, query: string): number | null {
+  if (!query) {
+    return 0;
+  }
+
+  const substringIndex = candidate.indexOf(query);
+  if (substringIndex >= 0) {
+    return substringIndex;
+  }
+
+  let queryIndex = 0;
+  let firstMatch = -1;
+  let lastMatch = -1;
+
+  for (let candidateIndex = 0; candidateIndex < candidate.length && queryIndex < query.length; candidateIndex += 1) {
+    if (candidate[candidateIndex] !== query[queryIndex]) {
+      continue;
+    }
+    if (firstMatch === -1) {
+      firstMatch = candidateIndex;
+    }
+    lastMatch = candidateIndex;
+    queryIndex += 1;
+  }
+
+  if (queryIndex !== query.length || firstMatch === -1 || lastMatch === -1) {
+    return null;
+  }
+
+  const spreadPenalty = lastMatch - firstMatch - query.length + 1;
+  return 1000 + firstMatch + spreadPenalty * 10;
 }

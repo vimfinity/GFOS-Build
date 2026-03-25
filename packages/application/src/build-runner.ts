@@ -19,6 +19,21 @@ export class BuildRunner {
     pipelineName?: string,
     signal?: AbortSignal,
   ): AsyncGenerator<BuildEvent> {
+    if (step.buildSystem === 'wildfly') {
+      yield { type: 'step:start', step, index, total, pipelineName };
+      yield {
+        type: 'step:done',
+        step,
+        index,
+        total,
+        exitCode: 0,
+        durationMs: 0,
+        status: 'success',
+        success: true,
+      };
+      return;
+    }
+
     // Pre-flight: check the right manifest file exists and fail gracefully.
     const manifestFile = step.buildSystem === 'node' ? 'package.json' : 'pom.xml';
     const manifestPath = path.join(step.path, manifestFile);
@@ -86,7 +101,7 @@ export class BuildRunner {
     if (exitCode !== 0) {
       return 'failed';
     }
-    if (step.executionMode === 'external') {
+    if (step.buildSystem !== 'wildfly' && step.executionMode === 'external') {
       return 'launched';
     }
     return 'success';

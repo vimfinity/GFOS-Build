@@ -1,5 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -9,8 +8,14 @@ import {
   getSuggestedJavaOverride,
   type MavenCommandValue,
 } from '@/components/MavenCommandFields';
+import {
+  DEFAULT_WILDFLY_DEPLOY_FORM,
+  WildFlyDeployFields,
+  type WildFlyDeployFormValue,
+} from '@/components/WildFlyDeployFields';
 import { ComboboxField } from '@/components/ui/combobox-field';
 import { Tooltip } from '@/components/ui/tooltip';
+import { ProjectPathPicker } from '@/components/ProjectPathPicker';
 import {
   getNodeScriptChoices,
   getNodeScriptComboboxOptions,
@@ -22,15 +27,14 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
-  FolderOpen,
-  Loader2,
   Check,
   ChevronDown,
 } from 'lucide-react';
-import type { PipelineStep } from '@gfos-build/contracts';
+import type { PipelineStep, WildFlyDeployTarget } from '@gfos-build/contracts';
 import type {
   ExecutionMode,
   MavenMetadata,
+  MavenStepMode,
   MavenOptionKey,
   MavenProfileState,
   MavenSubmoduleBuildStrategy,
@@ -38,14 +42,19 @@ import type {
   PackageManager,
   Project,
 } from '@gfos-build/contracts';
-import { pickDirectory } from '@/api/bridge';
-import { inspectProject, scanQuery, configQuery, useGitInfo } from '@/api/queries';
+import {
+  configQuery,
+  inspectProject,
+  useGitInfo,
+} from '@/api/queries';
 import { BranchBadge } from '@/components/BranchBadge';
 
 interface StepFormData {
   label: string;
   path: string;
   buildSystem: 'maven' | 'node' | null;
+  mavenMode: MavenStepMode;
+  deployConfig: WildFlyDeployFormValue;
   mavenModulePath: string;
   mavenSubmoduleBuildStrategy: MavenSubmoduleBuildStrategy;
   mavenGoals: string[];
@@ -87,6 +96,8 @@ function createEmptyStep(
     label: '',
     path: '',
     buildSystem: null,
+    mavenMode: 'build',
+    deployConfig: DEFAULT_WILDFLY_DEPLOY_FORM,
     mavenModulePath: '',
     mavenSubmoduleBuildStrategy: 'root-pl',
     mavenGoals: mavenGoals ? mavenGoals.split(/\s+/).filter(Boolean) : ['clean', 'install'],
@@ -106,7 +117,9 @@ function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
   return {
     label: step.label,
     path: step.path,
-    buildSystem: step.buildSystem ?? null,
+    buildSystem: step.buildSystem === 'wildfly' ? null : (step.buildSystem ?? null),
+    mavenMode: step.mode ?? 'build',
+    deployConfig: fromApiDeploy(step.deploy),
     mavenModulePath: step.modulePath ?? '',
     mavenSubmoduleBuildStrategy: step.submoduleBuildStrategy ?? 'root-pl',
     mavenGoals:
@@ -122,249 +135,6 @@ function fromApiStep(step: PipelineStep, mavenGoals: string): StepFormData {
     packageManager: step.packageManager,
     availableScripts: [],
   };
-}
-
-function getRelativePath(project: Project, roots: Record<string, string>): string {
-  const rootPath = roots[project.rootName];
-  if (!rootPath) return project.path;
-  const norm = project.path.replace(/\\/g, '/');
-  const rootNorm = rootPath.replace(/\\/g, '/').replace(/\/$/, '');
-  return norm.startsWith(rootNorm) ? norm.slice(rootNorm.length + 1) : project.path;
-}
-
-function ProjectPathPicker({
-  value,
-  onChange,
-  onResolvedPath,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onResolvedPath?: (path: string, project?: Project) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const { data: scanData, isLoading: scanLoading } = useQuery(scanQuery);
-  const { data: configData } = useQuery(configQuery);
-  const roots = useMemo(() => configData?.config.roots ?? {}, [configData]);
-
-  const displayValue = useMemo(() => {
-    if (!value) return '';
-    const match = scanData?.projects.find((project) => project.path === value);
-    if (match) {
-      const relPath = getRelativePath(match, roots);
-      return `${match.name} (${match.rootName}:${relPath})`;
-    }
-    return value;
-  }, [value, scanData, roots]);
-
-  const filtered = useMemo(() => {
-    if (!scanData?.projects) return [];
-    if (!query.trim()) return scanData.projects.slice(0, 20);
-    const q = query.toLowerCase();
-    return scanData.projects
-      .filter(
-        (project) =>
-          project.name.toLowerCase().includes(q) ||
-          project.path.toLowerCase().includes(q) ||
-          (project.maven?.artifactId ?? '').toLowerCase().includes(q) ||
-          (project.node?.name ?? '').toLowerCase().includes(q)
-      )
-      .slice(0, 30);
-  }, [scanData, query]);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const inputEl = inputRef.current;
-    const dropdownEl = dropdownRef.current;
-    if (!inputEl || !dropdownEl) return;
-
-    function applyPosition() {
-      if (!inputEl || !dropdownEl) return;
-      const rect = inputEl.getBoundingClientRect();
-      const GAP = 6;
-      const MAX_H = 240;
-      const spaceBelow = window.innerHeight - rect.bottom - GAP;
-      const spaceAbove = rect.top - GAP;
-      dropdownEl.style.left = `${rect.left}px`;
-      dropdownEl.style.width = `${rect.width}px`;
-      if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
-        dropdownEl.style.top = `${rect.bottom + GAP}px`;
-        dropdownEl.style.bottom = '';
-        dropdownEl.style.maxHeight = `${Math.max(Math.min(MAX_H, spaceBelow), 80)}px`;
-      } else {
-        dropdownEl.style.top = '';
-        dropdownEl.style.bottom = `${window.innerHeight - rect.top + GAP}px`;
-        dropdownEl.style.maxHeight = `${Math.max(Math.min(MAX_H, spaceAbove), 80)}px`;
-      }
-    }
-
-    applyPosition();
-    window.addEventListener('scroll', applyPosition, { capture: true, passive: true });
-    window.addEventListener('resize', applyPosition, { passive: true } as EventListenerOptions);
-    return () => {
-      window.removeEventListener('scroll', applyPosition, {
-        capture: true,
-      } as EventListenerOptions);
-      window.removeEventListener('resize', applyPosition);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      if (containerRef.current?.contains(target) || dropdownRef.current?.contains(target)) return;
-      setOpen(false);
-      setQuery('');
-    }
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
-
-  async function handleBrowse(event: React.MouseEvent) {
-    event.preventDefault();
-    const dir = await pickDirectory();
-    if (dir) {
-      onChange(dir);
-      onResolvedPath?.(dir);
-      setOpen(false);
-      setQuery('');
-    }
-  }
-
-  function selectProject(project: Project) {
-    onChange(project.path);
-    onResolvedPath?.(project.path, project);
-    setOpen(false);
-    setQuery('');
-    inputRef.current?.blur();
-  }
-
-  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Escape') {
-      if (open) {
-        // Prevent the parent dialog from seeing this Escape so it doesn't
-        // trigger the discard-confirmation while just closing the dropdown.
-        event.nativeEvent.stopImmediatePropagation();
-      }
-      setOpen(false);
-      setQuery('');
-      inputRef.current?.blur();
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      const trimmed = query.trim();
-      if (trimmed && /^([A-Za-z]:[/\\]|\/)/.test(trimmed)) {
-        onChange(trimmed);
-        onResolvedPath?.(trimmed);
-        setOpen(false);
-        setQuery('');
-      } else if (filtered.length > 0 && filtered[0]) {
-        selectProject(filtered[0]);
-      }
-    }
-  }
-
-  return (
-    <div ref={containerRef} className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-        Project path
-      </label>
-      <div className="flex gap-2">
-        <div className="relative min-w-0 flex-1">
-          <input
-            ref={inputRef}
-            value={open ? query : displayValue}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => {
-              setOpen(true);
-              setQuery('');
-            }}
-            onClick={() => setOpen(true)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              open ? 'Search projects or type an absolute path...' : 'Select a project...'
-            }
-            className="field-input h-11 w-full rounded-2xl border pl-4 pr-10 [background:var(--field-bg)] [border-color:var(--field-border)] focus:outline-none focus:border-ring focus:[box-shadow:0_0_0_1px_var(--color-ring)]"
-          />
-          <ChevronDown
-            size={15}
-            className={cn(
-              'pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-transform',
-              open && 'rotate-180'
-            )}
-          />
-        </div>
-
-        <Tooltip content="Browse directory" side="bottom">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-11 w-11 shrink-0"
-            onClick={(e) => void handleBrowse(e)}
-            aria-label="Browse directory"
-          >
-            <FolderOpen size={14} />
-          </Button>
-        </Tooltip>
-      </div>
-
-      {open &&
-        createPortal(
-          <div ref={dropdownRef} className="glass-card listbox-panel fixed z-[9999] overflow-auto">
-            {scanLoading ? (
-              <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
-                <Loader2 size={12} className="shrink-0 animate-spin" />
-                Loading projects...
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="px-4 py-3 text-xs text-muted-foreground">
-                {query.trim() ? 'No matching projects' : 'No projects found'}
-              </div>
-            ) : (
-              filtered.map((project) => {
-                const relPath = getRelativePath(project, roots);
-                return (
-                  <button
-                    key={project.path}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => selectProject(project)}
-                    className={cn(
-                      'listbox-option transition-colors',
-                      value === project.path && 'is-active'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'pill-meta font-semibold',
-                        project.buildSystem === 'maven'
-                          ? 'bg-primary/10 text-primary'
-                          : 'bg-success/10 text-success'
-                      )}
-                    >
-                      {project.buildSystem === 'maven' ? 'Maven' : 'Node'}
-                    </span>
-                    <span className="shrink-0 text-sm font-medium text-foreground">
-                      {project.name}
-                    </span>
-                    <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                      {relPath}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>,
-          document.body
-        )}
-    </div>
-  );
 }
 
 function StepCard({
@@ -421,7 +191,9 @@ function StepCard({
             </span>
             <span className="pill-meta rounded-full bg-secondary text-muted-foreground">
               {step.buildSystem === 'maven'
-                ? 'Maven'
+                ? step.mavenMode === 'deploy'
+                  ? 'Maven deploy'
+                  : 'Maven'
                 : step.buildSystem === 'node'
                   ? 'Node'
                   : 'Awaiting project'}
@@ -529,24 +301,69 @@ function StepCard({
 
           {step.buildSystem === 'maven' ? (
             <div className="mt-4">
-              <MavenCommandFields
-                metadata={step.mavenMetadata}
-                value={toMavenCommandValue(step)}
-                onChange={(nextValue) =>
-                  onUpdate((current) => ({
-                    ...current,
-                    mavenModulePath: nextValue.modulePath,
-                    mavenSubmoduleBuildStrategy: nextValue.submoduleBuildStrategy,
-                    mavenGoals: nextValue.goals,
-                    mavenOptionKeys: nextValue.optionKeys,
-                    mavenProfileStates: nextValue.profileStates,
-                    mavenExtraOptions: nextValue.extraOptions,
-                    javaVersion: nextValue.javaVersion,
-                    executionMode: nextValue.executionMode,
-                  }))
-                }
-                jdkVersions={jdkVersions}
-              />
+              <div className="mb-4 flex flex-col gap-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  Maven step mode
+                </label>
+                <div className="segmented-control w-fit">
+                  {([
+                    { value: 'build', label: 'Run Maven' },
+                    { value: 'deploy', label: 'Deploy to WildFly' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={step.mavenMode === option.value}
+                      onClick={() =>
+                        onUpdate((current) => ({
+                          ...current,
+                          mavenMode: option.value,
+                          executionMode:
+                            option.value === 'deploy' ? 'internal' : current.executionMode,
+                        }))
+                      }
+                      className={cn(
+                        'segmented-control-button',
+                        step.mavenMode === option.value && 'is-active'
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {step.mavenMode === 'build' ? (
+                <MavenCommandFields
+                  metadata={step.mavenMetadata}
+                  value={toMavenCommandValue(step)}
+                  onChange={(nextValue) =>
+                    onUpdate((current) => ({
+                      ...current,
+                      mavenModulePath: nextValue.modulePath,
+                      mavenSubmoduleBuildStrategy: nextValue.submoduleBuildStrategy,
+                      mavenGoals: nextValue.goals,
+                      mavenOptionKeys: nextValue.optionKeys,
+                      mavenProfileStates: nextValue.profileStates,
+                      mavenExtraOptions: nextValue.extraOptions,
+                      javaVersion: nextValue.javaVersion,
+                      executionMode: nextValue.executionMode,
+                    }))
+                  }
+                  jdkVersions={jdkVersions}
+                />
+              ) : (
+                <WildFlyDeployFields
+                  projectPath={step.path}
+                  value={step.deployConfig}
+                  onChange={(next) =>
+                    onUpdate((current) => ({
+                      ...current,
+                      deployConfig: next,
+                    }))
+                  }
+                />
+              )}
             </div>
           ) : step.buildSystem === 'node' ? (
             <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end">
@@ -932,7 +749,16 @@ export function PipelineDialog({
     steps.every((step) => {
       if (!step.path.trim()) return false;
       if (step.inspectionError) return false;
-      if (step.buildSystem === 'maven') return step.mavenGoals.length > 0;
+      if (step.buildSystem === 'maven') {
+        if (step.mavenMode === 'deploy') {
+          return (
+            step.mavenGoals.length > 0 &&
+            step.deployConfig.environmentName.trim().length > 0 &&
+            step.deployConfig.standaloneProfileName.trim().length > 0
+          );
+        }
+        return step.mavenGoals.length > 0;
+      }
       if (step.buildSystem === 'node')
         return step.commandType === 'install' || step.script.trim().length > 0;
       return false;
@@ -1061,5 +887,25 @@ function toMavenCommandValue(step: StepFormData): MavenCommandValue {
     extraOptions: step.mavenExtraOptions,
     javaVersion: step.javaVersion,
     executionMode: step.executionMode,
+  };
+}
+
+function fromApiDeploy(deploy?: WildFlyDeployTarget): WildFlyDeployFormValue {
+  if (!deploy) {
+    return DEFAULT_WILDFLY_DEPLOY_FORM;
+  }
+
+  return {
+    environmentName: deploy.environmentName,
+    standaloneProfileName: deploy.standaloneProfileName,
+    cleanupPresetName: deploy.cleanupPresetName ?? '',
+    startupPresetName: deploy.startupPresetName ?? '',
+    deployMode: deploy.deployMode ?? 'filesystem-scanner',
+    artifactSelection:
+      deploy.artifactSelector.kind === 'module'
+        ? `${deploy.artifactSelector.modulePath ?? ''}|${deploy.artifactSelector.packaging ?? ''}`
+        : deploy.artifactSelector.kind,
+    explicitArtifactFile: deploy.artifactSelector.fileName ?? '',
+    startServer: deploy.startServer,
   };
 }

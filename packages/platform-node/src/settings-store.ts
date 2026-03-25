@@ -46,7 +46,11 @@ export class SettingsStore {
   }
 
   save(config: AppConfig): void {
-    const validated = configSchema.parse(config);
+    const result = configSchema.safeParse(config);
+    if (!result.success) {
+      throw new Error(formatSaveValidationError(result.error.issues));
+    }
+    const validated = result.data;
     mkdirSync(path.dirname(this.settingsPath), { recursive: true });
     const tempPath = `${this.settingsPath}.tmp`;
     writeFileSync(tempPath, `${JSON.stringify(validated, null, 2)}\n`, 'utf8');
@@ -56,7 +60,11 @@ export class SettingsStore {
   savePatch(patch: Record<string, unknown>): AppConfig {
     const current = this.load().config;
     const merged = mergePlainObjects(current as Record<string, unknown>, patch);
-    const validated = configSchema.parse(merged);
+    const result = configSchema.safeParse(merged);
+    if (!result.success) {
+      throw new Error(formatSaveValidationError(result.error.issues));
+    }
+    const validated = result.data;
     this.save(validated);
     return validated;
   }
@@ -66,14 +74,25 @@ export class SettingsStore {
   }
 }
 
+const REPLACE_OBJECT_PATHS = new Set([
+  'roots',
+  'jdkRegistry',
+  'wildfly.environments',
+]);
+
 function mergePlainObjects(
   base: Record<string, unknown>,
   patch: Record<string, unknown>,
+  pathSegments: string[] = [],
 ): Record<string, unknown> {
+  const path = pathSegments.join('.');
+  if (path && REPLACE_OBJECT_PATHS.has(path)) {
+    return { ...patch };
+  }
   const next: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(patch)) {
     if (isPlainObject(value) && isPlainObject(next[key])) {
-      next[key] = mergePlainObjects(next[key] as Record<string, unknown>, value);
+      next[key] = mergePlainObjects(next[key] as Record<string, unknown>, value, [...pathSegments, key]);
       continue;
     }
     next[key] = value;
@@ -93,6 +112,15 @@ function formatValidationError(
     .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
     .join('; ');
   return `Local settings file "${settingsPath}" is invalid. ${detail}`;
+}
+
+function formatSaveValidationError(
+  issues: Array<{ path: PropertyKey[]; message: string }>,
+): string {
+  const detail = issues
+    .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+    .join('; ');
+  return `Settings update is invalid. ${detail}`;
 }
 
 function isEnoent(error: unknown): boolean {

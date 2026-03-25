@@ -353,4 +353,229 @@ describe('RepositoryScanner', () => {
       expect(found.project.node?.packageManager).toBe('npm');
     }
   });
+
+  it('surfaces static deployable Maven candidates from pom.xml metadata', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/deployable-parent');
+
+    fs.addDirectory(rootPath, [dirEntry('web', true), dirEntry('batch', true)]);
+    fs.addDirectory(path.join(rootPath, 'web'), []);
+    fs.addDirectory(path.join(rootPath, 'batch'), []);
+    fs.addFile(
+      path.join(rootPath, 'pom.xml'),
+      `<project>
+        <artifactId>deployable-parent</artifactId>
+        <version>2.0.0</version>
+        <packaging>pom</packaging>
+        <modules>
+          <module>web</module>
+          <module>batch</module>
+        </modules>
+      </project>`,
+    );
+    fs.addFile(
+      path.join(rootPath, 'web', 'pom.xml'),
+      `<project>
+        <artifactId>web</artifactId>
+        <version>2.0.0</version>
+        <packaging>war</packaging>
+        <build>
+          <directory>custom-target</directory>
+          <finalName>web-dev</finalName>
+        </build>
+      </project>`,
+    );
+    fs.addFile(
+      path.join(rootPath, 'batch', 'pom.xml'),
+      `<project>
+        <artifactId>batch</artifactId>
+        <version>2.0.0</version>
+        <packaging>jar</packaging>
+      </project>`,
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((event) => event.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.maven?.deployableCandidates).toEqual([
+        {
+          modulePath: 'batch',
+          artifactId: 'batch',
+          packaging: 'jar',
+          declaredFinalName: undefined,
+          declaredBuildDirectory: undefined,
+          expectedDefaultFileName: 'batch-2.0.0.jar',
+          selectionConfidence: 'manual',
+        },
+        {
+          modulePath: 'web',
+          artifactId: 'web',
+          packaging: 'war',
+          declaredFinalName: 'web-dev',
+          declaredBuildDirectory: 'custom-target',
+          expectedDefaultFileName: 'web-dev.war',
+          selectionConfidence: 'high',
+        },
+      ]);
+    }
+  });
+
+  it('resolves inherited module versions in deployable artifact filenames', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/inherited-version');
+
+    fs.addDirectory(rootPath, [dirEntry('enterprise', true)]);
+    fs.addDirectory(path.join(rootPath, 'enterprise'), []);
+    fs.addFile(
+      path.join(rootPath, 'pom.xml'),
+      `<project>
+        <artifactId>inherited-version</artifactId>
+        <version>3.1.0</version>
+        <packaging>pom</packaging>
+        <modules>
+          <module>enterprise</module>
+        </modules>
+      </project>`,
+    );
+    fs.addFile(
+      path.join(rootPath, 'enterprise', 'pom.xml'),
+      `<project>
+        <parent>
+          <groupId>com.gfos</groupId>
+          <artifactId>inherited-version</artifactId>
+          <version>3.1.0</version>
+        </parent>
+        <artifactId>enterprise</artifactId>
+        <packaging>ear</packaging>
+        <build>
+          <finalName>\${project.artifactId}-\${project.version}</finalName>
+        </build>
+      </project>`,
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((event) => event.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.maven?.deployableCandidates).toEqual([
+        {
+          modulePath: 'enterprise',
+          artifactId: 'enterprise',
+          packaging: 'ear',
+          declaredFinalName: 'enterprise-3.1.0',
+          declaredBuildDirectory: undefined,
+          expectedDefaultFileName: 'enterprise-3.1.0.ear',
+          selectionConfidence: 'high',
+        },
+      ]);
+    }
+  });
+
+  it('detects realistic EAR modules from packaging metadata even with heavy plugin configuration', async () => {
+    const fs = new InMemoryFileSystem();
+    const rootPath = path.resolve('/workspaces/ear-fixture');
+
+    fs.addDirectory(rootPath, [dirEntry('gfosweb', true)]);
+    fs.addDirectory(path.join(rootPath, 'gfosweb'), []);
+    fs.addFile(
+      path.join(rootPath, 'pom.xml'),
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+        <modelVersion>4.0.0</modelVersion>
+        <artifactId>ear-fixture</artifactId>
+        <version>2025.1.0</version>
+        <packaging>pom</packaging>
+        <modules>
+          <module>gfosweb</module>
+        </modules>
+      </project>`,
+    );
+    fs.addFile(
+      path.join(rootPath, 'gfosweb', 'pom.xml'),
+      `<project xmlns="http://maven.apache.org/POM/4.0.0">
+        <modelVersion>4.0.0</modelVersion>
+        <parent>
+          <groupId>de.gfos</groupId>
+          <artifactId>xtime-maven-config-2025</artifactId>
+          <version>2025.1.0</version>
+        </parent>
+        <artifactId>gfosweb</artifactId>
+        <packaging>ear</packaging>
+        <profiles>
+          <profile>
+            <id>easyui</id>
+            <activation>
+              <property>
+                <name>gfos.jenkins</name>
+                <value>true</value>
+              </property>
+            </activation>
+            <dependencies>
+              <dependency>
+                <groupId>de.gfos.fixture</groupId>
+                <artifactId>easyui-web</artifactId>
+                <type>war</type>
+              </dependency>
+            </dependencies>
+          </profile>
+        </profiles>
+        <build>
+          <finalName>\${project.artifactId}-\${project.version}</finalName>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-ear-plugin</artifactId>
+              <configuration>
+                <version>8</version>
+                <defaultLibBundleDir>lib</defaultLibBundleDir>
+                <skinnyWars>true</skinnyWars>
+                <modules>
+                  <webModule>
+                    <groupId>de.gfos.xtimeweb</groupId>
+                    <artifactId>gwmenu-war</artifactId>
+                    <contextRoot>/gfos</contextRoot>
+                  </webModule>
+                </modules>
+              </configuration>
+            </plugin>
+          </plugins>
+        </build>
+      </project>`,
+    );
+
+    const scanner = new RepositoryScanner(fs);
+    const events = await collectEvents(scanner, {
+      roots: { test: rootPath },
+      includeHidden: false,
+      exclude: [],
+    });
+
+    const found = events.find((event) => event.type === 'repo:found');
+    expect(found).toBeDefined();
+    if (found?.type === 'repo:found') {
+      expect(found.project.maven?.deployableCandidates).toEqual([
+        {
+          modulePath: 'gfosweb',
+          artifactId: 'gfosweb',
+          packaging: 'ear',
+          declaredFinalName: 'gfosweb-2025.1.0',
+          declaredBuildDirectory: undefined,
+          expectedDefaultFileName: 'gfosweb-2025.1.0.ear',
+          selectionConfidence: 'high',
+        },
+      ]);
+    }
+  });
 });
